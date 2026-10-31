@@ -23,7 +23,8 @@ const stmts = {
     WHERE id = @id AND estado = 'por_aprobar'`),
   descartar: db.prepare(`UPDATE ordenes_compra SET estado = 'descartada', actualizado_en = datetime('now', 'localtime') WHERE id = ? AND estado = 'por_aprobar'`),
   editar: db.prepare(`UPDATE ordenes_compra SET telefono = @telefono, solicitante = @solicitante, sucursal = @sucursal, renglones = @renglones,
-    estado = @estado, actualizado_en = datetime('now', 'localtime') WHERE id = @id AND estado IN ('aprobada', 'surtida', 'cancelada')`),
+    nota = @nota, estado = @estado, actualizado_en = datetime('now', 'localtime') WHERE id = @id AND estado IN ('aprobada', 'surtida', 'cancelada')`),
+  mover: db.prepare(`UPDATE ordenes_compra SET estado = @estado, actualizado_en = datetime('now', 'localtime') WHERE id = @id AND estado IN ('aprobada', 'surtida', 'cancelada')`),
   whatsapp: db.prepare('UPDATE ordenes_compra SET whatsapp = ? WHERE id = ?'),
   porAprobar: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'por_aprobar'`),
   porSurtir: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'aprobada'`),
@@ -131,7 +132,15 @@ function aprobar(id, datos) {
 
 function editar(id, datos) {
   if (!ESTADOS_PIZARRON.includes(datos.estado)) throw new Error('Estatus inválido');
-  const hecho = stmts.editar.run({ ...datos, id, renglones: JSON.stringify(datos.renglones) }).changes > 0;
+  const hecho = stmts.editar.run({ ...datos, id, nota: String(datos.nota ?? '').trim() || null, renglones: JSON.stringify(datos.renglones) }).changes > 0;
+  if (hecho) avisar();
+  return hecho;
+}
+
+// Mover entre columnas en cualquier sentido. No le avisa a nadie.
+function mover(id, estado) {
+  if (!ESTADOS_PIZARRON.includes(estado)) throw new Error('Estatus inválido');
+  const hecho = stmts.mover.run({ id, estado }).changes > 0;
   if (hecho) avisar();
   return hecho;
 }
@@ -189,6 +198,7 @@ module.exports = {
   responder,
   aprobar,
   editar,
+  mover,
   descartar,
   obtener,
   registrarEntrada,

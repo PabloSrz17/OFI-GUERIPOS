@@ -156,7 +156,7 @@ Octavio tiene su escritorio y su propio pizarrón, aparte de Sulema y Chatito, c
 3. Al aprobar:
    - **Con cambios** (cantidad, unidad, material o renglones): le llega *"Me autorizaron estas cantidades:"* con la lista nueva.
    - **Sin cambios:** le llega *"¡Claro que sí! Aquí tienes tu orden:"* con la imagen de la orden, sin precios.
-4. La orden queda en la pestaña **Órdenes de Compra** del Pizarrón de Octavio (sucursal inicial Concordia), en Aprobadas, Surtidas o Canceladas. **✎ Editar** cambia productos o estatus cuando sea y no le manda nada al solicitante. Si el envío falló, aparece **Reenviar**.
+4. La orden queda en la pestaña **Órdenes de Compra** del Pizarrón de Octavio (sucursal inicial Concordia), en Aprobadas, Surtidas o Canceladas. Los botones de cada tarjeta la mueven de un clic entre columnas, en cualquier sentido. **✎ Editar** cambia productos, nota o estatus en cualquier columna. Ni mover ni editar le manda nada al solicitante. Si el envío falló, aparece **Reenviar**.
 
 Si WhatsApp está desconectado, la orden no se aprueba: la alerta sigue abierta con lo escrito.
 
@@ -349,6 +349,7 @@ oficina-virtual/
 | POST | `/api/octavio/ordenes/:id/aprobar` | `{ solicitante, telefono, sucursal, renglones }`: aprueba y contesta por WhatsApp. 503 si está desconectado, 409 si ya se atendió. Devuelve `{ orden, whatsapp }` |
 | POST | `/api/octavio/ordenes/:id/descartar` | La quita sin contestar |
 | PUT | `/api/octavio/ordenes/:id` | Edita una orden del pizarrón, con `estado`: `aprobada` \| `surtida` \| `cancelada`. No envía nada |
+| PATCH | `/api/octavio/ordenes/:id/estado` | `{ estado }`: mueve la tarjeta entre `aprobada`, `surtida` y `cancelada`, en cualquier sentido. No envía nada |
 | POST | `/api/octavio/ordenes/:id/enviar` | Reenvía la respuesta de una orden aprobada |
 | GET | `/api/octavio/ordenes/:id/imagen` | PNG de la orden |
 | GET · POST | `/api/octavio/entradas` | Entradas de almacén · `{ folio, proveedor?, nota?, renglones: [{ cantidad, unidad?, material }] }` |

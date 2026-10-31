@@ -235,6 +235,7 @@ CREATE TABLE IF NOT EXISTS ordenes_compra (
   estado         TEXT NOT NULL DEFAULT 'por_aprobar'
                  CHECK (estado IN ('por_aprobar', 'aprobada', 'surtida', 'cancelada', 'descartada')),
   whatsapp       TEXT,
+  nota           TEXT,
   aprobada_en    TEXT,
   creado_en      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   actualizado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))

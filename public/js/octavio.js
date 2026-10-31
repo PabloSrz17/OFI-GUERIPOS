@@ -18,6 +18,12 @@ const ESTADO_WHATSAPP = {
 };
 const ESTATUS = { aprobada: 'Aprobada', surtida: 'Surtida', cancelada: 'Cancelada' };
 const MAX_ENTRADAS = 50; // las que devuelve el servidor
+// A dónde se puede mover una orden desde cada columna.
+const MOVER = {
+  aprobada: [['surtida', 'Surtida →'], ['cancelada', 'Cancelar ✕']],
+  surtida: [['aprobada', '← Aprobadas'], ['cancelada', 'Cancelar ✕']],
+  cancelada: [['aprobada', '← Aprobadas'], ['surtida', 'Surtida →']],
+};
 
 const todasLasFilas = (caja) => [...caja.querySelectorAll('.fila-articulo')].map((f) => ({
   cantidad: f.querySelector('[data-articulo="cantidad"]').value.trim(),
@@ -118,7 +124,11 @@ export function montarOctavio({ toast, alCambiar }) {
         <header><b>${esc(o.folio)}</b> <span class="orden__estado orden__estado--${esc(o.estado)}">${esc(ESTATUS[o.estado])}</span> <span>${esc(o.sucursal)}</span></header>
         <p class="orden__de">${esc(o.solicitante)} · ${esc((o.aprobada_en ?? o.creado_en).slice(0, 16))}</p>
         <ul>${o.renglones.map((r) => `<li>${esc(linea(r))}</li>`).join('')}</ul>
+        ${o.nota ? `<p class="orden__nota">📝 ${esc(o.nota)}</p>` : ''}
         ${o.whatsapp ? `<p class="orden__whatsapp">${esc(ESTADO_WHATSAPP[o.whatsapp] ?? o.whatsapp)}</p>` : ''}
+        <div class="orden__botones orden__mover">
+          ${MOVER[o.estado].map(([estado, texto]) => `<button type="button" class="btn" data-mover-orden="${o.id}" data-a="${estado}">${texto}</button>`).join('')}
+        </div>
         <div class="orden__botones">
           <button type="button" class="btn btn--secundario" data-editar-orden="${o.id}">✎ Editar</button>
           <a class="btn btn--secundario" href="/api/octavio/ordenes/${o.id}/imagen" target="_blank" rel="noopener">🖼 Imagen</a>
@@ -348,9 +358,22 @@ export function montarOctavio({ toast, alCambiar }) {
       c.telefono.value = o.telefono ? formatear(o.telefono) : '';
       c.sucursal.value = o.sucursal;
       c.estado.value = o.estado;
+      c.nota.value = o.nota ?? '';
       filasEditar.innerHTML = o.renglones.map(filaArticulo).join('');
       $('#editar-orden-aviso').textContent = '';
       dialogo.showModal();
+    }
+    const mover = e.target.closest('[data-mover-orden]');
+    if (mover) {
+      mover.disabled = true;
+      try {
+        const o = await api.patch(`/api/octavio/ordenes/${mover.dataset.moverOrden}/estado`, { estado: mover.dataset.a });
+        toast(`${o.folio} pasó a ${ESTATUS[o.estado]}`);
+      } catch (err) {
+        toast(err.message, true);
+      }
+      await recargar(); // si falló, la tarjeta vuelve a mostrar lo que hay en la base
+      alCambiar();
     }
     const reenviar = e.target.closest('[data-reenviar]');
     if (reenviar) {
@@ -382,7 +405,7 @@ export function montarOctavio({ toast, alCambiar }) {
     const c = formEditar.elements;
     try {
       await api.put(`/api/octavio/ordenes/${formEditar.dataset.id}`, {
-        solicitante: c.solicitante.value, telefono: c.telefono.value, sucursal: c.sucursal.value, estado: c.estado.value, renglones: leerFilas(filasEditar),
+        solicitante: c.solicitante.value, telefono: c.telefono.value, sucursal: c.sucursal.value, estado: c.estado.value, nota: c.nota.value, renglones: leerFilas(filasEditar),
       });
       dialogo.close();
       toast('Orden actualizada');

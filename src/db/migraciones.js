@@ -192,7 +192,14 @@ function entradasConRenglones(db) {
   console.log('[bd] Migración aplicada: entradas con varios artículos');
 }
 
+// Nota interna de una orden de compra, editable en el pizarrón.
+function notaDeOrden(db) {
+  const columnas = db.prepare('PRAGMA table_info(ordenes_compra)').all().map((c) => c.name);
+  if (!columnas.includes('nota')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN nota TEXT');
+}
+
 module.exports = function migrar(db) {
+  notaDeOrden(db);
   entradasConRenglones(db);
   saldosPendientes(db);
   telefonoDeNota(db);

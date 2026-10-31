@@ -156,6 +156,27 @@ test('en el pizarrón se edita productos y estatus; lo por aprobar o descartado 
   assert.throws(() => ordenes.editar(o.id, { ...datos(o), estado: 'por_aprobar' }), /Estatus inválido/);
 });
 
+test('en el pizarrón la orden va y regresa entre columnas sin avisar ni perder datos', async () => {
+  const tel = persona();
+  await solicitudes.procesarMensaje(mensaje(tel, `${AVISO}\n1 pz malla`));
+  const o = ultimaDe(tel);
+  assert.equal(ordenes.mover(o.id, 'surtida'), false); // todavía por aprobar
+  ordenes.aprobar(o.id, datos(o));
+  ordenes.editar(o.id, { ...datos(o), estado: 'aprobada', nota: ' urgente ' });
+  salidas.length = 0;
+  for (const estado of ['surtida', 'aprobada', 'cancelada', 'aprobada', 'surtida', 'cancelada', 'surtida']) {
+    assert.equal(ordenes.mover(o.id, estado), true);
+    assert.equal(ordenes.obtener(o.id).estado, estado);
+  }
+  const movida = ordenes.obtener(o.id);
+  assert.equal(movida.nota, 'urgente');
+  assert.deepEqual(movida.renglones, o.renglones);
+  assert.equal(salidas.length, 0);
+  assert.throws(() => ordenes.mover(o.id, 'por_aprobar'), /Estatus inválido/);
+  ordenes.editar(o.id, { ...datos(movida), estado: 'surtida', nota: '' });
+  assert.equal(ordenes.obtener(o.id).nota, null);
+});
+
 test('descartar saca la orden de la lista y no contesta', async () => {
   const tel = persona();
   await solicitudes.procesarMensaje(mensaje(tel, `${AVISO}\n1 pz malla`));

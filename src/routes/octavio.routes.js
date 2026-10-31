@@ -52,7 +52,17 @@ router.post('/ordenes/:id/descartar', (req, res) => {
 router.put('/ordenes/:id', (req, res) => {
   const id = ordenDe(req).id;
   try {
-    if (!ordenes.editar(id, { ...datosDe(req.body ?? {}), estado: req.body?.estado })) throw httpError(409, 'Esa orden todavía no está en el pizarrón');
+    if (!ordenes.editar(id, { ...datosDe(req.body ?? {}), nota: req.body?.nota, estado: req.body?.estado })) throw httpError(409, 'Esa orden todavía no está en el pizarrón');
+  } catch (err) {
+    throw err.status ? err : httpError(400, err.message);
+  }
+  res.json(ordenes.obtener(id));
+});
+
+router.patch('/ordenes/:id/estado', (req, res) => {
+  const id = ordenDe(req).id;
+  try {
+    if (!ordenes.mover(id, req.body?.estado)) throw httpError(409, 'Esa orden todavía no está en el pizarrón');
   } catch (err) {
     throw err.status ? err : httpError(400, err.message);
   }
