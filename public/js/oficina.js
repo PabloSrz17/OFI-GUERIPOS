@@ -5,6 +5,7 @@ const AGENTES = {
   chasis: { nombre: 'Sulema', rol: 'Ventas · SICAR y Pulpos' },
   rutas: { nombre: 'Gerente de Logística', rol: 'Logística · patio de fletes y camiones' },
   inspector: { nombre: 'Chatito Waspat', rol: 'Cotizaciones y atención' },
+  octavio: { nombre: 'Octavio', rol: 'Órdenes de compra y almacén · Concordia' },
 };
 // disponible: sin pendientes · procesando: trabajando o contestándote · espera: necesita a un humano
 const ESTADOS = { disponible: 'Disponible', procesando: 'Procesando', espera: 'En espera' };
@@ -24,7 +25,7 @@ const pensando = new Set();   // agentes contestando una pregunta (se muestran "
 const botones = {};
 const objetos = {}; // etiquetas de las pizarras
 
-const OBJETOS = { notas: '📦 Notas Pendientes', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias' };
+const OBJETOS = { notas: '📦 Notas Pendientes', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Órdenes de Compra' };
 
 export function ponerCuenta(id, n) {
   objetos[id].querySelector('.objeto3d__cuenta').textContent = n || '';
@@ -119,6 +120,11 @@ function estadosAgentes(r) {
         `${plural(r.cotizaciones_hoy ?? 0, 'cotización', 'cotizaciones')} hoy · ${plural(r.clientes, 'cliente', 'clientes')}`,
         null,
       ],
+    octavio: r.ordenes_por_aprobar
+      ? ['espera', `¡${plural(r.ordenes_por_aprobar, 'orden', 'órdenes')} por aprobar!`, r.ordenes_por_aprobar]
+      : r.ordenes_por_surtir
+        ? ['procesando', `${plural(r.ordenes_por_surtir, 'orden', 'órdenes')} por surtir`, null]
+        : ['disponible', 'Esperando órdenes…', null],
   };
 }
 
@@ -145,6 +151,7 @@ export function actualizarOficina(resumen, notas = ultimasNotas) {
   Object.assign(actuales, estadosAgentes(resumen));
   Object.keys(AGENTES).forEach(pintarAgente);
   ponerCuenta('notas', resumen.pendiente + resumen.cargando + resumen.en_ruta);
+  ponerCuenta('ordenes', resumen.ordenes_por_surtir);
   pintarLista();
 }
 
@@ -170,7 +177,7 @@ export function animarSalida(nota) {
 
 // ---- Panel lateral del agente: rol, estado y chat ----
 const panel = document.querySelector('#panel-agente');
-const historial = { chasis: [], rutas: [], inspector: [] }; // se guarda en el servidor; aquí, la copia en pantalla
+const historial = { chasis: [], rutas: [], inspector: [], octavio: [] }; // se guarda en el servidor; aquí, la copia en pantalla
 
 // El chat queda abajo del panel: se baja a él, salvo que haya cotizaciones esperando autorización arriba.
 function verChat() {

@@ -15,6 +15,7 @@ const { armarBorrador, aNumero } = require('./cotizador');
 const { normalizar } = require('../../lib/telefono');
 const { bienvenida } = require('../whatsapp/mensajes');
 const { bajarImagen } = require('../whatsapp/medios');
+const octavio = require('../octavio/ordenes');
 
 const Anthropic = AnthropicSDK.default ?? AnthropicSDK;
 const MODELO = 'claude-haiku-5-5';
@@ -173,10 +174,8 @@ function guardarFoto(media) {
   return nombre;
 }
 
-// La foto siempre abre su propia tarjeta. Si la IA falla, sale igual para capturarla a mano;
-// sólo lo que claramente no es un pedido (una selfie, un meme) se ignora.
-async function procesarFoto(mensaje, { clave, telefono, contacto, conv, pie, yaHablamos }) {
-  if (!process.env.ANTHROPIC_API_KEY) return;
+// Baja la foto de WhatsApp y, si hay clave de IA, la transcribe. Si algo falla, regresa lo que alcanzó.
+async function bajarYLeer(mensaje, clave, pie) {
   console.log(`[inspector] foto recibida de ${clave}`);
   const media = await bajarImagen(mensaje).catch((err) => {
     console.error(`[inspector] no se pudo descargar la foto de ${clave}:`, err.message);
@@ -185,10 +184,18 @@ async function procesarFoto(mensaje, { clave, telefono, contacto, conv, pie, yaH
   if (media) media.mimetype = String(media.mimetype).split(';')[0];
   const legible = Boolean(media && EXTENSIONES[media.mimetype] && media.data.length <= MAX_BASE64);
   if (media && !legible) console.error(`[inspector] foto de ${clave} no se pudo leer: ${media.mimetype}, ${media.data.length} bytes`);
-  const leida = legible ? await leerFoto(media, pie).catch((err) => {
+  const leida = legible && process.env.ANTHROPIC_API_KEY ? await leerFoto(media, pie).catch((err) => {
     console.error('[inspector] IA (foto):', err.message);
     return null;
   }) : null;
+  return { media, legible, leida };
+}
+
+// La foto siempre abre su propia tarjeta. Si la IA falla, sale igual para capturarla a mano;
+// sólo lo que claramente no es un pedido (una selfie, un meme) se ignora.
+async function procesarFoto(mensaje, { clave, telefono, contacto, conv, pie, yaHablamos }) {
+  if (!process.env.ANTHROPIC_API_KEY) return;
+  const { media, legible, leida } = await bajarYLeer(mensaje, clave, pie);
   // Si con la foto o justo antes pidió cotización, la tarjeta sale aunque la foto no parezca una lista.
   if (leida && !leida.es_pedido && !pideCotizacion(`${conv.textos}\n${pie}`)) {
     console.log(`[inspector] foto de ${clave} ignorada: no parece un pedido`);
@@ -217,9 +224,17 @@ async function procesarMensaje(mensaje) {
   const contacto = await mensaje.getContact().catch(() => null);
   // En chats @lid, contacto.number es el lid; el teléfono real viene en contacto.id.
   const telefono = normalizar(contacto?.id?.user ?? contacto?.number);
+  const clave = telefono ?? mensaje.from;
+
+  // Octavio primero: su aviso, o lo que siga mandando quien acaba de avisar, no le toca a Chatito.
+  const pideOrden = octavio.esOrden(texto);
+  if (pideOrden || (!pideCotizacion(texto) && octavio.abierta(clave))) {
+    const antes = pideOrden ? tomarRecientes(clave, momento(mensaje)) : [];
+    await octavio.recibir(mensaje, { clave, telefono, contacto, texto, antes, leerFoto: bajarYLeer, guardarFoto });
+    return;
+  }
   if (telefono && stmts.esChofer.get(telefono)) return;
 
-  const clave = telefono ?? mensaje.from;
   const previa = stmts.conversacion.get(clave);
   const conv = previa && !previa.vencida ? previa : { textos: '', esperando: 0, solicitud_id: null };
   // Quien ya pidió cotización sigue contestando (material, colonia, pago) sin repetir las palabras.

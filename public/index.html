@@ -100,6 +100,28 @@
     </section>
   </dialog>
 
+  <!-- Pizarra de Octavio: órdenes de compra aprobadas -->
+  <dialog id="ventana-ordenes" class="ventana" aria-labelledby="ordenes-titulo">
+    <header class="ventana__cabeza">
+      <h2 id="ordenes-titulo">🧾 Órdenes de Compra · Concordia</h2>
+      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
+    </header>
+    <section class="ordenes" aria-label="Órdenes de compra">
+      <div class="columna" data-orden-estado="aprobada">
+        <header><h2>Aprobadas</h2><span class="contador">0</span></header>
+        <div class="ordenes__lista"></div>
+      </div>
+      <div class="columna" data-orden-estado="surtida">
+        <header><h2>Surtidas</h2><span class="contador">0</span></header>
+        <div class="ordenes__lista"></div>
+      </div>
+      <div class="columna" data-orden-estado="cancelada">
+        <header><h2>Canceladas</h2><span class="contador">0</span></header>
+        <div class="ordenes__lista"></div>
+      </div>
+    </section>
+  </dialog>
+
   <!-- Panel lateral de cada agente: su función y su chat -->
   <dialog id="panel-agente" class="panel" aria-labelledby="panel-nombre">
     <header class="panel__cabeza">
@@ -192,6 +214,32 @@
       </section>
     </div>
 
+    <div class="panel__funcion" data-funcion="octavio" hidden>
+      <div id="ordenes-espera" class="autorizar" hidden>
+        <h3>📥 Órdenes por aprobar</h3>
+        <ul id="ordenes-espera-lista" class="ordenes-espera"></ul>
+      </div>
+      <button type="button" class="btn" data-objeto="ordenes">🧾 Abrir Órdenes de Compra</button>
+      <section class="captura captura--campos entradas" aria-labelledby="entradas-titulo">
+        <h2 id="entradas-titulo">📦 Entradas de Almacén</h2>
+        <p class="captura__ayuda">Es sólo un registro: no descuenta ni suma a ningún inventario.</p>
+        <form id="form-entrada" autocomplete="off">
+          <div class="editar__datos">
+            <label class="campo">Cantidad <input name="cantidad" required placeholder="7, 1/2…"></label>
+            <label class="campo">Unidad <input name="unidad" list="lista-unidades-captura" placeholder="m³, pz…"></label>
+            <label class="campo">Proveedor <input name="proveedor" placeholder="opcional"></label>
+            <label class="campo editar__ancho">Material <input name="material" list="lista-materiales" required></label>
+            <label class="campo editar__ancho">Nota <input name="nota" placeholder="opcional: remisión, placas…"></label>
+          </div>
+          <button type="submit" class="btn btn--ruta captura__guardar">Registrar entrada ✔</button>
+        </form>
+        <details class="inspector__recientes" open>
+          <summary>Últimas entradas</summary>
+          <ul id="entradas-lista"></ul>
+        </details>
+      </section>
+    </div>
+
     <section class="panel__conversacion" aria-label="Conversación">
       <p class="panel__titulo">💬 CONVERSACIÓN</p>
       <div class="panel__chat" aria-live="polite"></div>
@@ -200,6 +248,53 @@
         <button type="submit" class="btn panel__enviar"></button>
       </form>
     </section>
+  </dialog>
+
+  <!-- Alerta flotante de Octavio: la orden que llegó, editable antes de aprobar -->
+  <aside id="alerta-orden" class="alerta-orden" role="alert" aria-labelledby="orden-titulo" hidden>
+    <header class="alerta-orden__cabeza">
+      <h2 id="orden-titulo"></h2>
+      <button type="button" class="alerta__cerrar" data-ver-despues aria-label="Ver después">✕</button>
+    </header>
+    <p id="orden-actualizado" class="alerta-orden__aviso" hidden>Llegó más de esta orden. <button type="button" class="btn btn--secundario" data-recargar-orden>Ver lo nuevo</button></p>
+    <div id="orden-origen" class="alerta-orden__origen"></div>
+    <form id="form-orden" autocomplete="off">
+      <div class="editar__datos">
+        <label class="campo">Solicita <input name="solicitante" required></label>
+        <label class="campo">📱 WhatsApp <input name="telefono" type="tel" required placeholder="981 147 8351"></label>
+        <label class="campo">Sucursal <input name="sucursal" required></label>
+      </div>
+      <p id="orden-sin-lista" class="captura__ayuda" hidden>Todavía no trae lista: puede estar por llegar o captúrala aquí.</p>
+      <div id="orden-articulos"></div>
+      <button type="button" class="btn btn--secundario captura__agregar" data-agregar>＋ Agregar artículo</button>
+      <p id="orden-pista" class="alerta-orden__pista"></p>
+      <div class="dialogo__botones">
+        <button type="button" id="orden-descartar" class="btn btn--secundario">Descartar</button>
+        <button type="submit" id="orden-aprobar" class="btn btn--ruta"></button>
+      </div>
+    </form>
+  </aside>
+
+  <dialog id="editar-orden" class="dialogo dialogo--editar" aria-labelledby="editar-orden-titulo">
+    <form autocomplete="off">
+      <h2 id="editar-orden-titulo"></h2>
+      <p class="dialogo__aviso">Editar aquí no le avisa a nadie.</p>
+      <div class="editar__datos">
+        <label class="campo">Solicita <input name="solicitante" required></label>
+        <label class="campo">📱 WhatsApp <input name="telefono" type="tel" placeholder="opcional"></label>
+        <label class="campo">Sucursal <input name="sucursal" required></label>
+        <label class="campo">Estatus
+          <select name="estado"><option value="aprobada">Aprobada</option><option value="surtida">Surtida</option><option value="cancelada">Cancelada</option></select>
+        </label>
+      </div>
+      <div id="editar-orden-articulos"></div>
+      <button type="button" class="btn btn--secundario editar__agregar" data-agregar>＋ Agregar artículo</button>
+      <p id="editar-orden-aviso" class="dialogo__aviso dialogo__aviso--error"></p>
+      <div class="dialogo__botones">
+        <button type="button" class="btn btn--secundario" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn btn--ruta">Guardar cambios</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="confirmar-ruta" class="dialogo" aria-labelledby="confirmar-titulo">

@@ -172,4 +172,4 @@ function interpretar(linea) {
   };
 }
 
-module.exports = { interpretar, parseProducto, datosConEmpaque, unidadDe, conBolsa };
+module.exports = { interpretar, parseProducto, productoDeNota, datosConEmpaque, unidadDe, conBolsa };

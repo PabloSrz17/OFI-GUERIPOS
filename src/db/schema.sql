@@ -218,3 +218,36 @@ CREATE TABLE IF NOT EXISTS ajustes (
   clave TEXT PRIMARY KEY,
   valor TEXT NOT NULL
 );
+
+-- ===== Octavio: órdenes de compra y entradas de almacén =====
+
+-- original: la lista como llegó; renglones: la vigente. Si difieren al aprobar, se contesta con las cantidades.
+CREATE TABLE IF NOT EXISTS ordenes_compra (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  clave          TEXT NOT NULL,           -- teléfono o chat de quien la manda
+  telefono       TEXT,
+  solicitante    TEXT NOT NULL,
+  sucursal       TEXT NOT NULL DEFAULT 'Concordia',
+  mensaje        TEXT NOT NULL DEFAULT '',
+  foto           TEXT,
+  original       TEXT NOT NULL DEFAULT '[]',
+  renglones      TEXT NOT NULL DEFAULT '[]',
+  estado         TEXT NOT NULL DEFAULT 'por_aprobar'
+                 CHECK (estado IN ('por_aprobar', 'aprobada', 'surtida', 'cancelada', 'descartada')),
+  whatsapp       TEXT,
+  aprobada_en    TEXT,
+  creado_en      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  actualizado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_ordenes_estado ON ordenes_compra(estado);
+
+CREATE TABLE IF NOT EXISTS entradas_almacen (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  sucursal  TEXT NOT NULL DEFAULT 'Concordia',
+  proveedor TEXT,
+  material  TEXT NOT NULL,
+  cantidad  TEXT NOT NULL,
+  unidad    TEXT,
+  nota      TEXT,
+  creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);

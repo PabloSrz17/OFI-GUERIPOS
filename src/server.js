@@ -20,6 +20,7 @@ const registroSheets = require('./integraciones/sheets/registro');
 const agentes = require('./integraciones/agentes/agentes');
 const bus = require('./events/bus');
 const solicitudes = require('./integraciones/inspector/solicitudes');
+const ordenes = require('./integraciones/octavio/ordenes');
 const asistencias = require('./repositories/asistencias.repo');
 
 const app = express();
@@ -43,13 +44,14 @@ app.get('/api/choferes', (req, res) => res.json(choferes.listarActivos()));
 app.get('/api/camiones', (req, res) => res.json(camiones.listarActivos()));
 app.use('/api/clientes', require('./routes/clientes.routes'));
 app.use('/api/cotizaciones', require('./routes/cotizaciones.routes'));
+app.use('/api/octavio', require('./routes/octavio.routes'));
 app.use('/api/pizarron', require('./routes/pizarron.routes'));
 app.use('/api/asistencias', require('./routes/asistencias.routes'));
 
 // Tiempo real (Server-Sent Events): cada pantalla abierta recibe un aviso al cambiar algo y se refresca.
 const EVENTOS = {
   'nota:creada': 'tablero', 'nota:estado': 'tablero', 'nota:asignada': 'tablero', 'nota:editada': 'tablero', 'nota:eliminada': 'tablero', 'jornada:cerrada': 'tablero',
-  'cotizacion:creada': 'tablero', 'pizarron:cambio': 'pizarron', 'solicitud:nueva': 'inspector', 'asistencia:cambio': 'asistencia',
+  'cotizacion:creada': 'tablero', 'pizarron:cambio': 'pizarron', 'solicitud:nueva': 'inspector', 'asistencia:cambio': 'asistencia', 'orden:cambio': 'octavio',
 };
 bus.setMaxListeners(100); // un oyente por pantalla abierta
 app.get('/api/eventos', (req, res) => {
@@ -74,6 +76,8 @@ app.get('/api/resumen', (req, res) =>
     clientes: clientes.contar(),
     cotizaciones_hoy: cotizacionesRepo.hoy(),
     solicitudes_pendientes: solicitudes.pendientes().length,
+    ordenes_por_aprobar: ordenes.porAprobar(),
+    ordenes_por_surtir: ordenes.porSurtir(),
     asistencia_pendiente: asistencias.pendienteHoy(),
     camiones: camiones.conEstado(),
     integraciones: integraciones.obtener(),

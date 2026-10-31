@@ -18,7 +18,7 @@ const ESTADO_WHATSAPP = {
 };
 
 // Mismas reglas que el servidor (cotizador.js): "1/2" = 0.5, "1 1/2" = 1.5.
-function aNumero(valor) {
+export function aNumero(valor) {
   const t = String(valor ?? '').trim();
   const m = t.match(/^(?:(\d+)\s+)?(\d+)\/(\d+)$/);
   if (m) return Number(m[3]) > 0 ? Number(m[1] ?? 0) + Number(m[2]) / Number(m[3]) : NaN;

@@ -147,6 +147,21 @@ Construcomer, 7 m3 polvo + 10 cemento maya + 2 armex castillo, Pensiones, tel 98
 - **Pizarrón de la Oficina:** pendientes del equipo humano (tabla `chalkboard`). Se anotan con nombre (lo recuerda cada navegador) y se marcan como listos con la palomita. **Borrar pide dos clics:** el primero convierte la × en un botón rojo "¿Borrar?" que se desarma solo a los 3 s; el segundo borra. Los completados se ven el mismo día y desaparecen al siguiente.
 - **Tiempo real:** `GET /api/eventos` (Server-Sent Events) avisa a todas las pantallas abiertas cuando cambian notas, asignaciones, cotizaciones o el Pizarrón, y se actualizan al instante. Queda un refresco de respaldo cada 60 s.
 
+### Octavio: órdenes de compra y almacén
+
+Octavio tiene su escritorio y su propio pizarrón, **Órdenes de Compra**, aparte de Sulema y Chatito.
+
+1. Por WhatsApp alguien escribe *"Octavio te mando esta orden de compra"*, con la lista en el mismo mensaje, justo antes o hasta 2 minutos después. También sirve una foto: la lee la misma IA de Chatito, si hay clave de API.
+2. Sale una alerta flotante en la oficina con la lista editable. No se guarda como aprobada ni se le contesta nada hasta que alguien decida. **Ver después** la deja en el panel de Octavio y **Descartar** la quita sin contestar.
+3. Al aprobar:
+   - **Con cambios** (cantidad, unidad, material o renglones): le llega *"Me autorizaron estas cantidades:"* con la lista nueva.
+   - **Sin cambios:** le llega *"¡Claro que sí! Aquí tienes tu orden:"* con la imagen de la orden, sin precios.
+4. La orden queda en el pizarrón (sucursal inicial Concordia), en Aprobadas, Surtidas o Canceladas. **✎ Editar** cambia productos o estatus cuando sea y no le manda nada al solicitante. Si el envío falló, aparece **Reenviar**.
+
+Si WhatsApp está desconectado, la orden no se aprueba: la alerta sigue abierta con lo escrito.
+
+**Entradas de Almacén**, en el panel de Octavio, es sólo un registro manual: no suma ni descuenta inventario, porque el sistema no lleva inventario.
+
 ### Preguntarle a un agente (IA)
 
 **Da clic en un agente** y se abre su panel con su rol, su estado, lo que está haciendo y un chat ("Escríbele a El Rutas…"). Pregunta en español: "¿qué camión llevó la N923?", "¿cuánto vendimos hoy en Pulpos?", "¿cuánto cuesta el armex de castillo?". Enter envía; Shift+Enter hace salto de línea. La conversación se guarda en la base (`agentes_chat`), así que sigue ahí al cerrar el panel o recargar, y es la misma en todas las PCs.
@@ -319,7 +334,7 @@ oficina-virtual/
 | GET | `/api/eventos` | Tiempo real (SSE): eventos `tablero` y `pizarron` |
 | GET · POST | `/api/pizarron` | Notas del Pizarrón · `{ texto, creado_por? }` |
 | PATCH · DELETE | `/api/pizarron/:id` | `{ estado: "pendiente" \| "completado" }` · borrar |
-| POST | `/api/agentes/:id/preguntar` | `{ pregunta }` → `{ respuesta }` (`rutas`, `chasis`, `inspector`) |
+| POST | `/api/agentes/:id/preguntar` | `{ pregunta }` → `{ respuesta }` (`rutas`, `chasis`, `inspector`, `octavio`) |
 | POST | `/api/cotizaciones/borrador` | `{ texto }` → borrador con partidas (precio `null` = falta) |
 | POST | `/api/cotizaciones` | Aprueba: `{ cliente, telefono?, colonia, solicitud, partidas, actualizarPrecios?, enviar? }`. Recalcula importes, guarda, aprende y (si `enviar`) manda la imagen |
 | GET | `/api/cotizaciones` · `/api/cotizaciones/precios` | Últimas 10 · lista de precios y fletes |
@@ -330,6 +345,13 @@ oficina-virtual/
 | POST | `/api/cotizaciones/:id/estado` | `{ estado: "pagada" \| "cerrada" \| "aprobada" }`: las dos primeras cancelan el recordatorio; "aprobada" deshace |
 | GET | `/api/cotizaciones/:id/imagen` | PNG tipo Excel (`?descargar=1` para bajarla) |
 | POST | `/api/cotizaciones/:id/enviar` | Reenvía la imagen por WhatsApp |
+| GET | `/api/octavio/ordenes` | Órdenes de compra, sin las descartadas |
+| POST | `/api/octavio/ordenes/:id/aprobar` | `{ solicitante, telefono, sucursal, renglones }`: aprueba y contesta por WhatsApp. 503 si está desconectado, 409 si ya se atendió. Devuelve `{ orden, whatsapp }` |
+| POST | `/api/octavio/ordenes/:id/descartar` | La quita sin contestar |
+| PUT | `/api/octavio/ordenes/:id` | Edita una orden del pizarrón, con `estado`: `aprobada` \| `surtida` \| `cancelada`. No envía nada |
+| POST | `/api/octavio/ordenes/:id/enviar` | Reenvía la respuesta de una orden aprobada |
+| GET | `/api/octavio/ordenes/:id/imagen` | PNG de la orden |
+| GET · POST | `/api/octavio/entradas` | Entradas de almacén · `{ material, cantidad, unidad?, proveedor?, nota? }` |
 | GET | `/api/resumen` | Conteos por estado, `sin_chofer`, `clientes` y `integraciones` (estado de cada conector) |
 
 ## Base de datos

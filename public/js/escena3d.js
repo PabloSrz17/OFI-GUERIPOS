@@ -1,4 +1,4 @@
-// Maqueta isométrica 3D (three.js): caseta de oficina con los 3 escritorios y, al lado, el patio de
+// Maqueta isométrica 3D (three.js): caseta de oficina con los 4 escritorios y, al lado, el patio de
 // materiales con bodega, montones y la flota. Las etiquetas (agentes, camiones, áreas) son HTML
 // encima de la escena (CSS2DRenderer), así se les puede dar clic y leer con lector de pantalla.
 import * as THREE from 'three';
@@ -15,20 +15,22 @@ const ROPA = {
   chasis: { torso: 0x2f9e5b, pierna: 0x2d3a5c, gorra: 0x3b2417, casco: false },
   rutas: { torso: 0xf26b1d, pierna: 0x33406b, gorra: 0xf2b516, casco: true },
   inspector: { torso: 0x2f6fd1, pierna: 0x2b2b38, gorra: 0x8a8f99, casco: false },
+  octavio: { torso: 0x8e5bc7, pierna: 0x2d2a3f, gorra: 0x2b2320, casco: false },
 };
 const COLOR_ESTADO = { disponible: 0x3fbf6b, procesando: 0xf2a516, espera: 0xff5a4f };
 const CAJAS_CAMION = [0xe8a33d, 0xd9d4c7, 0x6fa8dc, 0xc0392b, 0xf2d33a, 0x9b59b6];
 
 // Lugares en la maqueta (x, z). La oficina va de x -17 a 1 y de z -8 a 8; el patio de x 1 a 13.
 // Muy separados en diagonal para que sus etiquetas no se encimen en la vista isométrica.
-const PUESTOS = { chasis: [-13.5, 4], rutas: [-3.5, 4], inspector: [-8.5, -4] };
-const AREAS = { chasis: 'VENTAS · MOSTRADOR', rutas: 'LOGÍSTICA · FLETES', inspector: 'COTIZACIONES' };
+const PUESTOS = { chasis: [-13.5, 4], rutas: [-3.5, 4], inspector: [-8.5, -4], octavio: [-2.5, -4] };
+const AREAS = { chasis: 'VENTAS · MOSTRADOR', rutas: 'LOGÍSTICA · FLETES', inspector: 'COTIZACIONES', octavio: 'ÓRDENES · ALMACÉN' };
 const ESTACIONAMIENTO = [[3.4, 5.0], [7.2, 5.0], [11.0, 5.0], [5.3, 1.4], [9.1, 1.4], [3.4, -2.2]];
 // A dónde se levanta cada agente de vez en cuando (por piso libre) antes de volver a su escritorio.
 const VISITAS = {
   chasis: [[-13.5, 1.6], [-15.4, -3]],
-  rutas: [[-3.5, 1.6], [-3, -6.6]],
+  rutas: [[-3.5, 1.6], [-5.8, -6.6]],
   inspector: [[-6, -6.4], [-11.5, -6.4]],
+  octavio: [[-2.2, -6.6], [-0.4, -5]],
 };
 const VELOCIDAD = 1.8;
 const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -95,6 +97,7 @@ function pisoYMuros() {
   escena.add(en(caja(6, 0.02, 4.4, 0x58b89a, { sombra: false }), PUESTOS.chasis[0], 0.02, PUESTOS.chasis[1] + 0.6));
   escena.add(en(caja(6, 0.02, 4.4, 0xf08a5d, { sombra: false }), PUESTOS.rutas[0], 0.02, PUESTOS.rutas[1] + 0.6));
   escena.add(en(caja(6, 0.02, 4.4, 0x6fa8dc, { sombra: false }), PUESTOS.inspector[0], 0.02, PUESTOS.inspector[1] + 0.6));
+  escena.add(en(caja(5.6, 0.02, 4.4, 0xb79ad8, { sombra: false }), PUESTOS.octavio[0], 0.02, PUESTOS.octavio[1] + 0.6));
 }
 
 // Planta en maceta. grande: arbolito para el patio.
@@ -328,7 +331,8 @@ export function montarEscena(el, agentesHtml, objetosHtml, alClicAgente, alClicO
   el.append(etiquetas.domElement);
 
   pisoYMuros();
-  pizarra('notas', -3.5, -7.8, 0, 0x2f6b4f, [0xf4f1e3, 0xf4f1e3, 0xf2c14e, 0xf4f1e3], objetosHtml.notas);
+  pizarra('notas', -5.8, -7.8, 0, 0x2f6b4f, [0xf4f1e3, 0xf4f1e3, 0xf2c14e, 0xf4f1e3], objetosHtml.notas);
+  pizarra('ordenes', -2.2, -7.8, 0, 0x4b3a6b, [0xf4f1e3, 0xd9c7f2, 0xf4f1e3, 0xf2c14e], objetosHtml.ordenes);
   pizarra('dia', -13.5, -7.8, 0, 0xc99a63, [0xf9e27a, 0xf7a8a0, 0xa8e0c8, 0xa9cdf2, 0xf9e27a, 0xf7a8a0], objetosHtml.dia, true);
   pizarra('asistencias', -16.8, -3, Math.PI / 2, 0xfaf7ee, [0x2f7fd1, 0xe2502f, 0x2f9e5b, 0x2f7fd1], objetosHtml.asistencias);
   decoracion();

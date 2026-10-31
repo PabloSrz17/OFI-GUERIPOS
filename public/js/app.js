@@ -9,6 +9,7 @@ import { montarParcial } from './parcial.js';
 import { montarVisorFoto } from './visor-foto.js';
 import { montarCierre } from './cierre.js';
 import { montarInspector, recargarSolicitudes } from './inspector.js';
+import { montarOctavio, recargarOctavio } from './octavio.js';
 import { normalizar, formatear } from './telefono.js';
 
 const INTERVALO_MS = 60000; // respaldo; los cambios llegan al instante por /api/eventos
@@ -277,6 +278,7 @@ function escucharEventos() {
   eventos.addEventListener('pizarron', () => recargarPizarron());
   eventos.addEventListener('asistencia', () => { recargarAsistencias(); refrescar(); }); // incluye el aviso de las 10:00
   eventos.addEventListener('inspector', () => { recargarSolicitudes(); refrescar(); }); // llegó/cambió una solicitud por WhatsApp
+  eventos.addEventListener('octavio', () => { recargarOctavio(); refrescar(); }); // llegó/cambió una orden de compra
   eventos.addEventListener('open', () => setConexion(true));
   eventos.addEventListener('error', () => setConexion(false));
 }
@@ -301,6 +303,7 @@ async function iniciar() {
   montarVisorFoto();
   montarCierre({ notasActuales: () => notasActuales, alCerrar: refrescar, toast });
   montarInspector({ toast, alAprobar: refrescar });
+  montarOctavio({ toast, alCambiar: refrescar });
   reloj();
   setInterval(reloj, 30000);
   try {

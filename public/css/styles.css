@@ -97,6 +97,34 @@ body { display: flex; flex-direction: column; overflow: hidden; background: #f7e
 /* Aviso emergente: hora de pasar lista */
 .alerta { position: fixed; bottom: 20px; left: 50%; z-index: 30; display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-weight: 700; color: #1c1300; background: #ffc53d; border: 2px solid #000; border-radius: 10px; box-shadow: 0 0 22px 4px rgb(255 197 61 / 0.5); transform: translateX(-50%); }
 .alerta[hidden] { display: none; }
+/* Octavio: orden por aprobar, flota sobre la oficina, los paneles y las pizarras */
+.alerta-orden { position: fixed; right: 16px; bottom: 16px; z-index: 40; width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 88px); padding: 12px 16px; overflow-y: auto; color: var(--texto); background: var(--panel); border: 3px solid #8e5bc7; border-radius: 12px; box-shadow: 0 12px 40px rgb(0 0 0 / 0.6); }
+.alerta-orden[hidden] { display: none; }
+.alerta-orden__cabeza { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.alerta-orden__cabeza h2 { margin: 0; font-size: 16px; }
+.alerta-orden__origen { display: flex; align-items: flex-start; gap: 10px; margin: 8px 0; font-size: 13px; color: var(--texto-suave); }
+.alerta-orden__origen p { margin: 0; max-height: 96px; overflow-y: auto; white-space: pre-wrap; }
+.alerta-orden__origen .foto-mini img { width: 90px; height: 120px; }
+.alerta-orden__aviso { margin: 8px 0; font-weight: 700; }
+.alerta-orden__pista { margin: 6px 0; font-size: 13px; font-weight: 700; }
+.alerta-orden input { width: 100%; min-width: 0; padding: 8px; font: inherit; font-size: 14px; color: var(--texto); background: var(--panel-2); border: 1px solid #d08a4e; border-radius: 8px; }
+.ordenes-espera li { display: flex; align-items: center; gap: 8px; }
+.ordenes-espera .btn { margin: 0 0 0 auto; }
+.entradas { margin-top: 12px; }
+.entradas input { min-width: 0; }
+#entradas-lista li { display: grid; gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--panel-2); list-style: none; }
+#entradas-lista { margin: 8px 0 0; padding: 0; }
+/* Pizarrón de órdenes de compra */
+.ordenes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; align-items: start; }
+.ordenes__lista { display: grid; gap: 10px; padding: 8px; }
+.ordenes__vacio { margin: 0; font-size: 13px; color: var(--texto-suave); }
+.orden { padding: 10px; font-size: 14px; background: var(--panel-2); border: 1px solid #d08a4e; border-radius: 8px; }
+.orden header { display: flex; justify-content: space-between; gap: 8px; }
+.orden__de { margin: 4px 0; font-size: 12px; color: var(--texto-suave); }
+.orden ul { margin: 6px 0; padding-left: 18px; }
+.orden__whatsapp { margin: 6px 0; font-size: 12px; }
+.orden__botones { display: flex; flex-wrap: wrap; gap: 6px; }
+.orden__botones .btn { margin: 0; padding: 6px 10px; font-size: 13px; text-decoration: none; }
 .alerta .btn { margin: 0; }
 .alerta__cerrar { padding: 0 4px; font-size: 16px; color: inherit; background: none; border: none; cursor: pointer; }
 
@@ -338,6 +366,7 @@ body { display: flex; flex-direction: column; overflow: hidden; background: #f7e
 }
 .panel__sprite[data-agente='rutas'] { background: #f26b1d; }
 .panel__sprite[data-agente='inspector'] { background: #2f6fd1; }
+.panel__sprite[data-agente='octavio'] { background: #8e5bc7; }
 .panel__nombre { margin: 0; font: 800 16px var(--pixel); }
 .panel__rol { margin: 4px 0; font-size: 13px; font-style: italic; color: var(--texto-suave); }
 .panel__estado { display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; background: #c8f0d0; color: #11642a; }
@@ -660,3 +689,4 @@ body { display: flex; flex-direction: column; overflow: hidden; background: #f7e
 .etiqueta3d .agente[data-agente='chasis'] .etiqueta { border-color: #2f9e5b; }
 .etiqueta3d .agente[data-agente='inspector'] .etiqueta { border-color: #2f7fd1; }
 .etiqueta3d .agente[data-agente='rutas'] .etiqueta { border-color: #f26b1d; }
+.etiqueta3d .agente[data-agente='octavio'] .etiqueta { border-color: #8e5bc7; }
