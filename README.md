@@ -151,7 +151,7 @@ Construcomer, 7 m3 polvo + 10 cemento maya + 2 armex castillo, Pensiones, tel 98
 
 Octavio tiene su escritorio y su propio pizarrón, aparte de Sulema y Chatito, con dos pestañas: **Órdenes de Compra** y **Entradas de Almacén**.
 
-1. Por WhatsApp alguien escribe *"Octavio te mando esta orden de compra"*, con la lista en el mismo mensaje, justo antes o hasta 2 minutos después. También sirve una foto: la lee la misma IA de Chatito, si hay clave de API.
+1. Por WhatsApp alguien escribe **Octavio** más **orden**, **compra** o **mando** (*"Octavio te mando esta orden de compra"*), en un mensaje o repartido en varios del mismo remitente con hasta 2 minutos entre ellos; la lista va en el mismo mensaje, justo antes o hasta 2 minutos después. También sirve una foto: la lee la misma IA de Chatito, si hay clave de API.
 2. Sale una alerta flotante en la oficina con la lista editable. No se guarda como aprobada ni se le contesta nada hasta que alguien decida. **Ver después** la deja en el panel de Octavio y **Descartar** la quita sin contestar.
 3. Al aprobar:
    - **Con cambios** (cantidad, unidad, material o renglones): le llega *"Me autorizaron estas cantidades:"* con la lista nueva.

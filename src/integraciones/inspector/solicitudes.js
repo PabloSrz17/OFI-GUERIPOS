@@ -227,10 +227,10 @@ async function procesarMensaje(mensaje) {
   const clave = telefono ?? mensaje.from;
 
   // Octavio primero: su aviso, o lo que siga mandando quien acaba de avisar, no le toca a Chatito.
-  const pideOrden = octavio.esOrden(texto);
+  const pideOrden = octavio.detectar(clave, texto, momento(mensaje));
   if (pideOrden || (!pideCotizacion(texto) && octavio.abierta(clave))) {
     const antes = pideOrden ? tomarRecientes(clave, momento(mensaje)) : [];
-    await octavio.recibir(mensaje, { clave, telefono, contacto, texto, antes, leerFoto: bajarYLeer, guardarFoto });
+    await octavio.recibir(mensaje, { clave, telefono, contacto, texto, aviso: pideOrden, antes, leerFoto: bajarYLeer, guardarFoto });
     return;
   }
   if (telefono && stmts.esChofer.get(telefono)) return;

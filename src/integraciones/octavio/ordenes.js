@@ -38,13 +38,41 @@ const avisar = () => bus.emit('orden:cambio');
 const obtener = (id) => conDatos(stmts.porId.get(id));
 
 const limpio = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const esOrden = (texto) => limpio(texto).includes('octavio') && limpio(texto).includes('orden de compra');
+const dicePalabra = (texto) => /\b(?:orden(?:es)?|compras?|mando)\b/.test(limpio(texto));
+const diceNombre = (texto) => /\boctavio\b/.test(limpio(texto));
+const esOrden = (texto) => diceNombre(texto) && dicePalabra(texto);
+
+// "Octavio" y la palabra pueden llegar en mensajes separados, hasta 2 minutos aparte. Sólo en memoria,
+// como los recientes de Chatito. Con una orden abierta no se juntan: lo que siga manda se suma a ella.
+const VENTANA_MS = 2 * 60_000;
+const pistas = new Map(); // clave -> { nombre, ms }
+function detectar(clave, texto, ms) {
+  if (esOrden(texto)) {
+    pistas.delete(clave);
+    return true;
+  }
+  const nombre = diceNombre(texto);
+  if ((!nombre && !dicePalabra(texto)) || stmts.abierta.get(clave)) return false;
+  for (const [otra, p] of pistas) {
+    if (p.ms < ms - VENTANA_MS) pistas.delete(otra);
+  }
+  const previa = pistas.get(clave);
+  if (previa && previa.nombre !== nombre) {
+    pistas.delete(clave);
+    return true;
+  }
+  pistas.set(clave, { nombre, ms });
+  return false;
+}
+
+// Lo que dice el aviso antes de la lista: "Octavio te mando esta orden de compra: 10 bultos cemento".
+const INICIO_AVISO = /^\D*(?<![\p{L}\d])(?:octavio|[oó]rden(?:es)?|compras?|m[aá]nd[oó])(?![\p{L}\d])(?:\s+de(?!\p{L}))?[\s:.,-]*/iu;
 
 // Sólo los renglones con cantidad: "gracias" o "para el lunes" se ven en el mensaje, no en la lista.
 function renglonesDeTexto(texto) {
   return String(texto ?? '')
     .split(/\n|\+|,\s+(?=\d)/)
-    .map((l) => l.replace(/^.*[oó]rden de compra[\s:.,-]*/i, '').replace(/^[\s•*·-]+/, '').replace(/^\d+\s*[.)-]+\s+(?=\d)/, '').trim())
+    .map((l) => l.replace(INICIO_AVISO, '').replace(/^[\s•*·-]+/, '').replace(/^\d+\s*[.)-]+\s+(?=\d)/, '').trim())
     .map((l) => {
       const alReves = l.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)\s+(\S+)$/); // "cemento maya 10 bultos"
       return productoDeNota(alReves && unidadDe(alReves[3]) ? `${alReves[2]} ${alReves[3]} ${alReves[1]}` : l);
@@ -57,8 +85,7 @@ const deFoto = (leida) => (leida?.productos ?? []).filter((p) => p.producto)
   .map((p) => ({ cantidad: p.cantidad, unidad: p.unidad, material: p.producto.toUpperCase() }));
 
 // Lo llama el lector de WhatsApp si el mensaje es para Octavio. leerFoto y guardarFoto son los de Chatito.
-async function recibir(mensaje, { clave, telefono, contacto, texto, antes, leerFoto, guardarFoto }) {
-  const aviso = esOrden(texto);
+async function recibir(mensaje, { clave, telefono, contacto, texto, aviso, antes, leerFoto, guardarFoto }) {
   const previa = stmts.abierta.get(clave);
   const sinNada = previa && !previa.foto && previa.renglones === '[]';
   const orden = !aviso || sinNada ? previa : null; // un aviso nuevo con otra lista ya en curso es otra orden
@@ -189,6 +216,7 @@ function editarEntrada(id, campos) {
 
 module.exports = {
   esOrden,
+  detectar,
   abierta: (clave) => Boolean(stmts.abierta.get(clave)),
   recibir,
   renglonesDeTexto,
