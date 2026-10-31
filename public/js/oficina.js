@@ -25,7 +25,7 @@ const pensando = new Set();   // agentes contestando una pregunta (se muestran "
 const botones = {};
 const objetos = {}; // etiquetas de las pizarras
 
-const OBJETOS = { notas: '📦 Notas Pendientes', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Órdenes de Compra' };
+const OBJETOS = { notas: '📦 Notas Pendientes', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Pizarrón de Octavio' };
 
 export function ponerCuenta(id, n) {
   objetos[id].querySelector('.objeto3d__cuenta').textContent = n || '';

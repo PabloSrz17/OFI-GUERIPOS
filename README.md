@@ -149,18 +149,18 @@ Construcomer, 7 m3 polvo + 10 cemento maya + 2 armex castillo, Pensiones, tel 98
 
 ### Octavio: órdenes de compra y almacén
 
-Octavio tiene su escritorio y su propio pizarrón, **Órdenes de Compra**, aparte de Sulema y Chatito.
+Octavio tiene su escritorio y su propio pizarrón, aparte de Sulema y Chatito, con dos pestañas: **Órdenes de Compra** y **Entradas de Almacén**.
 
 1. Por WhatsApp alguien escribe *"Octavio te mando esta orden de compra"*, con la lista en el mismo mensaje, justo antes o hasta 2 minutos después. También sirve una foto: la lee la misma IA de Chatito, si hay clave de API.
 2. Sale una alerta flotante en la oficina con la lista editable. No se guarda como aprobada ni se le contesta nada hasta que alguien decida. **Ver después** la deja en el panel de Octavio y **Descartar** la quita sin contestar.
 3. Al aprobar:
    - **Con cambios** (cantidad, unidad, material o renglones): le llega *"Me autorizaron estas cantidades:"* con la lista nueva.
    - **Sin cambios:** le llega *"¡Claro que sí! Aquí tienes tu orden:"* con la imagen de la orden, sin precios.
-4. La orden queda en el pizarrón (sucursal inicial Concordia), en Aprobadas, Surtidas o Canceladas. **✎ Editar** cambia productos o estatus cuando sea y no le manda nada al solicitante. Si el envío falló, aparece **Reenviar**.
+4. La orden queda en la pestaña **Órdenes de Compra** del Pizarrón de Octavio (sucursal inicial Concordia), en Aprobadas, Surtidas o Canceladas. **✎ Editar** cambia productos o estatus cuando sea y no le manda nada al solicitante. Si el envío falló, aparece **Reenviar**.
 
 Si WhatsApp está desconectado, la orden no se aprueba: la alerta sigue abierta con lo escrito.
 
-**Entradas de Almacén**, en el panel de Octavio, se capturan como una nota: proveedor, folio o factura (obligatorio), nota opcional y los renglones que hagan falta, con las mismas abreviaturas (B = BOLSAS, CB = CON BOLSA). En **Últimas entradas**, **✎ Editar** corrige cualquier dato de una entrada ya guardada; no queda registro de lo que tenía antes. Es sólo un registro manual: no suma ni descuenta inventario, porque el sistema no lleva inventario.
+**Entradas de Almacén**, en el panel de Octavio, se capturan como una nota: proveedor, folio o factura (obligatorio), nota opcional y los renglones que hagan falta, con las mismas abreviaturas (B = BOLSAS, CB = CON BOLSA). También salen en la pestaña **Entradas de Almacén** del pizarrón, con tarjetas naranjas para no confundirlas con las órdenes, que van en azul. En cualquiera de los dos lugares, **✎ Editar** corrige cualquier dato de una entrada ya guardada; no queda registro de lo que tenía antes. Es sólo un registro manual: no suma ni descuenta inventario, porque el sistema no lleva inventario.
 
 ### Preguntarle a un agente (IA)
 

@@ -16,6 +16,8 @@ const ESTADO_WHATSAPP = {
   no_whatsapp: '⚠️ Ese número no tiene WhatsApp',
   error: '⚠️ No se pudo enviar',
 };
+const ESTATUS = { aprobada: 'Aprobada', surtida: 'Surtida', cancelada: 'Cancelada' };
+const MAX_ENTRADAS = 50; // las que devuelve el servidor
 
 const todasLasFilas = (caja) => [...caja.querySelectorAll('.fila-articulo')].map((f) => ({
   cantidad: f.querySelector('[data-articulo="cantidad"]').value.trim(),
@@ -113,7 +115,7 @@ export function montarOctavio({ toast, alCambiar }) {
     const sinEnviar = o.estado === 'aprobada' && o.whatsapp !== 'enviado';
     return `
       <article class="orden">
-        <header><b>${esc(o.folio)}</b> <span>${esc(o.sucursal)}</span></header>
+        <header><b>${esc(o.folio)}</b> <span class="orden__estado orden__estado--${esc(o.estado)}">${esc(ESTATUS[o.estado])}</span> <span>${esc(o.sucursal)}</span></header>
         <p class="orden__de">${esc(o.solicitante)} · ${esc((o.aprobada_en ?? o.creado_en).slice(0, 16))}</p>
         <ul>${o.renglones.map((r) => `<li>${esc(linea(r))}</li>`).join('')}</ul>
         ${o.whatsapp ? `<p class="orden__whatsapp">${esc(ESTADO_WHATSAPP[o.whatsapp] ?? o.whatsapp)}</p>` : ''}
@@ -132,6 +134,25 @@ export function montarOctavio({ toast, alCambiar }) {
       col.querySelector('.contador').textContent = lista.length;
       col.querySelector('.ordenes__lista').innerHTML = lista.map(tarjeta).join('') || '<p class="ordenes__vacio">Sin órdenes</p>';
     }
+    $('#pestana-ordenes-n').textContent = ordenes.filter((o) => o.estado in ESTATUS).length;
+  }
+
+  function tarjetaEntrada(e) {
+    return `
+      <article class="tarjeta-entrada">
+        <span class="tarjeta-entrada__tipo">📦 ENTRADA</span>
+        <p class="tarjeta-entrada__folio">${esc(e.folio ?? 'Sin folio')}</p>
+        <p class="tarjeta-entrada__proveedor">${esc(e.proveedor ?? 'Sin proveedor')}</p>
+        <ul>${e.renglones.map((r) => `<li>${esc(linea(r))}</li>`).join('')}</ul>
+        <p class="tarjeta-entrada__pie">${esc(e.creado_en.slice(0, 16))}${e.nota ? ` · ${esc(e.nota)}` : ''}</p>
+        <div class="orden__botones"><button type="button" class="btn btn--secundario" data-editar-entrada="${e.id}">✎ Editar</button></div>
+      </article>`;
+  }
+
+  function pintarTableroEntradas() {
+    const aviso = entradas.length >= MAX_ENTRADAS ? `<p class="tablero-entradas__aviso">Se muestran las ${MAX_ENTRADAS} más recientes.</p>` : '';
+    $('#pestana-entradas-n').textContent = entradas.length;
+    $('#pizarron-entradas').innerHTML = aviso + (entradas.map(tarjetaEntrada).join('') || '<p class="ordenes__vacio">Sin entradas todavía.</p>');
   }
 
   async function recargar() {
@@ -142,6 +163,7 @@ export function montarOctavio({ toast, alCambiar }) {
       mostrarAlerta();
       pintarEspera();
       pintarPizarron();
+      pintarTableroEntradas();
       $('#entradas-lista').innerHTML = entradas.map((e) => `
         <li>
           <div class="entrada__cabeza"><b>${esc(e.folio ?? 'Sin folio')}</b><span>${esc(e.proveedor ?? 'Sin proveedor')}</span></div>
@@ -261,7 +283,7 @@ export function montarOctavio({ toast, alCambiar }) {
     }
   });
 
-  $('#entradas-lista').addEventListener('click', (e) => {
+  const alEditarEntrada = (e) => {
     const boton = e.target.closest('[data-editar-entrada]');
     if (!boton) return;
     const entrada = entradas.find((x) => x.id === Number(boton.dataset.editarEntrada));
@@ -274,7 +296,9 @@ export function montarOctavio({ toast, alCambiar }) {
     filasEditarEntrada.innerHTML = entrada.renglones.map(filaArticulo).join('');
     $('#editar-entrada-aviso').textContent = '';
     dialogoEntrada.showModal();
-  });
+  };
+  $('#entradas-lista').addEventListener('click', alEditarEntrada);
+  $('#pizarron-entradas').addEventListener('click', alEditarEntrada);
 
   formEditarEntrada.addEventListener('click', (e) => {
     if (e.target.closest('[data-agregar]')) {
@@ -304,6 +328,15 @@ export function montarOctavio({ toast, alCambiar }) {
   });
 
   // ---- Pizarrón ----
+  document.querySelector('#ventana-ordenes .pestanas').addEventListener('click', (e) => {
+    const elegida = e.target.closest('[role="tab"]');
+    if (!elegida) return;
+    for (const p of document.querySelectorAll('#ventana-ordenes [role="tab"]')) {
+      p.setAttribute('aria-selected', String(p === elegida));
+      document.getElementById(p.getAttribute('aria-controls')).hidden = p !== elegida;
+    }
+  });
+
   $('#ventana-ordenes').addEventListener('click', async (e) => {
     const editar = e.target.closest('[data-editar-orden]');
     if (editar) {

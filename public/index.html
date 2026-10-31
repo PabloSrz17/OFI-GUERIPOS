@@ -100,13 +100,17 @@
     </section>
   </dialog>
 
-  <!-- Pizarra de Octavio: órdenes de compra aprobadas -->
+  <!-- Pizarra de Octavio: órdenes de compra aprobadas y entradas de almacén -->
   <dialog id="ventana-ordenes" class="ventana" aria-labelledby="ordenes-titulo">
     <header class="ventana__cabeza">
-      <h2 id="ordenes-titulo">🧾 Órdenes de Compra · Concordia</h2>
+      <h2 id="ordenes-titulo">Pizarrón de Octavio</h2>
       <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
     </header>
-    <section class="ordenes" aria-label="Órdenes de compra">
+    <div class="pestanas" role="tablist" aria-label="Secciones del pizarrón">
+      <button type="button" class="pestana pestana--ordenes" role="tab" id="pestana-ordenes" aria-controls="pizarron-ordenes" aria-selected="true">🧾 Órdenes de Compra - Concordia <span class="contador" id="pestana-ordenes-n">0</span></button>
+      <button type="button" class="pestana pestana--entradas" role="tab" id="pestana-entradas" aria-controls="pizarron-entradas" aria-selected="false">📦 Entradas de Almacén <span class="contador" id="pestana-entradas-n">0</span></button>
+    </div>
+    <section class="ordenes" id="pizarron-ordenes" role="tabpanel" aria-labelledby="pestana-ordenes">
       <div class="columna" data-orden-estado="aprobada">
         <header><h2>Aprobadas</h2><span class="contador">0</span></header>
         <div class="ordenes__lista"></div>
@@ -120,6 +124,7 @@
         <div class="ordenes__lista"></div>
       </div>
     </section>
+    <section class="tablero-entradas" id="pizarron-entradas" role="tabpanel" aria-labelledby="pestana-entradas" hidden></section>
   </dialog>
 
   <!-- Panel lateral de cada agente: su función y su chat -->
@@ -219,7 +224,7 @@
         <h3>📥 Órdenes por aprobar</h3>
         <ul id="ordenes-espera-lista" class="ordenes-espera"></ul>
       </div>
-      <button type="button" class="btn" data-objeto="ordenes">🧾 Abrir Órdenes de Compra</button>
+      <button type="button" class="btn" data-objeto="ordenes">🧾 Abrir Pizarrón de Octavio</button>
       <section class="captura captura--campos entradas" aria-labelledby="entradas-titulo">
         <h2 id="entradas-titulo">📦 Entradas de Almacén</h2>
         <p class="captura__ayuda">Es sólo un registro: no descuenta ni suma a ningún inventario.</p>
