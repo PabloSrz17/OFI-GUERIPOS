@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vincular WhatsApp</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .vincular { max-width: 520px; margin: 0 auto; padding: 24px 16px; }
+    .vincular h1 { font: 14px var(--pixel); color: var(--entregado); line-height: 1.6; }
+    .vincular ol { line-height: 1.7; padding-left: 20px; }
+    .qr { display: grid; place-items: center; min-height: 300px; margin: 16px 0; padding: 16px; background: #fff; border: 4px solid #000; box-shadow: var(--sombra); }
+    .qr svg { width: 100%; max-width: 280px; height: auto; }
+    .qr p { color: #111; text-align: center; font-weight: 700; }
+    .vincular a { color: var(--en-ruta); }
+  </style>
+</head>
+<body>
+  <main class="vincular">
+    <h1>📱 Vincular WhatsApp</h1>
+    <p id="estado" class="badge">Cargando…</p>
+    <div id="qr" class="qr"><p>…</p></div>
+    <ol>
+      <li>Abre <b>WhatsApp</b> en el celular del <b>número del negocio</b>.</li>
+      <li>Toca <b>⋮ / Configuración → Dispositivos vinculados → Vincular un dispositivo</b>.</li>
+      <li>Escanea este código. La página se actualiza sola.</li>
+    </ol>
+    <p><a href="/">← Volver a la Oficina Virtual</a></p>
+  </main>
+  <script type="module">
+    const $ = (s) => document.querySelector(s);
+    async function actualizar() {
+      try {
+        const w = await fetch('/api/whatsapp').then((r) => r.json());
+        $('#estado').textContent = w.mensaje ?? 'Sin datos';
+        $('#estado').className = `badge ${w.ok === true ? 'ok' : w.ok === false ? 'error' : ''}`;
+        $('#qr').innerHTML = w.qr
+          ?? `<p>${w.ok ? '✅ WhatsApp ya está vinculado. No necesitas escanear nada.' : 'Esperando el código… (si WhatsApp está desactivado, revisa WHATSAPP_ACTIVO en .env)'}</p>`;
+      } catch {
+        $('#estado').textContent = 'Sin conexión con la Oficina Virtual';
+      }
+    }
+    actualizar();
+    setInterval(actualizar, 3000);
+  </script>
+</body>
+</html>

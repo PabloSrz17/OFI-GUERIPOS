@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oficina Virtual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="/css/styles.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="pixel">Oficina Virtual <span>· Materiales</span></h1>
+    <div class="topbar__meta">
+      <button type="button" id="abrir-cierre" class="btn topbar__cierre">🌙 Cierre de Jornada</button>
+      <button type="button" id="salir-pin" class="btn btn--secundario topbar__salir" title="Cerrar la sesión en esta PC">🔒 Salir</button>
+      <span id="conectores" class="conectores"></span>
+      <span id="conexion" class="badge">Conectando…</span>
+      <time id="reloj"></time>
+    </div>
+  </header>
+
+  <main id="escena" class="escena3d" aria-label="Maqueta 3D de la oficina: da clic en un agente o en una pizarra"></main>
+
+  <div id="alerta-lista" class="alerta" role="alert" hidden>
+    <span>⏰ Hora de pasar lista de hoy</span>
+    <button type="button" class="btn" data-objeto="asistencias">Pasar lista</button>
+    <button type="button" class="alerta__cerrar" aria-label="Cerrar aviso">✕</button>
+  </div>
+
+  <!-- Pizarra "Notas Pendientes": flujo de notas y pedidos -->
+  <dialog id="ventana-notas" class="ventana" aria-labelledby="ventana-notas-titulo">
+    <header class="ventana__cabeza">
+      <h2 id="ventana-notas-titulo">📦 Notas Pendientes</h2>
+      <button type="button" class="btn btn--secundario ventana__historial" data-ver-historial>📚 Historial</button>
+      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
+    </header>
+    <section id="tablero" class="kanban" aria-label="Tablero logístico">
+      <div class="columna" data-estado="saldo">
+        <header><h2>Saldos Pendientes</h2><span class="contador">0</span></header>
+        <div class="columna__lista"></div>
+      </div>
+      <div class="columna" data-estado="pendiente">
+        <header><h2>Pendiente</h2><span class="contador">0</span></header>
+        <div class="columna__lista"></div>
+      </div>
+      <div class="columna" data-estado="cargando">
+        <header><h2>Cargando</h2><span class="contador">0</span></header>
+        <div class="columna__lista"></div>
+      </div>
+      <div class="columna" data-estado="en_ruta">
+        <header><h2>En Ruta</h2><span class="contador">0</span></header>
+        <div class="columna__lista"></div>
+      </div>
+      <div class="columna" data-estado="entregado">
+        <header><h2>Entregado hoy</h2><span class="contador">0</span></header>
+        <div class="columna__lista"></div>
+      </div>
+    </section>
+  </dialog>
+
+  <!-- Pizarra "Pendientes del Día": avisos y tareas del equipo -->
+  <dialog id="ventana-dia" class="ventana ventana--media" aria-labelledby="pizarron-titulo">
+    <header class="ventana__cabeza">
+      <h2 id="pizarron-titulo">📝 Pendientes del Día</h2>
+      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
+    </header>
+    <section class="pizarron">
+      <header class="pizarron__cabeza">
+        <span id="pizarron-contador" class="pizarron__contador"></span>
+      </header>
+      <form id="form-pizarron" class="pizarron__form" autocomplete="off">
+        <input id="pizarron-texto" type="text" required maxlength="300" placeholder="Pendiente para el equipo… (ej. llamar a Construcomer por su saldo)">
+        <input id="pizarron-autor" type="text" maxlength="40" placeholder="Tu nombre" aria-label="Tu nombre">
+        <button type="submit" class="btn">Anotar</button>
+      </form>
+      <ul id="pizarron-lista" class="pizarron__lista"></ul>
+    </section>
+  </dialog>
+
+  <!-- Pizarra de Asistencias -->
+  <dialog id="ventana-asistencias" class="ventana ventana--media" aria-labelledby="asistencias-titulo">
+    <header class="ventana__cabeza">
+      <h2 id="asistencias-titulo">🗓 Pizarra de Asistencias</h2>
+      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
+    </header>
+    <section class="pizarron asistencias">
+      <div class="asistencias__semana">
+        <button type="button" id="asistencias-anterior" class="btn btn--secundario" aria-label="Semana anterior">◀</button>
+        <span id="asistencias-semana"></span>
+        <button type="button" id="asistencias-siguiente" class="btn btn--secundario" aria-label="Semana siguiente">▶</button>
+        <span id="asistencias-contador" class="pizarron__contador"></span>
+        <span class="asistencias__ayuda">Clic en la casilla: ✔ asistió · ✖ faltó · vacía</span>
+      </div>
+      <div class="asistencias__tabla"><table id="asistencias-tabla"></table></div>
+    </section>
+  </dialog>
+
+  <!-- Panel lateral de cada agente: su función y su chat -->
+  <dialog id="panel-agente" class="panel" aria-labelledby="panel-nombre">
+    <header class="panel__cabeza">
+      <span class="panel__sprite" aria-hidden="true"></span>
+      <div>
+        <h2 id="panel-nombre" class="panel__nombre"></h2>
+        <p class="panel__rol"></p>
+        <span class="panel__estado"></span>
+      </div>
+      <button type="button" class="panel__cerrar" aria-label="Cerrar">×</button>
+    </header>
+    <p class="panel__titulo">AHORA</p>
+    <p class="panel__ahora"></p>
+    <button type="button" class="btn btn--secundario panel__irchat">💬 Ver conversación ↓</button>
+
+    <div class="panel__funcion" data-funcion="chasis" hidden>
+      <div id="sin-direccion" class="autorizar" hidden>
+        <h3>⚠️ Notas sin dirección</h3>
+        <ul id="sin-direccion-lista" class="sin-direccion"></ul>
+      </div>
+      <section class="captura captura--campos" aria-labelledby="captura-titulo">
+        <h2 id="captura-titulo">✍ Nueva nota <button type="button" id="captura-etiqueta" class="origen origen--sicar origen--boton" title="Cambiar entre SC y SALIDA">SC</button></h2>
+        <p class="captura__ayuda">📋 ¿Tienes la imagen del ticket? Pégala con Ctrl + V o arrástrala aquí.</p>
+        <div id="captura-ocr" class="captura__ocr" role="status" hidden><img alt="Imagen del ticket"><span></span></div>
+        <form id="form-captura" autocomplete="off">
+          <div class="editar__datos">
+            <label class="campo">Folio <input name="folio" required></label>
+            <label class="campo">Cliente <input name="cliente" list="lista-clientes" required></label>
+            <label class="campo">📱 WhatsApp <input name="telefono" type="tel" placeholder="981 147 8351"></label>
+          </div>
+          <div id="captura-articulos"></div>
+          <button type="button" class="btn btn--secundario captura__agregar" data-agregar>＋ Agregar artículo</button>
+          <div class="editar__datos">
+            <label class="campo editar__ancho">Dirección <input name="direccion" required></label>
+            <label class="campo">Total $ <input name="total" inputmode="decimal" placeholder="opcional"></label>
+            <label class="campo">Hora de la venta <input name="hora" type="time"></label>
+          </div>
+          <button type="submit" class="btn btn--ruta captura__guardar">Guardar en Pendiente ✔</button>
+        </form>
+        <datalist id="lista-clientes"></datalist>
+        <datalist id="lista-materiales"></datalist>
+        <datalist id="lista-unidades-captura"><option value="m³"></option><option value="pz"></option><option value="BOLSAS"></option><option value="bulto"></option><option value="viaje"></option><option value="kg"></option><option value="ton"></option></datalist>
+        <details class="captura__linea">
+          <summary>¿Prefieres pegar todo en una línea?</summary>
+          <p class="captura__ayuda">Ej. <i>33219, Luis Roman, 7 m3 polvo + 10 bultos cemento + Cal, Calle 5 Centro, tel 981 196 5122</i>. Llena la nota de arriba para que la revises.</p>
+          <div class="captura__form">
+            <input id="captura-texto" type="text" aria-label="Nota en una línea">
+            <button type="button" class="btn" id="captura-interpretar">Llenar</button>
+          </div>
+        </details>
+      </section>
+    </div>
+
+    <div class="panel__funcion" data-funcion="rutas" hidden>
+      <button type="button" class="btn" data-objeto="notas">📦 Abrir Notas Pendientes</button>
+    </div>
+
+    <div class="panel__funcion" data-funcion="inspector" hidden>
+      <div id="solicitudes" class="autorizar" hidden>
+        <h3>🧮 Cotizaciones por autorizar <span id="solicitudes-total"></span></h3>
+        <ul id="solicitudes-lista"></ul>
+      </div>
+      <section class="captura inspector captura--campos" aria-labelledby="inspector-titulo">
+        <h2 id="inspector-titulo">🧮 Nueva cotización</h2>
+        <form id="form-cotizar" autocomplete="off">
+          <div class="editar__datos editar__datos--dos">
+            <label class="campo">Cliente <input name="cliente" list="lista-clientes" required></label>
+            <label class="campo">📱 WhatsApp <input name="telefono" type="tel" placeholder="981 147 8351"></label>
+          </div>
+          <div id="cotizar-articulos"></div>
+          <button type="button" class="btn btn--secundario captura__agregar" data-agregar>＋ Agregar artículo</button>
+          <div class="editar__datos">
+            <label class="campo editar__ancho">Dirección / Colonia <input name="colonia" required></label>
+          </div>
+          <button type="submit" class="btn btn--ruta captura__guardar">Generar y Enviar Cotización 💬</button>
+        </form>
+        <details class="captura__linea">
+          <summary>¿Prefieres pegar todo en una línea?</summary>
+          <p class="captura__ayuda">Ej. <i>Construcomer, 7 m3 polvo + 10 cemento maya, Pensiones, tel 981 118 3096</i>. Llena los campos de arriba para que los revises.</p>
+          <div class="captura__form">
+            <input id="cotizar-texto" type="text" aria-label="Cotización en una línea">
+            <button type="button" class="btn" id="cotizar-interpretar">Llenar</button>
+          </div>
+        </details>
+        <div id="cotizacion" hidden></div>
+        <details class="inspector__recientes" open>
+          <summary>Últimas cotizaciones</summary>
+          <ul id="cotizaciones-recientes"></ul>
+        </details>
+      </section>
+    </div>
+
+    <section class="panel__conversacion" aria-label="Conversación">
+      <p class="panel__titulo">💬 CONVERSACIÓN</p>
+      <div class="panel__chat" aria-live="polite"></div>
+      <form class="panel__form">
+        <textarea rows="2" required aria-label="Mensaje"></textarea>
+        <button type="submit" class="btn panel__enviar"></button>
+      </form>
+    </section>
+  </dialog>
+
+  <dialog id="confirmar-ruta" class="dialogo" aria-labelledby="confirmar-titulo">
+    <form method="dialog">
+      <h2 id="confirmar-titulo">🚚 ¿Enviar a ruta?</h2>
+      <div id="confirmar-resumen" class="dialogo__resumen"></div>
+      <label class="campo dialogo__telefono">📱 WhatsApp del cliente
+        <input id="confirmar-telefono" type="tel" inputmode="tel" placeholder="981 196 5122" autocomplete="off">
+      </label>
+      <p id="confirmar-whatsapp" class="dialogo__aviso"></p>
+      <div class="dialogo__botones">
+        <button value="cancelar" class="btn btn--secundario" autofocus>Cancelar</button>
+        <button value="confirmar" class="btn btn--ruta">Sí, va en camino ▶</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="envio-parcial" class="dialogo" aria-labelledby="parcial-titulo">
+    <form>
+      <h2 id="parcial-titulo">✂ Envío parcial</h2>
+      <div id="parcial-resumen" class="dialogo__resumen"></div>
+      <p>Escribe lo que va en este viaje. Si subes la cantidad se toma del saldo; si la bajas, regresa al saldo. Pon 0 en lo que no va.</p>
+      <div id="parcial-renglones"></div>
+      <p id="parcial-aviso" class="dialogo__aviso dialogo__aviso--error"></p>
+      <div class="dialogo__botones">
+        <button type="button" class="btn btn--regresar" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn">Guardar envío parcial</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="cancelar-nota" class="dialogo" aria-labelledby="cancelar-titulo">
+    <form method="dialog">
+      <h2 id="cancelar-titulo">✕ Cancelar nota</h2>
+      <div id="cancelar-resumen" class="dialogo__resumen"></div>
+      <p id="cancelar-aviso" class="dialogo__aviso dialogo__aviso--error"></p>
+      <div class="dialogo__botones">
+        <button value="no" class="btn btn--secundario" autofocus>Cancelar</button>
+        <button value="confirmar" class="btn btn--peligro">Confirmar Cancelación</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="editar-nota" class="dialogo dialogo--editar" aria-labelledby="editar-titulo">
+    <form method="dialog" autocomplete="off">
+      <h2 id="editar-titulo">✎ Editar nota</h2>
+      <p id="editar-estado" class="dialogo__aviso"></p>
+      <div class="editar__datos">
+        <label class="campo">Folio <input name="folio" required></label>
+        <label class="campo">Cliente <input name="cliente" required></label>
+        <label class="campo">📱 WhatsApp <input name="telefono" type="tel" placeholder="opcional"></label>
+      </div>
+      <div class="auditoria">
+        <div id="editar-foto"></div>
+        <div class="auditoria__texto">
+          <div id="editar-articulos"></div>
+          <button type="button" class="btn btn--secundario editar__agregar" data-agregar>＋ Agregar artículo</button>
+        </div>
+      </div>
+      <div class="editar__datos">
+        <label class="campo editar__ancho">Dirección <input name="direccion" required></label>
+        <label class="campo">Zona <input name="zona" placeholder="opcional"></label>
+        <label class="campo">Total $ <input name="total" inputmode="decimal" placeholder="opcional"></label>
+        <label class="campo">Chofer <select name="chofer_id"></select></label>
+        <label class="campo">Camión <select name="camion_id"></select></label>
+      </div>
+      <p id="editar-aviso" class="dialogo__aviso dialogo__aviso--error"></p>
+      <div class="dialogo__botones">
+        <button type="button" class="btn btn--secundario" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn btn--ruta">Guardar cambios</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="cierre-jornada" class="dialogo" aria-labelledby="cierre-titulo">
+    <h2 id="cierre-titulo"></h2>
+    <div id="cierre-resumen" class="dialogo__resumen" role="status"></div>
+    <p id="cierre-aviso" class="dialogo__aviso"></p>
+    <div class="dialogo__botones">
+      <button type="button" class="btn btn--secundario" data-ver-historial>📚 Ver historial</button>
+      <button type="button" class="btn btn--secundario" data-cancelar>Cancelar</button>
+      <button type="button" class="btn btn--ruta" data-confirmar>Sí, cerrar jornada</button>
+    </div>
+  </dialog>
+
+  <dialog id="ventana-historial" class="dialogo dialogo--historial" aria-labelledby="historial-titulo">
+    <h2 id="historial-titulo">📚 Historial de notas entregadas</h2>
+    <p class="dialogo__aviso">Las últimas 200.</p>
+    <div class="historial__tabla">
+      <table>
+        <thead><tr><th>Entregada</th><th>Folio</th><th>Cliente</th><th>Productos</th><th>Chofer · Camión</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="dialogo__botones">
+      <button type="button" class="btn btn--secundario" data-cerrar-historial>Cerrar</button>
+    </div>
+  </dialog>
+
+  <dialog id="visor-foto" class="visor" aria-label="Foto del cliente">
+    <button type="button" class="visor__cerrar" data-cerrar-visor aria-label="Cerrar">×</button>
+    <img alt="Foto del cliente">
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+{
+  "name": "oficina-virtual",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Oficina Virtual & Dashboard Logístico para materiales de construcción",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --watch --env-file-if-exists=.env src/server.js",
+    "seed": "node --env-file-if-exists=.env src/db/seed.js",
+    "seed:choferes": "node --env-file-if-exists=.env src/db/seed.js --solo-choferes",
+    "pulpos:login": "node --env-file-if-exists=.env src/integraciones/pulpos/login.js",
+    "sicar:explorar": "node --env-file-if-exists=.env src/integraciones/sicar/explorar.js",
+    "respaldo": "node --env-file-if-exists=.env scripts/respaldar.js",
+    "pin:borrar": "node --env-file-if-exists=.env scripts/borrar-pin.js",
+    "test": "node --test",
+    "inicio:instalar": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inicio-automatico.ps1",
+    "inicio:quitar": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inicio-automatico.ps1 -Quitar",
+    "oficina:detener": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/detener-oficina.ps1"
+  },
+  "engines": {
+    "node": ">=22.9"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "@tesseract.js-data/spa": "^1.0.0",
+    "better-sqlite3": "^12.2.0",
+    "express": "^5.1.0",
+    "mysql2": "^3.24.6",
+    "puppeteer": "^24.43.1",
+    "qrcode": "^1.5.4",
+    "tesseract.js": "^7.0.0",
+    "three": "^0.186.1",
+    "whatsapp-web.js": "^1.34.7"
+  },
+  "allowScripts": {
+    "puppeteer@24.43.1": true
+  }
+}
