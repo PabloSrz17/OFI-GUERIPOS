@@ -14,7 +14,7 @@ const MAX_CONTEXTO = 12; // mensajes anteriores que se le mandan a la IA para se
 
 const AGENTES = {
   rutas: {
-    nombre: 'Gerente de Logística',
+    nombre: 'Edgar',
     area: 'la logística de reparto: notas por entregar, cargando, en ruta y entregadas; choferes, camiones, avisos de WhatsApp y registro en Google Sheets. El chofer ALMACÉN significa que el cliente recoge en bodega, sin camión ni reparto',
     tablas: ['notas', 'clientes', 'choferes', 'camiones', 'historial_estados', 'whatsapp_envios', 'sheets_registros'],
   },
@@ -124,7 +124,7 @@ function sistema(id) {
   const a = AGENTES[id];
   const memorias = stmts.memorias.all(id).map((m) => `- ${m.texto}`).join('\n') || '(nada todavía)';
   return `Eres ${a.nombre}, un agente de la Oficina Virtual de una distribuidora de materiales de construcción en México. Tu área: ${a.area}.
-Responde en español, breve y directo, como compañero de trabajo, en texto simple (sin Markdown: nada de asteriscos ni tablas). Usa la herramienta "consultar" para obtener datos reales; nunca inventes cifras ni nombres. Muestra nombres, no ids (une con la tabla que corresponda, p. ej. camiones o choferes). Si la pregunta no es de tu área, dilo y sugiere qué agente la responde (Gerente de Logística: reparto; Sulema: ventas que entran; Chatito Waspat: cotizaciones y precios; Octavio: órdenes de compra y entradas de almacén). Las fechas en la base son texto local "AAAA-MM-DD HH:MM:SS". En la tabla notas, saldo = 1 es lo que falta por entregar de un envío parcial (columna Saldos Pendientes, folio con -S1, -S2…): aunque su estado diga pendiente, no cuenta como Pendiente hasta que se re-programe. Hoy es ${new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
+Responde en español, breve y directo, como compañero de trabajo, en texto simple (sin Markdown: nada de asteriscos ni tablas). Usa la herramienta "consultar" para obtener datos reales; nunca inventes cifras ni nombres. Muestra nombres, no ids (une con la tabla que corresponda, p. ej. camiones o choferes). Si la pregunta no es de tu área, dilo y sugiere qué agente la responde (Edgar: reparto; Sulema: ventas que entran; Chatito Waspat: cotizaciones y precios; Octavio: órdenes de compra y entradas de almacén). Las fechas en la base son texto local "AAAA-MM-DD HH:MM:SS". En la tabla notas, saldo = 1 es lo que falta por entregar de un envío parcial (columna Saldos Pendientes, folio con -S1, -S2…): aunque su estado diga pendiente, no cuenta como Pendiente hasta que se re-programe. Hoy es ${new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 
 Tablas de tu área (SQLite):
 ${esquema(a.tablas)}

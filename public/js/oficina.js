@@ -3,7 +3,7 @@ import { montarEscena, estadoAgente, actualizarCamiones, salirCamion, actualizar
 
 const AGENTES = {
   chasis: { nombre: 'Sulema', rol: 'Ventas · SICAR y Pulpos' },
-  rutas: { nombre: 'Gerente de Logística', rol: 'Logística · patio de fletes y camiones' },
+  rutas: { nombre: 'Edgar', rol: 'Logística · patio de fletes y camiones' },
   inspector: { nombre: 'Chatito Waspat', rol: 'Cotizaciones y atención' },
   octavio: { nombre: 'Octavio', rol: 'Órdenes de compra y almacén · Concordia' },
 };
@@ -12,7 +12,7 @@ const ESTADOS = { disponible: 'Disponible', procesando: 'Procesando', espera: 'E
 const ESTADO_CAMION = { patio: 'En patio', cargando: 'Cargando', en_ruta: 'En ruta' };
 
 const NOMBRES_CONECTOR = { pulpos: 'Pulpos', sicar: 'SICAR', whatsapp: 'WhatsApp', sheets: 'Sheets', respaldos: 'Respaldo' };
-const CONECTORES_DE_VENTAS = ['pulpos', 'sicar']; // los vigila Sulema; WhatsApp lo vigila Gerente de Logística
+const CONECTORES_DE_VENTAS = ['pulpos', 'sicar']; // los vigila Sulema; WhatsApp lo vigila Edgar
 
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
