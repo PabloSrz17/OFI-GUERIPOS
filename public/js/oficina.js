@@ -1,5 +1,5 @@
 import { api } from './api.js';
-import { montarEscena, estadoAgente, actualizarCamiones, salirCamion } from './escena3d.js';
+import { montarEscena, estadoAgente, actualizarCamiones, salirCamion, actualizarPantalla } from './escena3d.js';
 
 const AGENTES = {
   chasis: { nombre: 'Sulema', rol: 'Ventas · SICAR y Pulpos' },
@@ -25,7 +25,8 @@ const pensando = new Set();   // agentes contestando una pregunta (se muestran "
 const botones = {};
 const objetos = {}; // etiquetas de las pizarras
 
-const OBJETOS = { notas: '📦 Notas Pendientes', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Pizarrón de Octavio' };
+const OBJETOS = { notas: '📦 Notas Pendientes', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Pizarrón de Octavio', chatito: '💬 Chatito Waspat' };
+const COLOR_NOTA = { pendiente: '#f2994a', cargando: '#d4a106', en_ruta: '#2f7fd1' };
 
 export function ponerCuenta(id, n) {
   objetos[id].querySelector('.objeto3d__cuenta').textContent = n || '';
@@ -71,6 +72,10 @@ export function montarOficina(contenedor) {
 }
 
 function abrirVentana(id) {
+  if (id === 'chatito') {
+    abrirPanel('inspector'); // su pantalla abre su panel: no tiene ventana propia
+    return;
+  }
   if (panel.open) panel.close();
   document.querySelectorAll('.ventana[open]').forEach((d) => d.close());
   document.querySelector(`#ventana-${id}`).show();
@@ -152,6 +157,18 @@ export function actualizarOficina(resumen, notas = ultimasNotas) {
   Object.keys(AGENTES).forEach(pintarAgente);
   ponerCuenta('notas', resumen.pendiente + resumen.cargando + resumen.en_ruta);
   ponerCuenta('ordenes', resumen.ordenes_por_surtir);
+  ponerCuenta('chatito', resumen.solicitudes_pendientes);
+  actualizarPantalla('notas', notas
+    .filter((n) => COLOR_NOTA[n.estado])
+    .map((n) => ({ texto: `${n.folio} · ${n.cliente}`, color: COLOR_NOTA[n.estado] })));
+  actualizarPantalla('chatito', [
+    { texto: `${resumen.solicitudes_pendientes ?? 0} por autorizar`, color: resumen.solicitudes_pendientes ? '#d92d20' : '#2f9e5b' },
+    { texto: plural(resumen.cotizaciones_hoy ?? 0, 'cotización hoy', 'cotizaciones hoy') },
+    { texto: plural(resumen.clientes ?? 0, 'cliente', 'clientes') },
+    resumen.integraciones?.whatsapp?.ok === false
+      ? { texto: 'WhatsApp sin conexión', color: '#d92d20' }
+      : { texto: 'WhatsApp conectado', color: '#2f9e5b' },
+  ]);
   pintarLista();
 }
 

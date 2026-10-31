@@ -5,6 +5,7 @@ import { formatear } from './telefono.js';
 import { miniaturaFoto } from './visor-foto.js';
 import { filaArticulo } from './captura.js';
 import { aNumero } from './inspector.js';
+import { actualizarPantalla } from './escena3d.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const $ = (sel) => document.querySelector(sel);
@@ -174,6 +175,12 @@ export function montarOctavio({ toast, alCambiar }) {
       pintarEspera();
       pintarPizarron();
       pintarTableroEntradas();
+      // Pantalla del muro: lo que falta atender y, si queda lugar, las últimas entradas.
+      actualizarPantalla('ordenes', [
+        ...porAprobar().map((o) => ({ texto: `${o.folio} por aprobar`, color: '#ff6b5e' })),
+        ...ordenes.filter((o) => o.estado === 'aprobada').slice(0, 3).map((o) => ({ texto: `${o.folio} ${o.sucursal}`, color: '#6fb2ff' })),
+        ...entradas.map((e) => ({ texto: `Entrada ${e.folio ?? 'sin folio'}`, color: '#f97316' })),
+      ]);
       $('#entradas-lista').innerHTML = entradas.map((e) => `
         <li>
           <div class="entrada__cabeza"><b>${esc(e.folio ?? 'Sin folio')}</b><span>${esc(e.proveedor ?? 'Sin proveedor')}</span></div>

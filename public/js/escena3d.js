@@ -1,15 +1,29 @@
-// Maqueta isométrica 3D (three.js): caseta de oficina con los 4 escritorios y, al lado, el patio de
-// materiales con bodega, montones y la flota. Las etiquetas (agentes, camiones, áreas) son HTML
-// encima de la escena (CSS2DRenderer), así se les puede dar clic y leer con lector de pantalla.
+// Maqueta 3D (three.js): oficina de madera con el Tablero Central en el muro del fondo, 4 escritorios y,
+// al lado, el patio de materiales con bodega, cajones de material y la flota. Las pantallas del muro
+// muestran datos reales. Las etiquetas (agentes, camiones, áreas) son HTML encima de la escena
+// (CSS2DRenderer), así se les puede dar clic y leer con lector de pantalla.
 import * as THREE from 'three';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { modeloDeFlota } from './flota3d.js';
 
 const C = {
-  piso: 0xd7a56f, losetas: 0xbd8a55, muro: 0xfbeed8, muroBorde: 0xe8c9a0, patio: 0xdcbf91,
-  madera: 0x8b5a2b, mesa: 0xc9874a, metal: 0x5a4a3e, pantalla: 0x69d8e0, piel: 0xf2c79a,
-  bodega: 0xc8593f, techo: 0x7a2f22, puerta: 0x3f6f73, llanta: 0x2b2320, cabina: 0xe2502f,
-  hoja: 0x4fa84f, hojaClara: 0x7cc35a, maceta: 0xc8643c, raya: 0xf2c14e,
+  piso: 0xb9804a, muro: 0xf3e3c8, muroBorde: 0x8b5a2b, patio: 0x5b5753,
+  madera: 0x6f4426, metal: 0x5a4a3e, pantalla: 0x69d8e0, piel: 0xf2c79a, crema: 0xe6dcc4,
+  bodega: 0xb5533a, techo: 0x9c3b28, llanta: 0x2b2320, cabina: 0xe2502f,
+  hoja: 0x4fa84f, hojaClara: 0x7cc35a, maceta: 0xc8643c, raya: 0xf2c14e, corcho: 0xc99a63,
+};
+// Cada puesto: color de su mueble y de su alfombra, y el nombre en su escritorio.
+const MUEBLE = {
+  chasis: { mesa: 0xa8703c, alfombra: 0x2f7f78, borde: 0x8fd0c0, placa: 'Sulema' },
+  inspector: { mesa: 0x3b4a6b, alfombra: 0x3d6f8f, borde: 0xa9cdf2, placa: 'Chatito' },
+  octavio: { mesa: 0xd9773a, alfombra: 0xd9813c, borde: 0xf8c58f, placa: 'Octavio' },
+  rutas: { mesa: 0xc9b89a, alfombra: 0xcfc7b8, borde: 0x8f8778, placa: 'Logística' },
+};
+// Pantallas del Tablero Central: fondo, tinta y el brillo que dejan en el muro.
+const PANTALLAS = {
+  chatito: { fondo: '#c9f7b5', tinta: '#123d12', brillo: 0x7dff6a, vacio: 'Sin datos' },
+  ordenes: { fondo: '#1f2f45', tinta: '#e8f1ff', brillo: 0x6fb2ff, vacio: 'Sin órdenes ni entradas' },
+  notas: { fondo: '#f8fbff', tinta: '#16263a', brillo: 0xbfe0ff, vacio: 'Sin notas activas' },
 };
 const ROPA = {
   chasis: { torso: 0x2f9e5b, pierna: 0x2d3a5c, gorra: 0x3b2417, casco: false },
@@ -21,16 +35,16 @@ const COLOR_ESTADO = { disponible: 0x3fbf6b, procesando: 0xf2a516, espera: 0xff5
 const CAJAS_CAMION = [0xe8a33d, 0xd9d4c7, 0x6fa8dc, 0xc0392b, 0xf2d33a, 0x9b59b6];
 
 // Lugares en la maqueta (x, z). La oficina va de x -17 a 1 y de z -8 a 8; el patio de x 1 a 13.
-// Muy separados en diagonal para que sus etiquetas no se encimen en la vista isométrica.
-const PUESTOS = { chasis: [-13.5, 4], rutas: [-3.5, 4], inspector: [-8.5, -4], octavio: [-2.5, -4] };
+// Tres puestos en fila frente al Tablero Central y el mostrador adelante, a la izquierda.
+const PUESTOS = { chasis: [-12.5, 3], inspector: [-10.4, -4.5], octavio: [-5.9, -4.5], rutas: [-1.5, -4.5] };
 const AREAS = { chasis: 'VENTAS · MOSTRADOR', rutas: 'LOGÍSTICA · FLETES', inspector: 'COTIZACIONES', octavio: 'ÓRDENES · ALMACÉN' };
 const ESTACIONAMIENTO = [[3.4, 5.0], [7.2, 5.0], [11.0, 5.0], [5.3, 1.4], [9.1, 1.4], [3.4, -2.2]];
 // A dónde se levanta cada agente de vez en cuando (por piso libre) antes de volver a su escritorio.
 const VISITAS = {
-  chasis: [[-13.5, 1.6], [-15.4, -3]],
-  rutas: [[-3.5, 1.6], [-5.8, -6.6]],
-  inspector: [[-6, -6.4], [-11.5, -6.4]],
-  octavio: [[-2.2, -6.6], [-0.4, -5]],
+  chasis: [[-12.5, 0.8], [-15, -2.5]],
+  rutas: [[-1.5, -6.8], [0.1, -5.6]],
+  inspector: [[-10.4, -6.8], [-12.2, -6.4]],
+  octavio: [[-5.9, -6.8], [-4.3, -6.2]],
 };
 const VELOCIDAD = 1.8;
 const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -39,6 +53,7 @@ let escena, camara, render, etiquetas, contenedor;
 const agentes = {};   // id -> { grupo, anillo, estado, casa, camino, siguiente, pausa }
 const pizarras = [];  // grupos 3D a los que se les puede dar clic
 const camiones = {};  // nombre -> { grupo, etiqueta, x, z, saliendo }
+const pantallas = {}; // id -> { lienzo, textura, config }
 const reloj = new THREE.Clock();
 
 function caja(ancho, alto, fondo, color, { sombra = true } = {}) {
@@ -62,42 +77,157 @@ function etiqueta(contenido, clase) {
   return new CSS2DObject(div);
 }
 
+// ---- Texturas dibujadas aquí mismo: no hay imágenes que bajar ----
+
+function textura(ancho, alto, dibujar, repetirX = 1, repetirY = 1) {
+  const lienzo = document.createElement('canvas');
+  lienzo.width = ancho;
+  lienzo.height = alto;
+  dibujar(lienzo.getContext('2d'), ancho, alto);
+  const t = new THREE.CanvasTexture(lienzo);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repetirX, repetirY);
+  return t;
+}
+
+// Tablas de madera: siempre las mismas vetas (azar con semilla), para que no cambien al recargar.
+function tablas(base, oscuro, cuantas) {
+  let semilla = 7;
+  const azar = () => { semilla = (semilla * 16807) % 2147483647; return semilla / 2147483647; };
+  return (ctx, ancho, alto) => {
+    const grueso = alto / cuantas;
+    for (let i = 0; i < cuantas; i++) {
+      ctx.fillStyle = base;
+      ctx.fillRect(0, i * grueso, ancho, grueso);
+      ctx.fillStyle = `rgb(0 0 0 / ${0.03 + azar() * 0.13})`;
+      ctx.fillRect(0, i * grueso, ancho, grueso);
+      ctx.fillStyle = oscuro;
+      ctx.fillRect(0, i * grueso, ancho, 2);
+      ctx.fillRect(azar() * ancho, i * grueso, 2, grueso); // unión entre tablas
+    }
+  };
+}
+
+function ladrillos(ctx, ancho, alto) {
+  ctx.fillStyle = '#d8c2a8';
+  ctx.fillRect(0, 0, ancho, alto);
+  const [largo, grueso] = [ancho / 8, alto / 16];
+  let semilla = 11;
+  for (let fila = 0; fila < 16; fila++) {
+    for (let i = -1; i < 9; i++) {
+      semilla = (semilla * 16807) % 2147483647;
+      ctx.fillStyle = `hsl(13 ${48 + semilla % 12}% ${40 + semilla % 8}%)`;
+      ctx.fillRect(i * largo + (fila % 2 ? largo / 2 : 0) + 1, fila * grueso + 1, largo - 2, grueso - 2);
+    }
+  }
+}
+
+function persiana(ctx, ancho, alto) {
+  for (let y = 0; y < alto; y += 16) {
+    ctx.fillStyle = y % 32 ? '#a7abad' : '#c4c8ca';
+    ctx.fillRect(0, y, ancho, 16);
+  }
+}
+
+function plano(ancho, alto, material) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(ancho, alto), material);
+  m.receiveShadow = true;
+  return m;
+}
+
+// Letrero con texto, pegado a un mueble o muro (mira hacia +z).
+function placa(texto, ancho, alto, { fondo = '#2b2320', tinta = '#fff4dc', borde = '#c99a63' } = {}) {
+  const t = textura(512, Math.round((512 * alto) / ancho), (ctx, a, h) => {
+    ctx.fillStyle = fondo;
+    ctx.fillRect(0, 0, a, h);
+    ctx.strokeStyle = borde;
+    ctx.lineWidth = 8;
+    ctx.strokeRect(6, 6, a - 12, h - 12);
+    ctx.fillStyle = tinta;
+    ctx.font = `800 ${Math.round(h * 0.52)}px "Segoe UI", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(texto, a / 2, h / 2 + 2, a - 40);
+  });
+  return new THREE.Mesh(new THREE.PlaneGeometry(ancho, alto), new THREE.MeshBasicMaterial({ map: t }));
+}
+
 // ---- Construcción de la maqueta ----
 
+const ALTO_MURO = 5.1;
+
+function alfombra(x, z, ancho, fondo, { alfombra: color, borde }) {
+  escena.add(en(caja(ancho, 0.02, fondo, borde, { sombra: false }), x, 0.025, z));
+  escena.add(en(caja(ancho - 0.3, 0.02, fondo - 0.3, color, { sombra: false }), x, 0.035, z));
+}
+
 function pisoYMuros() {
-  const piso = caja(18, 0.2, 16, C.piso, { sombra: false });
-  escena.add(en(piso, -8, -0.1, 0));
-  // Losetas: cuadrícula sutil para dar escala.
-  const rejilla = new THREE.GridHelper(18, 18, C.losetas, C.losetas);
-  rejilla.scale.z = 16 / 18;
-  escena.add(en(rejilla, -8, 0.01, 0));
+  escena.add(en(caja(18, 0.2, 16, C.madera, { sombra: false }), -8, -0.1, 0));
+  // Duela: tablas a lo largo del salón.
+  const duela = plano(18, 16, new THREE.MeshLambertMaterial({ map: textura(512, 512, tablas('#c58a50', '#7c5026', 10), 2, 2.5) }));
+  duela.rotation.x = -Math.PI / 2;
+  escena.add(en(duela, -8, 0.005, 0));
 
-  const patio = caja(12, 0.18, 16, C.patio, { sombra: false });
-  escena.add(en(patio, 7, -0.11, 0));
+  // Patio de asfalto, con banqueta entre él y la oficina.
+  escena.add(en(caja(12, 0.18, 16, C.patio, { sombra: false }), 7, -0.11, 0));
+  escena.add(en(caja(0.7, 0.06, 16, 0xb9b1a4, { sombra: false }), 1.5, 0.0, 0));
 
-  // Muros en "corte" de maqueta: fondo e izquierda altos, frente bajo con entrada, lado del patio con ventanal.
-  escena.add(en(caja(18, 2.4, 0.3, C.muro), -8, 1.2, -8));
-  escena.add(en(caja(0.3, 2.4, 16, C.muro), -17, 1.2, 0));
-  escena.add(en(caja(8, 0.6, 0.3, C.muroBorde), -13, 0.3, 8));
-  escena.add(en(caja(8, 0.6, 0.3, C.muroBorde), -3, 0.3, 8));
+  // Muro del fondo con lambrín de madera: ahí vive el Tablero Central.
+  escena.add(en(caja(18, ALTO_MURO, 0.3, C.madera), -8, ALTO_MURO / 2, -8));
+  const lambrin = plano(17.7, ALTO_MURO - 0.1, new THREE.MeshLambertMaterial({ map: textura(512, 512, (ctx, a, h) => {
+    ctx.translate(a, 0);
+    ctx.rotate(Math.PI / 2); // tablas verticales
+    tablas('#8a5a30', '#5a3719', 24)(ctx, h, a);
+  }) }));
+  escena.add(en(lambrin, -8, ALTO_MURO / 2, -7.84));
+  escena.add(en(caja(18, 0.18, 0.36, 0x4a2c15), -8, ALTO_MURO, -8));
+  escena.add(en(caja(17.7, 0.22, 0.06, 0x4a2c15, { sombra: false }), -8, 0.11, -7.82));
+  // Letrero principal.
+  escena.add(en(caja(6.3, 0.72, 0.1, 0x4a2c15), -7, 4.53, -7.78));
+  escena.add(en(placa('TABLERO CENTRAL', 6, 0.56, { fondo: '#c99a63', tinta: '#2b1608', borde: '#6f4426' }), -7, 4.53, -7.72));
+
+  // Muro izquierdo en corte de maqueta: alto al fondo, bajo al frente.
+  const perfil = new THREE.Shape();
+  perfil.moveTo(-8, 0);
+  perfil.lineTo(8, 0);
+  perfil.lineTo(8, 1.1);
+  perfil.lineTo(-8, ALTO_MURO);
+  perfil.closePath();
+  const izquierdo = new THREE.Mesh(new THREE.ExtrudeGeometry(perfil, { depth: 0.3, bevelEnabled: false }), new THREE.MeshLambertMaterial({ color: C.muro }));
+  izquierdo.rotation.y = -Math.PI / 2; // el perfil corre a lo largo de z
+  izquierdo.castShadow = true;
+  izquierdo.receiveShadow = true;
+  escena.add(en(izquierdo, -16.85, 0, 0));
+  escena.add(en(caja(0.05, 0.5, 15.7, C.muroBorde, { sombra: false }), -16.83, 0.25, 0));
+  // Ventana y mapa de la zona de reparto.
+  escena.add(en(caja(0.08, 1.5, 3.2, C.madera, { sombra: false }), -16.82, 1.55, 1.4));
+  escena.add(en(caja(0.06, 1.3, 3, 0xbfeaf5, { sombra: false }), -16.78, 1.55, 1.4));
+  escena.add(en(caja(0.04, 1.3, 0.08, C.madera, { sombra: false }), -16.75, 1.55, 1.4));
+  escena.add(en(caja(0.08, 1.7, 2.5, C.madera, { sombra: false }), -16.82, 2.5, -3));
+  escena.add(en(caja(0.06, 1.5, 2.3, 0xe9d9ae, { sombra: false }), -16.78, 2.5, -3));
+  for (const [y, z, alto, fondo] of [[2.7, -3.6, 0.6, 0.7], [2.2, -2.5, 0.5, 0.9], [2.85, -2.3, 0.3, 0.5]]) {
+    escena.add(en(caja(0.02, alto, fondo, 0xa8b878, { sombra: false }), -16.74, y, z));
+  }
+
+  // Frente y lado del patio bajos, para ver adentro; ventanal hacia el patio.
+  escena.add(en(caja(18, 0.6, 0.3, C.muroBorde), -8, 0.3, 8));
   escena.add(en(caja(0.3, 0.6, 16, C.muroBorde), 1, 0.3, 0));
-  // Rodapié oscuro en los muros altos.
-  escena.add(en(caja(18, 0.12, 0.32, C.madera, { sombra: false }), -8, 0.06, -8));
-  escena.add(en(caja(0.32, 0.12, 16, C.madera, { sombra: false }), -17, 0.06, 0));
+  escena.add(en(caja(0.1, 1.2, 10, 0xa7e3ee, { sombra: false }), 1, 1.2, -2));
+  escena.add(en(caja(0.16, 0.1, 10.1, C.madera, { sombra: false }), 1, 1.82, -2));
+  // Mampara que aparta a Logística, y cerca de madera al fondo del patio.
+  escena.add(en(caja(0.14, 1.7, 5.3, C.madera), -3.7, 0.85, -5.2));
+  escena.add(en(caja(0.22, 0.1, 5.4, 0x4a2c15, { sombra: false }), -3.7, 1.72, -5.2));
+  escena.add(en(caja(12, 1, 0.12, C.madera), 7, 0.5, -7.95));
+  escena.add(en(caja(0.12, 1, 16, C.madera), 13, 0.5, 0));
 
-  // Franja de color en los muros y ventana que da luz.
-  escena.add(en(caja(17.7, 0.5, 0.05, 0xe9825a, { sombra: false }), -8, 0.42, -7.83));
-  escena.add(en(caja(0.05, 0.5, 15.7, 0xe9825a, { sombra: false }), -16.83, 0.42, 0));
-  escena.add(en(caja(0.08, 1.4, 3.2, C.madera, { sombra: false }), -16.82, 1.5, 4));
-  escena.add(en(caja(0.06, 1.2, 3, 0xbfeaf5, { sombra: false }), -16.78, 1.5, 4));
-  // Ventanal hacia el patio (vidrio en el muro bajo).
-  escena.add(en(caja(0.1, 1.2, 10, 0xa7e3ee, { sombra: false }), 1, 1.2, 0));
-  escena.add(en(caja(0.16, 0.1, 10.1, C.madera, { sombra: false }), 1, 1.82, 0));
   // Alfombras que marcan cada área.
-  escena.add(en(caja(6, 0.02, 4.4, 0x58b89a, { sombra: false }), PUESTOS.chasis[0], 0.02, PUESTOS.chasis[1] + 0.6));
-  escena.add(en(caja(6, 0.02, 4.4, 0xf08a5d, { sombra: false }), PUESTOS.rutas[0], 0.02, PUESTOS.rutas[1] + 0.6));
-  escena.add(en(caja(6, 0.02, 4.4, 0x6fa8dc, { sombra: false }), PUESTOS.inspector[0], 0.02, PUESTOS.inspector[1] + 0.6));
-  escena.add(en(caja(5.6, 0.02, 4.4, 0xb79ad8, { sombra: false }), PUESTOS.octavio[0], 0.02, PUESTOS.octavio[1] + 0.6));
+  for (const id of Object.keys(PUESTOS)) {
+    const [x, z] = PUESTOS[id];
+    alfombra(x, z + 0.6, id === 'chasis' ? 6.6 : 4.2, id === 'chasis' ? 5 : 4.6, MUEBLE[id]);
+  }
 }
 
 // Planta en maceta. grande: arbolito para el patio.
@@ -116,11 +246,29 @@ function planta(x, z, grande = false) {
   escena.add(en(g, x, 0, z));
 }
 
+function silla(x, z, giro, color) {
+  const g = new THREE.Group();
+  g.add(en(caja(0.6, 0.08, 0.6, color), 0, 0.5, 0));
+  g.add(en(caja(0.6, 0.6, 0.08, color), 0, 0.8, -0.3));
+  for (const [dx, dz] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) g.add(en(caja(0.06, 0.48, 0.06, 0x4a2c15), dx, 0.24, dz));
+  g.rotation.y = giro;
+  escena.add(en(g, x, 0, z));
+}
+
 function decoracion() {
   // Plantas de la oficina y arbolitos del patio.
-  [[-16.2, -7.2], [0.3, -7.2], [-16.2, 7.2], [-9.5, 7.2], [0.3, 7.2], [-8.5, 1.2]].forEach(([x, z]) => planta(x, z));
-  [[12.4, -7.2], [1.9, -6.6]].forEach(([x, z]) => planta(x, z, true));
-  // Librero con carpetas de colores en el muro del fondo.
+  [[-16.1, -0.9], [-16.1, 6.9], [-8.15, -7.3], [0.2, -7.3], [0.2, 6.9], [-7.3, 3.6]].forEach(([x, z]) => planta(x, z));
+  [[12.3, -7.2], [2.5, -6.8]].forEach(([x, z]) => planta(x, z, true));
+  // Clientes en el mostrador de Sulema.
+  for (const dx of [-0.9, 0.9]) silla(PUESTOS.chasis[0] + dx, PUESTOS.chasis[1] + 1.8, Math.PI, 0xa8703c);
+  // Sala de espera: banca y garrafón.
+  escena.add(en(caja(3, 0.14, 0.8, C.muroBorde), -3.2, 0.5, 7.1));
+  escena.add(en(caja(3, 0.6, 0.12, C.muroBorde), -3.2, 0.85, 7.5));
+  for (const dx of [-1.3, 1.3]) escena.add(en(caja(0.14, 0.45, 0.7, 0x4a2c15), -3.2 + dx, 0.22, 7.1));
+  escena.add(en(caja(0.6, 1.05, 0.6, C.crema), -0.9, 0.52, 7.2));
+  const garrafon = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.5, 14), new THREE.MeshLambertMaterial({ color: 0x8fd3ee, transparent: true, opacity: 0.85 }));
+  escena.add(en(garrafon, -0.9, 1.3, 7.2));
+  // Librero con carpetas de colores en el muro izquierdo.
   const librero = new THREE.Group();
   librero.add(en(caja(2, 2, 0.45, C.madera), 0, 1, 0));
   const COLORES = [0xe9825a, 0xf2c14e, 0x58b89a, 0x6fa8dc, 0xc76bb0, 0xe2502f];
@@ -130,16 +278,17 @@ function decoracion() {
       librero.add(en(caja(0.16, 0.44, 0.08, COLORES[(i + Math.round(y * 3)) % COLORES.length], { sombra: false }), -0.76 + i * 0.19, y + 0.04, 0.25));
     }
   }
-  escena.add(en(librero, -9, 0, -7.6));
+  librero.rotation.y = Math.PI / 2;
+  escena.add(en(librero, -16.45, 0, -6.4));
   // Rayas amarillas de los cajones de estacionamiento.
   for (const [x, z] of ESTACIONAMIENTO) {
     for (const lado of [-1, 1]) escena.add(en(caja(3.2, 0.02, 0.09, C.raya, { sombra: false }), x, 0.0, z + lado * 0.95));
   }
 }
 
-// Pizarra colgada en el muro. Se le da clic al modelo o a su etiqueta. rotacion: de cara a +z o a +x.
+// Pizarra colgada en el muro. Se le da clic al modelo o a su etiqueta.
 // trazos: colores de los renglones (gis, tinta) o, con papelitos, de las notas pegadas.
-function pizarra(id, x, z, rotacion, colorFondo, trazos, html, papelitos = false) {
+function pizarra(id, x, y, z, colorFondo, trazos, html, papelitos = false) {
   const g = new THREE.Group();
   g.add(en(caja(3.2, 1.7, 0.1, C.madera), 0, 0, 0));
   g.add(en(caja(3, 1.5, 0.04, colorFondo, { sombra: false }), 0, 0, 0.06));
@@ -151,34 +300,96 @@ function pizarra(id, x, z, rotacion, colorFondo, trazos, html, papelitos = false
       g.add(en(caja(largo, 0.07, 0.01, color, { sombra: false }), -1.2 + largo / 2, 0.5 - i * 0.33, 0.09));
     }
   });
-  g.position.set(x, 1.5, z);
-  g.rotation.y = rotacion;
+  g.position.set(x, y, z);
   g.traverse((o) => { o.userData.objeto = id; });
   escena.add(g);
   pizarras.push(g);
   const e = etiqueta(html, 'objeto3d__ancla');
-  e.position.set(0, 1.25, 0);
+  e.position.set(0, 1.05, 0.2);
   g.add(e);
 }
 
-// Escritorio con monitor(es) y silla; el agente queda parado detrás, mirando al frente (+z).
-function escritorio(x, z, largo, monitores) {
+// Pantalla del Tablero Central: renglones con datos reales (ver actualizarPantalla). Brilla sola.
+function pantalla(id, x, z, html) {
+  const config = PANTALLAS[id];
   const g = new THREE.Group();
-  g.add(en(caja(largo, 0.12, 1.1, C.mesa), 0, 0.85, 0.5));
-  g.add(en(caja(largo, 0.8, 0.12, C.madera), 0, 0.4, 1.0));            // frente del mueble
-  for (const lado of [-1, 1]) g.add(en(caja(0.1, 0.8, 1, C.madera), lado * (largo / 2 - 0.05), 0.4, 0.5));
+  const halo = plano(4.7, 3.1, new THREE.MeshBasicMaterial({ color: config.brillo, transparent: true, opacity: 0.35 }));
+  halo.receiveShadow = false;
+  g.add(en(halo, 0, 0, -0.03));
+  g.add(en(caja(4.2, 2.6, 0.12, 0x2b2320), 0, 0, 0));
+  const t = textura(640, 368, (ctx, a, h) => { ctx.fillStyle = config.fondo; ctx.fillRect(0, 0, a, h); });
+  const lienzo = t.image;
+  g.add(en(new THREE.Mesh(new THREE.PlaneGeometry(3.96, 2.36), new THREE.MeshBasicMaterial({ map: t })), 0, 0, 0.07));
+  g.position.set(x, 2.05, z);
+  g.traverse((o) => { o.userData.objeto = id; });
+  escena.add(g);
+  pizarras.push(g);
+  pantallas[id] = { lienzo, textura: t, config };
+  dibujarPantalla(id, []);
+  const e = etiqueta(html, 'objeto3d__ancla');
+  e.position.set(0, 1.72, 0.2);
+  g.add(e);
+}
+
+const RENGLONES_PANTALLA = 5;
+
+function dibujarPantalla(id, filas) {
+  const { lienzo, textura: t, config } = pantallas[id];
+  const ctx = lienzo.getContext('2d');
+  const alto = lienzo.height / RENGLONES_PANTALLA;
+  ctx.fillStyle = config.fondo;
+  ctx.fillRect(0, 0, lienzo.width, lienzo.height);
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 44px "Segoe UI", sans-serif';
+  const lista = filas.length ? filas : [{ texto: config.vacio }];
+  lista.slice(0, RENGLONES_PANTALLA).forEach(({ texto, color }, i) => {
+    const y = alto * i + alto / 2;
+    if (i) {
+      ctx.fillStyle = 'rgb(128 128 128 / 0.35)';
+      ctx.fillRect(16, alto * i - 1, lienzo.width - 32, 2);
+    }
+    ctx.fillStyle = color ?? config.tinta;
+    ctx.beginPath();
+    ctx.arc(34, y, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = config.tinta;
+    ctx.fillText(recortar(ctx, texto, lienzo.width - 80), 62, y + 2);
+  });
+  t.needsUpdate = true;
+}
+
+function recortar(ctx, texto, ancho) {
+  if (ctx.measureText(texto).width <= ancho) return texto;
+  let corto = texto;
+  while (corto.length && ctx.measureText(`${corto}…`).width > ancho) corto = corto.slice(0, -1);
+  return `${corto}…`;
+}
+
+// Monitor de cinescopio. El grupo del escritorio lo coloca sobre la mesa.
+function monitorViejo(g, x) {
+  g.add(en(caja(0.95, 0.72, 0.62, C.crema), x, 1.32, 0.2));
+  g.add(en(caja(0.84, 0.6, 0.02, 0x4a463f, { sombra: false }), x, 1.32, 0.52));
+  const pantallita = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.48, 0.01), new THREE.MeshBasicMaterial({ color: C.pantalla })); // brilla sola
+  g.add(en(pantallita, x, 1.32, 0.535));
+  g.add(en(caja(0.3, 0.06, 0.3, C.crema), x, 0.94, 0.3));
+  g.add(en(caja(0.7, 0.04, 0.24, C.crema), x, 0.93, 0.72)); // teclado
+}
+
+// Escritorio con monitor(es) y silla; el agente queda parado detrás, mirando al frente (+z).
+function escritorio(x, z, largo, monitores, { mesa, placa: nombre }) {
+  const lados = new THREE.Color(mesa).multiplyScalar(0.72).getHex();
+  const g = new THREE.Group();
+  g.add(en(caja(largo, 0.12, 1.1, mesa), 0, 0.85, 0.5));
+  g.add(en(caja(largo, 0.8, 0.12, lados), 0, 0.4, 1.0));               // frente del mueble
+  for (const lado of [-1, 1]) g.add(en(caja(0.1, 0.8, 1, lados), lado * (largo / 2 - 0.05), 0.4, 0.5));
+  g.add(en(placa(nombre, 1.2, 0.3), 0, 0.5, 1.07));
   // Detalles: taza y papeles.
   const taza = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.14, 10), new THREE.MeshLambertMaterial({ color: 0xe9825a }));
   g.add(en(taza, largo / 2 - 0.3, 0.98, 0.75));
   g.add(en(caja(0.34, 0.03, 0.44, 0xfff8ea, { sombra: false }), -largo / 2 + 0.35, 0.93, 0.7));
-  monitores.forEach((mx) => {
-    g.add(en(caja(0.9, 0.55, 0.06, C.metal), mx, 1.3, 0.25));
-    const pantalla = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.47, 0.01), new THREE.MeshBasicMaterial({ color: C.pantalla })); // brilla sola
-    g.add(en(pantalla, mx, 1.3, 0.29));
-    g.add(en(caja(0.12, 0.3, 0.12, C.metal), mx, 1.0, 0.25));
-  });
-  g.add(en(caja(0.6, 0.08, 0.6, 0xe9825a), 0, 0.5, -0.45));             // silla
-  g.add(en(caja(0.6, 0.6, 0.08, 0xe9825a), 0, 0.8, -0.75));
+  monitores.forEach((mx) => monitorViejo(g, mx));
+  g.add(en(caja(0.6, 0.08, 0.6, lados), 0, 0.5, -0.45));                // silla
+  g.add(en(caja(0.6, 0.6, 0.08, lados), 0, 0.8, -0.75));
   g.position.set(x, 0, z);
   escena.add(g);
 }
@@ -204,7 +415,7 @@ function monito(id) {
 
 function agente(id, html) {
   const [x, z] = PUESTOS[id];
-  escritorio(x, z, id === 'chasis' ? 3.6 : 2.6, id === 'chasis' ? [-0.8, 0.8] : [0]);
+  escritorio(x, z, id === 'chasis' ? 3.6 : 2.6, id === 'chasis' ? [-0.8, 0.8] : [0], MUEBLE[id]);
   const g = monito(id);
   g.position.set(x, 0, z - 0.2);
   escena.add(g);
@@ -250,26 +461,51 @@ function caminar(a, dt, t) {
 
 function bodega() {
   const g = new THREE.Group();
-  g.add(en(caja(5, 3, 3.6, C.bodega), 0, 1.5, 0));
-  const techo = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 2.9, 1.2, 4, 1), new THREE.MeshLambertMaterial({ color: C.techo }));
-  techo.rotation.y = Math.PI / 4;
-  techo.scale.set(1.25, 1, 0.9);
-  techo.castShadow = true;
-  g.add(en(techo, 0, 3.6, 0));
-  g.add(en(caja(2.4, 2, 0.08, C.puerta, { sombra: false }), 0, 1, 1.82));
-  g.position.set(7.2, 0, -3.6);
+  // Muros de ladrillo y frontón triangular; el techo corre de adelante hacia atrás.
+  const ladrillo = new THREE.MeshLambertMaterial({ map: textura(256, 256, ladrillos, 2, 1.5), color: 0xffffff });
+  const muros = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 3.6), ladrillo);
+  muros.castShadow = true;
+  muros.receiveShadow = true;
+  g.add(en(muros, 0, 1.5, 0));
+  const fronton = new THREE.Shape();
+  fronton.moveTo(-2.5, 0);
+  fronton.lineTo(2.5, 0);
+  fronton.lineTo(0, 1.3);
+  fronton.closePath();
+  const pico = new THREE.Mesh(new THREE.ExtrudeGeometry(fronton, { depth: 3.6, bevelEnabled: false }), new THREE.MeshLambertMaterial({ color: C.bodega }));
+  pico.castShadow = true;
+  g.add(en(pico, 0, 3, -1.8));
+  const inclinacion = Math.atan2(1.3, 2.5);
+  for (const lado of [-1, 1]) {
+    const faldon = caja(3.15, 0.16, 4.3, C.techo);
+    faldon.rotation.z = -lado * inclinacion;
+    g.add(en(faldon, lado * 1.3, 3.72, 0));
+  }
+  g.add(en(caja(0.2, 0.2, 4.4, 0x6d2719), 0, 4.34, 0));
+  // Cortina metálica enrollable.
+  g.add(en(caja(2.9, 2.35, 0.08, 0x3a3634, { sombra: false }), 0, 1.17, 1.82));
+  g.add(en(plano(2.6, 2.1, new THREE.MeshLambertMaterial({ map: textura(64, 256, persiana) })), 0, 1.05, 1.87));
+  g.position.set(7.6, 0, -4.6);
   escena.add(g);
   const cartel = etiqueta('BODEGA', 'area3d');
-  cartel.position.set(7.2, 4.6, -3.6);
+  cartel.position.set(7.6, 5.1, -4.6);
   escena.add(cartel);
 }
 
+// Cajones de madera con el material apilado adentro.
 function montones() {
-  [[11.4, -1.4, 0xe6dcc4, 'Polvo'], [11.6, 1.6, 0xa89a82, 'Grava'], [3.2, -4.6, 0x8c7a66, 'Piedra']].forEach(([x, z, color, nombre]) => {
-    const cono = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.2, 10), new THREE.MeshLambertMaterial({ color, flatShading: true }));
+  [[11.6, -5.2, 0x8c7a66, 'Piedra'], [11.6, -2.7, C.crema, 'Polvo'], [11.6, -0.2, 0xa89a82, 'Grava']].forEach(([x, z, color, nombre]) => {
+    const g = new THREE.Group();
+    for (const lado of [-1, 1]) {
+      g.add(en(caja(2.3, 0.65, 0.14, C.muroBorde), 0, 0.33, lado * 1.05));
+      g.add(en(caja(0.14, 0.65, 2.2, C.muroBorde), lado * 1.08, 0.33, 0));
+    }
+    g.add(en(caja(2.1, 0.3, 2, color), 0, 0.15, 0));
+    const cono = new THREE.Mesh(new THREE.ConeGeometry(0.95, 0.9, 10), new THREE.MeshLambertMaterial({ color, flatShading: true }));
     cono.castShadow = true;
     cono.receiveShadow = true;
-    escena.add(en(cono, x, 0.6, z));
+    g.add(en(cono, 0, 0.75, 0));
+    escena.add(en(g, x, 0, z));
     const e = etiqueta(nombre, 'material3d');
     e.position.set(x, 1.5, z);
     escena.add(e);
@@ -302,8 +538,8 @@ export function montarEscena(el, agentesHtml, objetosHtml, alClicAgente, alClicO
   escena.background = new THREE.Color(0xf7e3c6);
 
   camara = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
-  const centro = new THREE.Vector3(-3, 0, -2); // centro visual de la maqueta (con etiquetas)
-  camara.position.copy(centro).add(new THREE.Vector3(22, 20, 22)); // diagonal desde arriba: vista isométrica
+  const centro = new THREE.Vector3(-2, 1.2, 0); // centro visual de la maqueta (con etiquetas)
+  camara.position.copy(centro).add(new THREE.Vector3(6, 17, 30)); // de frente al Tablero Central, un poco de lado
   camara.lookAt(centro);
 
   escena.add(new THREE.HemisphereLight(0xfff4e0, 0xb98a5a, 1.7));
@@ -331,10 +567,13 @@ export function montarEscena(el, agentesHtml, objetosHtml, alClicAgente, alClicO
   el.append(etiquetas.domElement);
 
   pisoYMuros();
-  pizarra('notas', -5.8, -7.8, 0, 0x2f6b4f, [0xf4f1e3, 0xf4f1e3, 0xf2c14e, 0xf4f1e3], objetosHtml.notas);
-  pizarra('ordenes', -2.2, -7.8, 0, 0x4b3a6b, [0xf4f1e3, 0xd9c7f2, 0xf4f1e3, 0xf2c14e], objetosHtml.ordenes);
-  pizarra('dia', -13.5, -7.8, 0, 0xc99a63, [0xf9e27a, 0xf7a8a0, 0xa8e0c8, 0xa9cdf2, 0xf9e27a, 0xf7a8a0], objetosHtml.dia, true);
-  pizarra('asistencias', -16.8, -3, Math.PI / 2, 0xfaf7ee, [0x2f7fd1, 0xe2502f, 0x2f9e5b, 0x2f7fd1], objetosHtml.asistencias);
+  // Tablero Central: tablero de corcho con Asistencias y Pendientes, y una pantalla por área.
+  escena.add(en(caja(3.8, 3.85, 0.1, 0x4a2c15), -14.6, 2.25, -7.82));
+  pizarra('asistencias', -14.6, 3.1, -7.72, 0xfaf7ee, [0x2f7fd1, 0xe2502f, 0x2f9e5b, 0x2f7fd1], objetosHtml.asistencias);
+  pizarra('dia', -14.6, 1.25, -7.72, C.corcho, [0xf9e27a, 0xf7a8a0, 0xa8e0c8, 0xa9cdf2, 0xf9e27a, 0xf7a8a0], objetosHtml.dia, true);
+  pantalla('chatito', -10.4, -7.74, objetosHtml.chatito);
+  pantalla('ordenes', -5.9, -7.74, objetosHtml.ordenes);
+  pantalla('notas', -1.5, -7.74, objetosHtml.notas);
   decoracion();
   bodega();
   montones();
@@ -367,7 +606,7 @@ export function montarEscena(el, agentesHtml, objetosHtml, alClicAgente, alClicO
 function ajustar() {
   const { clientWidth: ancho, clientHeight: alto } = contenedor;
   const aspecto = ancho / alto;
-  const vista = Math.max(23, 37 / aspecto); // en pantallas angostas se aleja para que quepa todo
+  const vista = Math.max(19, 35 / aspecto); // en pantallas angostas se aleja para que quepa todo
   Object.assign(camara, { left: (-vista * aspecto) / 2, right: (vista * aspecto) / 2, top: vista / 2, bottom: -vista / 2 });
   camara.updateProjectionMatrix();
   render.setSize(ancho, alto);
@@ -400,6 +639,15 @@ function cuadro() {
   }
   render.render(escena, camara);
   etiquetas.render(escena, camara);
+}
+
+// filas: [{ texto, color? }]. Sólo vuelve a dibujar si algo cambió.
+export function actualizarPantalla(id, filas) {
+  const p = pantallas[id];
+  const firma = JSON.stringify(filas);
+  if (!p || p.firma === firma) return;
+  p.firma = firma;
+  dibujarPantalla(id, filas);
 }
 
 export function estadoAgente(id, estado) {
