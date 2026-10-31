@@ -160,7 +160,7 @@ Octavio tiene su escritorio y su propio pizarrón, **Órdenes de Compra**, apart
 
 Si WhatsApp está desconectado, la orden no se aprueba: la alerta sigue abierta con lo escrito.
 
-**Entradas de Almacén**, en el panel de Octavio, se capturan como una nota: proveedor, folio o factura (obligatorio), nota opcional y los renglones que hagan falta, con las mismas abreviaturas (B = BOLSAS, CB = CON BOLSA). Es sólo un registro manual: no suma ni descuenta inventario, porque el sistema no lleva inventario.
+**Entradas de Almacén**, en el panel de Octavio, se capturan como una nota: proveedor, folio o factura (obligatorio), nota opcional y los renglones que hagan falta, con las mismas abreviaturas (B = BOLSAS, CB = CON BOLSA). En **Últimas entradas**, **✎ Editar** corrige cualquier dato de una entrada ya guardada; no queda registro de lo que tenía antes. Es sólo un registro manual: no suma ni descuenta inventario, porque el sistema no lleva inventario.
 
 ### Preguntarle a un agente (IA)
 
@@ -352,6 +352,7 @@ oficina-virtual/
 | POST | `/api/octavio/ordenes/:id/enviar` | Reenvía la respuesta de una orden aprobada |
 | GET | `/api/octavio/ordenes/:id/imagen` | PNG de la orden |
 | GET · POST | `/api/octavio/entradas` | Entradas de almacén · `{ folio, proveedor?, nota?, renglones: [{ cantidad, unidad?, material }] }` |
+| PUT | `/api/octavio/entradas/:id` | Edita una entrada, con los mismos datos |
 | GET | `/api/resumen` | Conteos por estado, `sin_chofer`, `clientes` y `integraciones` (estado de cada conector) |
 
 ## Base de datos

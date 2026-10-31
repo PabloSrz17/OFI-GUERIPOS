@@ -297,6 +297,24 @@
     </form>
   </dialog>
 
+  <dialog id="editar-entrada" class="dialogo dialogo--editar" aria-labelledby="editar-entrada-titulo">
+    <form autocomplete="off">
+      <h2 id="editar-entrada-titulo"></h2>
+      <div class="editar__datos">
+        <label class="campo">Proveedor <input name="proveedor"></label>
+        <label class="campo">Folio / Factura <input name="folio" required></label>
+        <label class="campo editar__ancho">Nota <input name="nota" placeholder="opcional: remisión, placas…"></label>
+      </div>
+      <div id="editar-entrada-articulos"></div>
+      <button type="button" class="btn btn--secundario editar__agregar" data-agregar>＋ Agregar artículo</button>
+      <p id="editar-entrada-aviso" class="dialogo__aviso dialogo__aviso--error"></p>
+      <div class="dialogo__botones">
+        <button type="button" class="btn btn--secundario" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn btn--ruta">Guardar cambios</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="confirmar-ruta" class="dialogo" aria-labelledby="confirmar-titulo">
     <form method="dialog">
       <h2 id="confirmar-titulo">🚚 ¿Enviar a ruta?</h2>

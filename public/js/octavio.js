@@ -44,8 +44,12 @@ export function montarOctavio({ toast, alCambiar }) {
   let oculta = new Set(); // "ver después", hasta que llegue algo nuevo de esa orden
   let enviando = false;
   let registrando = false;
+  let entradas = [];
   const filasEntrada = $('#entrada-articulos');
   filasEntrada.innerHTML = filaArticulo();
+  const dialogoEntrada = $('#editar-entrada');
+  const formEditarEntrada = dialogoEntrada.querySelector('form');
+  const filasEditarEntrada = $('#editar-entrada-articulos');
 
   const porAprobar = () => ordenes.filter((o) => o.estado === 'por_aprobar').sort((a, b) => a.id - b.id);
   // Por contenido: actualizado_en sólo tiene segundos y aviso y lista pueden llegar en el mismo.
@@ -132,8 +136,9 @@ export function montarOctavio({ toast, alCambiar }) {
 
   async function recargar() {
     try {
-      const [lista, entradas] = await Promise.all([api.get('/api/octavio/ordenes'), api.get('/api/octavio/entradas')]);
+      const [lista, ultimas] = await Promise.all([api.get('/api/octavio/ordenes'), api.get('/api/octavio/entradas')]);
       ordenes = lista;
+      entradas = ultimas;
       mostrarAlerta();
       pintarEspera();
       pintarPizarron();
@@ -142,6 +147,7 @@ export function montarOctavio({ toast, alCambiar }) {
           <div class="entrada__cabeza"><b>${esc(e.folio ?? 'Sin folio')}</b><span>${esc(e.proveedor ?? 'Sin proveedor')}</span></div>
           <ul class="entrada__materiales">${e.renglones.map((r) => `<li>${esc(linea(r))}</li>`).join('')}</ul>
           <span class="entrada__pie">${esc(e.creado_en.slice(0, 16))}${e.nota ? ` · ${esc(e.nota)}` : ''}</span>
+          <div class="orden__botones"><button type="button" class="btn btn--secundario" data-editar-entrada="${e.id}">✎ Editar</button></div>
         </li>`).join('') || '<li>Sin entradas todavía.</li>';
     } catch (err) {
       toast(err.message, true);
@@ -252,6 +258,48 @@ export function montarOctavio({ toast, alCambiar }) {
       toast(err.message, true); // lo escrito se queda para corregirlo
     } finally {
       registrando = false;
+    }
+  });
+
+  $('#entradas-lista').addEventListener('click', (e) => {
+    const boton = e.target.closest('[data-editar-entrada]');
+    if (!boton) return;
+    const entrada = entradas.find((x) => x.id === Number(boton.dataset.editarEntrada));
+    const c = formEditarEntrada.elements;
+    formEditarEntrada.dataset.id = entrada.id;
+    $('#editar-entrada-titulo').textContent = `✎ Editar entrada ${entrada.folio ?? 'sin folio'}`;
+    c.proveedor.value = entrada.proveedor ?? '';
+    c.folio.value = entrada.folio ?? '';
+    c.nota.value = entrada.nota ?? '';
+    filasEditarEntrada.innerHTML = entrada.renglones.map(filaArticulo).join('');
+    $('#editar-entrada-aviso').textContent = '';
+    dialogoEntrada.showModal();
+  });
+
+  formEditarEntrada.addEventListener('click', (e) => {
+    if (e.target.closest('[data-agregar]')) {
+      filasEditarEntrada.insertAdjacentHTML('beforeend', filaArticulo());
+      filasEditarEntrada.lastElementChild.querySelector('input').focus();
+    }
+    if (e.target.closest('[data-quitar]')) {
+      e.target.closest('.fila-articulo').remove();
+      if (!filasEditarEntrada.children.length) filasEditarEntrada.innerHTML = filaArticulo();
+    }
+    if (e.target.closest('[data-cerrar]')) dialogoEntrada.close();
+  });
+
+  formEditarEntrada.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const c = formEditarEntrada.elements;
+    try {
+      await api.put(`/api/octavio/entradas/${formEditarEntrada.dataset.id}`, {
+        proveedor: c.proveedor.value, folio: c.folio.value, nota: c.nota.value, renglones: todasLasFilas(filasEditarEntrada),
+      });
+      dialogoEntrada.close();
+      toast('Entrada actualizada');
+      await recargar();
+    } catch (err) {
+      $('#editar-entrada-aviso').textContent = err.message;
     }
   });
 

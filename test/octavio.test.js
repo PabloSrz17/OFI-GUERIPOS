@@ -176,6 +176,24 @@ test('entradas de almacén: folio obligatorio y ningún renglón a medias', () =
   assert.equal(ordenes.entradas().some((e) => e.folio === 'F1'), false);
 });
 
+test('entradas de almacén: se editan; con un dato inválido no cambia nada', () => {
+  ordenes.registrarEntrada({ proveedor: 'cemex', folio: 'ed-1', renglones: [{ cantidad: '1', unidad: 'pz', material: 'malla' }] });
+  const { id } = ordenes.entradas()[0];
+  const renglones = [{ cantidad: '2', unidad: 'b', material: 'cal' }, { cantidad: '3', unidad: 'pz', material: 'malla' }];
+  assert.equal(ordenes.editarEntrada(id, { proveedor: 'promexma', folio: 'ed-2', nota: 'corregida', renglones }), true);
+  let e = ordenes.entradas().find((x) => x.id === id);
+  assert.equal(e.proveedor, 'PROMEXMA');
+  assert.equal(e.folio, 'ED-2');
+  assert.equal(e.nota, 'corregida');
+  assert.deepEqual(e.renglones, [{ cantidad: '2', unidad: 'BOLSAS', material: 'CAL' }, { cantidad: '3', unidad: 'pz', material: 'MALLA' }]);
+  assert.throws(() => ordenes.editarEntrada(id, { folio: '', renglones }), /Falta el folio/);
+  assert.throws(() => ordenes.editarEntrada(id, { folio: 'x', renglones: [{ cantidad: '5' }] }), /Falta el material/);
+  e = ordenes.entradas().find((x) => x.id === id);
+  assert.equal(e.folio, 'ED-2');
+  assert.equal(e.renglones.length, 2);
+  assert.equal(ordenes.editarEntrada(999999, { folio: 'x', renglones }), false);
+});
+
 test('entradas de almacén: un folio con varios artículos y las abreviaturas de las notas', () => {
   ordenes.registrarEntrada({
     proveedor: 'promexma',

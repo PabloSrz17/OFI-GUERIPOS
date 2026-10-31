@@ -80,4 +80,15 @@ router.post('/entradas', (req, res) => {
   res.status(201).end();
 });
 
+router.put('/entradas/:id', (req, res) => {
+  let hecho;
+  try {
+    hecho = ordenes.editarEntrada(Number(req.params.id), req.body ?? {});
+  } catch (err) {
+    throw httpError(400, err.message);
+  }
+  if (!hecho) throw httpError(404, 'Entrada no encontrada');
+  res.status(204).end();
+});
+
 module.exports = router;

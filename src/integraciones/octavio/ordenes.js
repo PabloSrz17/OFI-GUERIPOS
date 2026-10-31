@@ -28,6 +28,7 @@ const stmts = {
   porAprobar: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'por_aprobar'`),
   porSurtir: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'aprobada'`),
   entrada: db.prepare('INSERT INTO entradas_almacen (proveedor, folio, nota, renglones) VALUES (@proveedor, @folio, @nota, @renglones)'),
+  editarEntrada: db.prepare('UPDATE entradas_almacen SET proveedor = @proveedor, folio = @folio, nota = @nota, renglones = @renglones WHERE id = @id'),
   entradas: db.prepare('SELECT * FROM entradas_almacen ORDER BY id DESC LIMIT 50'),
 };
 
@@ -155,7 +156,7 @@ function renglonesDeEntrada(lista) {
   });
 }
 
-function registrarEntrada({ proveedor, folio, nota, renglones }) {
+function datosDeEntrada({ proveedor, folio, nota, renglones }) {
   const datos = {
     proveedor: String(proveedor ?? '').trim().toUpperCase() || null,
     folio: String(folio ?? '').trim().toUpperCase(),
@@ -163,8 +164,18 @@ function registrarEntrada({ proveedor, folio, nota, renglones }) {
     renglones: JSON.stringify(renglonesDeEntrada(renglones)),
   };
   if (!datos.folio) throw new Error('Falta el folio o factura');
-  stmts.entrada.run(datos);
+  return datos;
+}
+
+function registrarEntrada(campos) {
+  stmts.entrada.run(datosDeEntrada(campos));
   avisar();
+}
+
+function editarEntrada(id, campos) {
+  const hecho = stmts.editarEntrada.run({ ...datosDeEntrada(campos), id }).changes > 0;
+  if (hecho) avisar();
+  return hecho;
 }
 
 module.exports = {
@@ -181,6 +192,7 @@ module.exports = {
   descartar,
   obtener,
   registrarEntrada,
+  editarEntrada,
   listar: () => stmts.listar.all().map(conDatos),
   entradas: () => stmts.entradas.all().map((e) => ({ ...e, renglones: JSON.parse(e.renglones) })),
   porAprobar: () => stmts.porAprobar.get().n,
