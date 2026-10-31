@@ -169,7 +169,31 @@ function saldosPendientes(db) {
   if (!columnas.includes('saldo')) db.exec('ALTER TABLE notas ADD COLUMN saldo INTEGER NOT NULL DEFAULT 0');
 }
 
+// Entradas de almacén con folio y varios artículos: cada entrada vieja queda con su único renglón.
+function entradasConRenglones(db) {
+  const columnas = db.prepare('PRAGMA table_info(entradas_almacen)').all().map((c) => c.name);
+  if (columnas.includes('renglones')) return;
+  db.transaction(() => {
+    db.exec(`CREATE TABLE entradas_nueva (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      sucursal  TEXT NOT NULL DEFAULT 'Concordia',
+      proveedor TEXT,
+      folio     TEXT,
+      nota      TEXT,
+      renglones TEXT NOT NULL,
+      creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    )`);
+    db.exec(`INSERT INTO entradas_nueva (id, sucursal, proveedor, nota, renglones, creado_en)
+      SELECT id, sucursal, proveedor, nota, json_array(json_object('cantidad', cantidad, 'unidad', COALESCE(unidad, ''), 'material', material)), creado_en
+      FROM entradas_almacen`);
+    db.exec('DROP TABLE entradas_almacen');
+    db.exec('ALTER TABLE entradas_nueva RENAME TO entradas_almacen');
+  })();
+  console.log('[bd] Migración aplicada: entradas con varios artículos');
+}
+
 module.exports = function migrar(db) {
+  entradasConRenglones(db);
   saldosPendientes(db);
   telefonoDeNota(db);
   renglonEnHoja(db);

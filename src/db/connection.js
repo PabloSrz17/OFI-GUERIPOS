@@ -3,6 +3,9 @@ const path = require('node:path');
 const Database = require('better-sqlite3');
 const { dbPath } = require('../config');
 
+// Abrir la base aplica el esquema y las migraciones: una prueba sin DB_PATH modificaría la real.
+if (process.env.NODE_TEST_CONTEXT && !process.env.DB_PATH) throw new Error('Una prueba intentó abrir la base real: define DB_PATH');
+
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const db = new Database(dbPath);

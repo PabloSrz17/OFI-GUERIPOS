@@ -6,7 +6,7 @@ const bus = require('../../events/bus');
 const whatsapp = require('../whatsapp/cliente');
 const imagen = require('../inspector/imagen');
 const { aNumero } = require('../inspector/cotizador');
-const { productoDeNota, unidadDe } = require('../sicar/texto');
+const { productoDeNota, unidadDe, datosConEmpaque, conBolsa } = require('../sicar/texto');
 
 const VENTANA = `datetime('now', 'localtime', '-2 minutes')`; // lo que manda después de avisar se suma a su orden
 const ESTADOS_PIZARRON = ['aprobada', 'surtida', 'cancelada'];
@@ -27,7 +27,7 @@ const stmts = {
   whatsapp: db.prepare('UPDATE ordenes_compra SET whatsapp = ? WHERE id = ?'),
   porAprobar: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'por_aprobar'`),
   porSurtir: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'aprobada'`),
-  entrada: db.prepare('INSERT INTO entradas_almacen (proveedor, material, cantidad, unidad, nota) VALUES (@proveedor, @material, @cantidad, @unidad, @nota)'),
+  entrada: db.prepare('INSERT INTO entradas_almacen (proveedor, folio, nota, renglones) VALUES (@proveedor, @folio, @nota, @renglones)'),
   entradas: db.prepare('SELECT * FROM entradas_almacen ORDER BY id DESC LIMIT 50'),
 };
 
@@ -141,16 +141,28 @@ function descartar(id) {
   return hecho;
 }
 
-function registrarEntrada({ proveedor, material, cantidad, unidad, nota }) {
+// Un renglón a medias detiene todo: lo que entró a bodega no se pierde en silencio.
+function renglonesDeEntrada(lista) {
+  const renglones = (Array.isArray(lista) ? lista : [])
+    .map((r) => ({ cantidad: String(r.cantidad ?? '').trim(), unidad: String(r.unidad ?? '').trim(), material: String(r.material ?? '').trim() }))
+    .filter((r) => r.cantidad || r.unidad || r.material);
+  if (!renglones.length) throw new Error('Agrega al menos un material');
+  return renglones.map((r) => {
+    if (!r.material) throw new Error(`Falta el material del renglón "${linea(r)}"`);
+    if (!(aNumero(r.cantidad) > 0)) throw new Error(`Falta la cantidad de ${r.material.toUpperCase()}`);
+    const { unidad, material } = datosConEmpaque(r); // B = BOLSAS, CB = CON BOLSA, igual que en las notas
+    return { cantidad: r.cantidad, unidad: unidadDe(unidad) ?? conBolsa(unidad), material: material.toUpperCase() };
+  });
+}
+
+function registrarEntrada({ proveedor, folio, nota, renglones }) {
   const datos = {
     proveedor: String(proveedor ?? '').trim().toUpperCase() || null,
-    material: String(material ?? '').trim().toUpperCase(),
-    cantidad: String(cantidad ?? '').trim(),
-    unidad: String(unidad ?? '').trim() || null,
+    folio: String(folio ?? '').trim().toUpperCase(),
     nota: String(nota ?? '').trim() || null,
+    renglones: JSON.stringify(renglonesDeEntrada(renglones)),
   };
-  if (!datos.material) throw new Error('Falta el material');
-  if (!(aNumero(datos.cantidad) > 0)) throw new Error('Falta la cantidad');
+  if (!datos.folio) throw new Error('Falta el folio o factura');
   stmts.entrada.run(datos);
   avisar();
 }
@@ -170,7 +182,7 @@ module.exports = {
   obtener,
   registrarEntrada,
   listar: () => stmts.listar.all().map(conDatos),
-  entradas: () => stmts.entradas.all(),
+  entradas: () => stmts.entradas.all().map((e) => ({ ...e, renglones: JSON.parse(e.renglones) })),
   porAprobar: () => stmts.porAprobar.get().n,
   porSurtir: () => stmts.porSurtir.get().n,
 };

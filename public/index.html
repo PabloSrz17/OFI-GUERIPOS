@@ -225,12 +225,12 @@
         <p class="captura__ayuda">Es sólo un registro: no descuenta ni suma a ningún inventario.</p>
         <form id="form-entrada" autocomplete="off">
           <div class="editar__datos">
-            <label class="campo">Cantidad <input name="cantidad" required placeholder="7, 1/2…"></label>
-            <label class="campo">Unidad <input name="unidad" list="lista-unidades-captura" placeholder="m³, pz…"></label>
-            <label class="campo">Proveedor <input name="proveedor" placeholder="opcional"></label>
-            <label class="campo editar__ancho">Material <input name="material" list="lista-materiales" required></label>
+            <label class="campo">Proveedor <input name="proveedor" placeholder="PROMEXMA"></label>
+            <label class="campo">Folio / Factura <input name="folio" required></label>
             <label class="campo editar__ancho">Nota <input name="nota" placeholder="opcional: remisión, placas…"></label>
           </div>
+          <div id="entrada-articulos"></div>
+          <button type="button" class="btn btn--secundario captura__agregar" data-agregar>＋ Agregar artículo</button>
           <button type="submit" class="btn btn--ruta captura__guardar">Registrar entrada ✔</button>
         </form>
         <details class="inspector__recientes" open>

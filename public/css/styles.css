@@ -112,8 +112,12 @@ body { display: flex; flex-direction: column; overflow: hidden; background: #f7e
 .ordenes-espera .btn { margin: 0 0 0 auto; }
 .entradas { margin-top: 12px; }
 .entradas input { min-width: 0; }
-#entradas-lista li { display: grid; gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--panel-2); list-style: none; }
+#entradas-lista > li { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--panel-2); list-style: none; }
 #entradas-lista { margin: 8px 0 0; padding: 0; }
+.entrada__cabeza { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; }
+.entrada__materiales { margin: 2px 0; padding-left: 18px; }
+#entradas-lista .entrada__materiales li { padding: 1px 0; border: 0; list-style: disc; }
+.entrada__pie { font-size: 12px; color: var(--texto-suave); overflow-wrap: anywhere; }
 /* Pizarrón de órdenes de compra */
 .ordenes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; align-items: start; }
 .ordenes__lista { display: grid; gap: 10px; padding: 8px; }

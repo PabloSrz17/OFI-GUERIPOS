@@ -17,11 +17,12 @@ const ESTADO_WHATSAPP = {
   error: '⚠️ No se pudo enviar',
 };
 
-const leerFilas = (caja) => [...caja.querySelectorAll('.fila-articulo')].map((f) => ({
+const todasLasFilas = (caja) => [...caja.querySelectorAll('.fila-articulo')].map((f) => ({
   cantidad: f.querySelector('[data-articulo="cantidad"]').value.trim(),
   unidad: f.querySelector('[data-articulo="unidad"]').value.trim(),
   material: f.querySelector('[data-articulo="material"]').value.trim().toUpperCase(),
-})).filter((r) => r.material);
+}));
+const leerFilas = (caja) => todasLasFilas(caja).filter((r) => r.material);
 
 // Mismas reglas que el servidor (ordenes.js): lo que decide qué mensaje sale.
 const claveDe = (r) => `${aNumero(r.cantidad)}|${String(r.unidad ?? '').toLowerCase()}|${String(r.material ?? '').toUpperCase()}`;
@@ -42,6 +43,9 @@ export function montarOctavio({ toast, alCambiar }) {
   let tocada = false;     // ya le movieron: que no se le borre si llega otro mensaje
   let oculta = new Set(); // "ver después", hasta que llegue algo nuevo de esa orden
   let enviando = false;
+  let registrando = false;
+  const filasEntrada = $('#entrada-articulos');
+  filasEntrada.innerHTML = filaArticulo();
 
   const porAprobar = () => ordenes.filter((o) => o.estado === 'por_aprobar').sort((a, b) => a.id - b.id);
   // Por contenido: actualizado_en sólo tiene segundos y aviso y lista pueden llegar en el mismo.
@@ -134,7 +138,11 @@ export function montarOctavio({ toast, alCambiar }) {
       pintarEspera();
       pintarPizarron();
       $('#entradas-lista').innerHTML = entradas.map((e) => `
-        <li><b>${esc(linea(e))}</b><span>${esc(e.proveedor ?? 'Sin proveedor')} · ${esc(e.creado_en.slice(0, 16))}${e.nota ? ` · ${esc(e.nota)}` : ''}</span></li>`).join('') || '<li>Sin entradas todavía.</li>';
+        <li>
+          <div class="entrada__cabeza"><b>${esc(e.folio ?? 'Sin folio')}</b><span>${esc(e.proveedor ?? 'Sin proveedor')}</span></div>
+          <ul class="entrada__materiales">${e.renglones.map((r) => `<li>${esc(linea(r))}</li>`).join('')}</ul>
+          <span class="entrada__pie">${esc(e.creado_en.slice(0, 16))}${e.nota ? ` · ${esc(e.nota)}` : ''}</span>
+        </li>`).join('') || '<li>Sin entradas todavía.</li>';
     } catch (err) {
       toast(err.message, true);
     }
@@ -214,19 +222,36 @@ export function montarOctavio({ toast, alCambiar }) {
     pintarAlerta(orden, porAprobar().length);
   });
 
+  $('#form-entrada').addEventListener('click', (e) => {
+    if (e.target.closest('[data-agregar]')) {
+      filasEntrada.insertAdjacentHTML('beforeend', filaArticulo());
+      filasEntrada.lastElementChild.querySelector('input').focus();
+    }
+    if (e.target.closest('[data-quitar]')) {
+      e.target.closest('.fila-articulo').remove();
+      if (!filasEntrada.children.length) filasEntrada.innerHTML = filaArticulo();
+    }
+  });
+
   $('#form-entrada').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const c = e.target.elements;
+    if (registrando) return;
+    registrando = true;
+    const form = e.target;
+    const c = form.elements;
     try {
       await api.post('/api/octavio/entradas', {
-        proveedor: c.proveedor.value, material: c.material.value, cantidad: c.cantidad.value, unidad: c.unidad.value, nota: c.nota.value,
+        proveedor: c.proveedor.value, folio: c.folio.value, nota: c.nota.value, renglones: todasLasFilas(filasEntrada),
       });
-      e.target.reset();
-      toast('Entrada registrada');
-      c.material.focus();
+      toast(`Entrada ${c.folio.value.trim().toUpperCase()} registrada`);
+      form.reset();
+      filasEntrada.innerHTML = filaArticulo();
+      c.proveedor.focus();
       await recargar();
     } catch (err) {
-      toast(err.message, true);
+      toast(err.message, true); // lo escrito se queda para corregirlo
+    } finally {
+      registrando = false;
     }
   });
 

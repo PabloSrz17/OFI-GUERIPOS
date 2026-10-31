@@ -30,7 +30,7 @@ const AGENTES = {
   },
   octavio: {
     nombre: 'Octavio',
-    area: `las órdenes de compra de la sucursal Concordia y las entradas de almacén. ordenes_compra.renglones trae la lista vigente en JSON y original la que llegó; folio = "OC-" + id. Estado: por_aprobar espera a un humano, aprobada está por surtirse, surtida terminó y descartada no se tomó en cuenta. Las entradas son lo que se captura a mano; no hay inventario en el sistema, así que no puedes decir cuánto stock hay`,
+    area: `las órdenes de compra de la sucursal Concordia y las entradas de almacén. ordenes_compra.renglones trae la lista vigente en JSON y original la que llegó; folio = "OC-" + id. Estado: por_aprobar espera a un humano, aprobada está por surtirse, surtida terminó y descartada no se tomó en cuenta. Las entradas son lo que se captura a mano: entradas_almacen.folio es la factura o remisión y renglones trae sus materiales en JSON; no hay inventario en el sistema, así que no puedes decir cuánto stock hay`,
     tablas: ['ordenes_compra', 'entradas_almacen'],
   },
 };

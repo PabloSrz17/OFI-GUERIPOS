@@ -167,12 +167,36 @@ test('descartar saca la orden de la lista y no contesta', async () => {
   assert.equal(salidas.length, 0);
 });
 
-test('entradas de almacén: material y cantidad obligatorios', () => {
-  assert.throws(() => ordenes.registrarEntrada({ cantidad: '1' }), /Falta el material/);
-  assert.throws(() => ordenes.registrarEntrada({ material: 'cal', cantidad: '0' }), /Falta la cantidad/);
-  ordenes.registrarEntrada({ proveedor: 'cemex', material: 'cemento', cantidad: '1/2', unidad: 'ton' });
+test('entradas de almacén: folio obligatorio y ningún renglón a medias', () => {
+  const bien = [{ cantidad: '1', material: 'cal' }];
+  assert.throws(() => ordenes.registrarEntrada({ renglones: bien }), /Falta el folio/);
+  assert.throws(() => ordenes.registrarEntrada({ folio: 'F1', renglones: [] }), /al menos un material/);
+  assert.throws(() => ordenes.registrarEntrada({ folio: 'F1', renglones: [...bien, { cantidad: '5', unidad: 'pz' }] }), /Falta el material del renglón "5 pz"/);
+  assert.throws(() => ordenes.registrarEntrada({ folio: 'F1', renglones: [...bien, { cantidad: '0', material: 'malla' }] }), /Falta la cantidad de MALLA/);
+  assert.equal(ordenes.entradas().some((e) => e.folio === 'F1'), false);
+});
+
+test('entradas de almacén: un folio con varios artículos y las abreviaturas de las notas', () => {
+  ordenes.registrarEntrada({
+    proveedor: 'promexma',
+    folio: 'fa-123',
+    nota: 'placas ABC',
+    renglones: [
+      { cantidad: '1/2', unidad: 'ton', material: 'cemento' },
+      { cantidad: '10', unidad: 'B', material: 'polvo' },
+      { cantidad: '5', unidad: 'm3', material: 'grava cb' },
+      { cantidad: '3', unidad: 'CB', material: 'arena' },
+      { cantidad: '', unidad: '', material: '' },
+    ],
+  });
   const [e] = ordenes.entradas();
-  assert.equal(e.material, 'CEMENTO');
-  assert.equal(e.proveedor, 'CEMEX');
-  assert.equal(e.cantidad, '1/2');
+  assert.equal(e.proveedor, 'PROMEXMA');
+  assert.equal(e.folio, 'FA-123');
+  assert.equal(e.nota, 'placas ABC');
+  assert.deepEqual(e.renglones, [
+    { cantidad: '1/2', unidad: 'ton', material: 'CEMENTO' },
+    { cantidad: '10', unidad: 'BOLSAS', material: 'POLVO' },
+    { cantidad: '5', unidad: 'm³', material: 'GRAVA CON BOLSA' },
+    { cantidad: '3', unidad: 'CON BOLSA', material: 'ARENA' },
+  ]);
 });

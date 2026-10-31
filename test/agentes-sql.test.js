@@ -1,5 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+process.env.DB_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'oficina-prueba-')), 'prueba.sqlite');
+
 const { revisarSQL } = require('../src/integraciones/agentes/agentes');
 
 const RUTAS = ['notas', 'choferes', 'camiones', 'clientes'];

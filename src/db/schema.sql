@@ -245,9 +245,8 @@ CREATE TABLE IF NOT EXISTS entradas_almacen (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   sucursal  TEXT NOT NULL DEFAULT 'Concordia',
   proveedor TEXT,
-  material  TEXT NOT NULL,
-  cantidad  TEXT NOT NULL,
-  unidad    TEXT,
+  folio     TEXT, -- obligatorio al capturar; las entradas de antes de este campo no lo traen
   nota      TEXT,
+  renglones TEXT NOT NULL, -- JSON: [{ cantidad, unidad, material }]
   creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
