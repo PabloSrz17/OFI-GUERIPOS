@@ -48,10 +48,11 @@ app.use('/api/octavio', require('./routes/octavio.routes'));
 app.use('/api/pizarron', require('./routes/pizarron.routes'));
 app.use('/api/asistencias', require('./routes/asistencias.routes'));
 app.use('/api/reportes', require('./routes/reportes.routes'));
+app.use('/api/evidencias', require('./routes/evidencias.routes'));
 
 // Tiempo real (Server-Sent Events): cada pantalla abierta recibe un aviso al cambiar algo y se refresca.
 const EVENTOS = {
-  'nota:creada': 'tablero', 'nota:estado': 'tablero', 'nota:asignada': 'tablero', 'nota:editada': 'tablero', 'nota:eliminada': 'tablero', 'jornada:cerrada': 'tablero',
+  'nota:creada': 'tablero', 'nota:estado': 'tablero', 'nota:asignada': 'tablero', 'nota:editada': 'tablero', 'nota:eliminada': 'tablero', 'jornada:cerrada': 'tablero', 'evidencia:nueva': 'tablero',
   'cotizacion:creada': 'tablero', 'pizarron:cambio': 'pizarron', 'solicitud:nueva': 'inspector', 'asistencia:cambio': 'asistencia', 'orden:cambio': 'octavio',
 };
 bus.setMaxListeners(100); // un oyente por pantalla abierta
@@ -103,6 +104,7 @@ app.listen(config.port, config.host, () => {
   avisosWhatsapp.iniciar();
   solicitudes.iniciar(whatsapp);
   require('./integraciones/agentes/grupo').iniciar(whatsapp);
+  require('./integraciones/sulema/paquetes').iniciar();
   require('./integraciones/inspector/seguimiento').iniciar();
   require('./integraciones/recordatorio-lista').iniciar();
   whatsapp.iniciar();

@@ -40,7 +40,7 @@ module.exports = {
     host: process.env.SICAR_DB_HOST || '192.168.1.67', // PC "MOSTRADOR"
     port: Number(process.env.SICAR_DB_PORT) || 3306,
     user: process.env.SICAR_DB_USER || '',
-    password: process.env.SICAR_DB_PASSWORD || '',
+    password: process.env.SICAR_DB_PASSWORD || process.env.SICAR_DB_PASS || '', // SICAR_DB_PASS también vale
     database: process.env.SICAR_DB_NAME || 'sicar',
   },
 };

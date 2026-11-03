@@ -21,13 +21,13 @@ function cotizacion(creado_en, estado = 'aprobada', pagada_en = null) {
 }
 
 let folio = 0;
-function nota({ estado = 'entregado', chofer_id = null, camion_id = null, entregas = [] }) {
+function nota({ estado = 'entregado', chofer_id = null, camion_id = null, entregas = [], salio = null }) {
   folio += 1;
   const id = db.prepare(`INSERT INTO notas (folio, cliente_id, material, cantidad, direccion, estado, chofer_id, camion_id)
     VALUES (?, ?, 'GRAVA', 1, 'CENTRO', ?, ?, ?)`).run(`R${folio}`, cliente, estado, chofer_id, camion_id).lastInsertRowid;
   for (const fecha of entregas) {
     db.prepare("INSERT INTO historial_estados (nota_id, estado_anterior, estado_nuevo, fecha) VALUES (?, 'en_ruta', 'entregado', ?)").run(id, fecha);
-  }
+  }  if (salio) db.prepare("INSERT INTO historial_estados (nota_id, estado_anterior, estado_nuevo, fecha) VALUES (?, 'cargando', 'en_ruta', ?)").run(id, salio);
 }
 
 test('la semana va del lunes 08:00 al cierre del sábado; el domingo es de la que acaba de cerrar', () => {
@@ -79,4 +79,39 @@ test('Edgar: entregas de la semana por chofer y unidad, sin las regresadas', () 
       { chofer: 'José', unidad: 'Ram 4000', viajes: 1 },
     ],
   });
+});
+
+test('Control de Gasolina: la carga anotada a mano sale en la bitácora y en los filtros', () => {
+  const c = reporte.anotarCombustible({ unidad: 'ESTAQUITAS', importe: 450, concepto: 'gasolina', litros: null });
+  assert.ok(c.id > 0);
+  const { cargas, total } = reporte.bitacoraCombustible({ unidad: 'esta', min: '400' });
+  assert.equal(cargas.length, 1);
+  assert.equal(cargas[0].reporto, 'Oficina (a mano)');
+  assert.equal(total, 450);
+  assert.equal(reporte.bitacoraCombustible({ unidad: 'esta', min: '500' }).cargas.length, 0);
+});
+
+test('Edgar: notas del mismo chofer y unidad que salen con 20 minutos o menos entre sí son un solo viaje', () => {
+  const luis = chofer('Luis');
+  const ram = camion('Ram 2000');
+  const dina = camion('Dina 2');
+  const entrega = ['2026-11-10 13:00:00'];
+  // 09:00, 09:15 y 09:30: cada una a 15 min de la anterior = un viaje. 10:00 (30 min después) = otro.
+  for (const salio of ['2026-11-10 09:00:00', '2026-11-10 09:15:00', '2026-11-10 09:30:00', '2026-11-10 10:00:00']) {
+    nota({ chofer_id: luis, camion_id: ram, entregas: entrega, salio });
+  }
+  nota({ chofer_id: luis, camion_id: ram, entregas: entrega, salio: '2026-11-10 10:20:00' }); // justo 20 min: mismo viaje
+  nota({ chofer_id: luis, camion_id: dina, entregas: entrega, salio: '2026-11-10 09:05:00' }); // otra unidad: otro viaje
+  nota({ chofer_id: luis, camion_id: ram, entregas: ['2026-11-11 12:00:00'] }); // sin "En ruta": cuenta su hora de entrega
+  assert.deepEqual(reporte.generar('2026-11-10').edgar, {
+    despachados: 4,
+    viajes: [
+      { chofer: 'Luis', unidad: 'Ram 2000', viajes: 3 },
+      { chofer: 'Luis', unidad: 'Dina 2', viajes: 1 },
+    ],
+  });
+  assert.deepEqual(reporte.delDia('2026-11-10').viajes, [
+    { chofer: 'Luis', unidad: 'Ram 2000', viajes: 2 },
+    { chofer: 'Luis', unidad: 'Dina 2', viajes: 1 },
+  ]);
 });

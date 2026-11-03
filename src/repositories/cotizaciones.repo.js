@@ -28,6 +28,8 @@ const stmts = {
     FROM cotizaciones co JOIN clientes cl ON cl.id = co.cliente_id
     ORDER BY co.id DESC LIMIT ?`),
   whatsapp: db.prepare('UPDATE cotizaciones SET whatsapp = ? WHERE id = ?'),
+  borrarPartidas: db.prepare('DELETE FROM cotizacion_partidas WHERE cotizacion_id = ?'),
+  cambiarTotal: db.prepare('UPDATE cotizaciones SET total = ? WHERE id = ?'),
   // Si ya se pagó o se cerró, o si el recordatorio ya salió, no se vuelve a programar.
   programar: db.prepare(`
     UPDATE cotizaciones SET
@@ -96,7 +98,17 @@ const aprobar = db.transaction((cotizacion, actualizarPrecios) => {
   return { cotizacion: obtener(id), aprendido };
 });
 
+// Edición manual desde el historial: cambia renglones y total; folio, cliente y fecha se quedan.
+const editar = db.transaction((id, { partidas, total }) => {
+  if (!stmts.porId.get(id)) return null;
+  stmts.borrarPartidas.run(id);
+  partidas.forEach((p, i) => stmts.partida.run(id, i + 1, p.tipo === 'flete' ? 'flete' : 'producto', p.descripcion, p.cantidad, String(p.unidad ?? '').trim(), p.precio, p.importe));
+  stmts.cambiarTotal.run(total, id);
+  return obtener(id);
+});
+
 module.exports = {
+  editar,
   precios: () => stmts.precios.all(),
   fletes: () => stmts.fletes.all(),
   fletePorColonia: (colonia) => stmts.flete.get(clave(colonia)) ?? null,

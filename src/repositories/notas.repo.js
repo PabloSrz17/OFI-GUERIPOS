@@ -24,7 +24,8 @@ const SELECT_NOTA = `
          (SELECT w.estado FROM whatsapp_envios w WHERE w.nota_id = n.id AND w.tipo = 'en_ruta') AS whatsapp,
          (SELECT s.estado FROM sheets_registros s WHERE s.nota_id = n.id) AS sheets,
          (SELECT s.folio_hoja FROM sheets_registros s WHERE s.nota_id = n.id) AS sheets_folio,
-         (SELECT s.fecha_hoja FROM sheets_registros s WHERE s.nota_id = n.id) AS sheets_fecha
+         (SELECT s.fecha_hoja FROM sheets_registros s WHERE s.nota_id = n.id) AS sheets_fecha,
+         (SELECT COUNT(*) FROM evidencias e WHERE e.nota_id = n.id) AS evidencias
   FROM notas n
   JOIN clientes c ON c.id = n.cliente_id
   LEFT JOIN choferes ch ON ch.id = n.chofer_id

@@ -2,7 +2,8 @@
 // método de pago (bienvenida automática, una vez cada 24 horas y SIN precios). Con los datos, la IA
 // (Claude Haiku) los saca de la plática y se arma el borrador con la lista de precios y el flete.
 // Queda como tarjeta en el Pizarrón; el precio sale sólo cuando un humano da "Aceptar y Enviar".
-// Una foto de lista o nota de materiales se transcribe con la IA y sale como tarjeta, con la foto al lado.
+// Una foto de lista o nota de materiales se lee primero con Tesseract en esta PC (ocr.js) y, si no sale
+// clara, con la IA; sale como tarjeta, con la foto al lado, y se avisa al grupo con la imagen de la tarjeta.
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
@@ -16,6 +17,9 @@ const { normalizar } = require('../../lib/telefono');
 const { bienvenida } = require('../whatsapp/mensajes');
 const { bajarImagen } = require('../whatsapp/medios');
 const octavio = require('../octavio/ordenes');
+const evidencias = require('../sulema/evidencias');
+const combustible = require('../agentes/combustible');
+const ocr = require('./ocr');
 
 const Anthropic = AnthropicSDK.default ?? AnthropicSDK;
 const MODELO = 'claude-haiku-5-5';
@@ -184,10 +188,14 @@ async function bajarYLeer(mensaje, clave, pie) {
   if (media) media.mimetype = String(media.mimetype).split(';')[0];
   const legible = Boolean(media && EXTENSIONES[media.mimetype] && media.data.length <= MAX_BASE64);
   if (media && !legible) console.error(`[inspector] foto de ${clave} no se pudo leer: ${media.mimetype}, ${media.data.length} bytes`);
-  const leida = legible && process.env.ANTHROPIC_API_KEY ? await leerFoto(media, pie).catch((err) => {
-    console.error('[inspector] IA (foto):', err.message);
+  const local = legible ? await ocr.leerLocal(media, cotizaciones.precios()).catch((err) => {
+    console.error('[inspector] Tesseract:', err.message);
     return null;
   }) : null;
+  const leida = local ?? (legible && process.env.ANTHROPIC_API_KEY ? await leerFoto(media, pie).catch((err) => {
+    console.error('[inspector] IA (foto):', err.message);
+    return null;
+  }) : null);
   return { media, legible, leida };
 }
 
@@ -206,7 +214,9 @@ async function procesarFoto(mensaje, { clave, telefono, contacto, conv, pie, yaH
   if (!renglones.length) datos.productos = [{ cantidad: '', unidad: '', producto: '' }];
   // La transcripción se queda en la plática: si después manda la colonia, la tarjeta conserva los productos.
   const textos = `${conv.textos}\n[Foto] ${pie} ${renglones.join(', ') || 'no se pudo leer'}`.trim().slice(-2000);
-  guardarSolicitud(clave, { telefono, contacto, datos, textos, conv: { ...conv, solicitud_id: null }, foto: legible ? guardarFoto(media) : null });
+  const id = guardarSolicitud(clave, { telefono, contacto, datos, textos, conv: { ...conv, solicitud_id: null }, foto: legible ? guardarFoto(media) : null });
+  // Con productos leídos, el grupo recibe la imagen de la tarjeta (grupo.js). Se autoriza en la Oficina.
+  if (renglones.length) bus.emit('solicitud:foto', id);
   if (!yaHablamos && !(datos.colonia && datos.metodo_pago)) {
     await mensaje.client.sendMessage(mensaje.from, bienvenida(), { sendSeen: false });
     stmts.saludar.run(clave);
@@ -225,6 +235,18 @@ async function procesarMensaje(mensaje) {
   // En chats @lid, contacto.number es el lid; el teléfono real viene en contacto.id.
   const telefono = normalizar(contacto?.id?.user ?? contacto?.number);
   const clave = telefono ?? mensaje.from;
+
+  // Sulema primero: la foto de una nota firmada con "Sulema" y "nota" no es pedido ni orden.
+  if (await evidencias.recibir(mensaje, { clave, texto, esFoto, envio: contacto?.pushname || contacto?.name || clave })) return;
+
+  // Edgar: "Edgar, la estaquitas echó 500 de gasolina" también en privado. Si no es carga, sigue normal.
+  if (!esFoto && /\bedgar\b/i.test(texto.normalize('NFD').replace(/[̀-ͯ]/g, '')) && combustible.esCombustible(texto)) {
+    const r = await combustible.anotar(texto, contacto?.pushname || contacto?.name || clave);
+    if (r) {
+      await mensaje.client.sendMessage(mensaje.from, r, { sendSeen: false });
+      return;
+    }
+  }
 
   // Octavio primero: su aviso, o lo que siga mandando quien acaba de avisar, no le toca a Chatito.
   const pideOrden = octavio.detectar(clave, texto, momento(mensaje));
@@ -301,6 +323,7 @@ function guardarSolicitud(clave, { telefono, contacto, datos, textos, conv, foto
   stmts.guardarConversacion.run({ clave, textos, esperando: conv.esperando, solicitud_id: id });
   console.log(`[inspector] solicitud #${id} por WhatsApp de ${nombre}`);
   bus.emit('solicitud:nueva');
+  return id;
 }
 
 // Cotización pedida en el grupo del equipo: sale como tarjeta por autorizar, igual que las de clientes.

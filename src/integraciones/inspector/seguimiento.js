@@ -2,7 +2,7 @@
 // en SQLite, así que sobrevive reinicios; si la PC estaba apagada, sale al volver a conectar.
 const cotizaciones = require('../../repositories/cotizaciones.repo');
 const whatsapp = require('../whatsapp/cliente');
-const { SEGUIMIENTO } = require('../whatsapp/mensajes');
+const { seguimiento } = require('../whatsapp/mensajes');
 const bus = require('../../events/bus');
 
 const CADA_MS = 60_000;
@@ -15,7 +15,7 @@ async function revisar(cliente = whatsapp) {
     for (const { id, telefono } of cotizaciones.seguimientosVencidos()) {
       let estado = 'error';
       try {
-        estado = (await cliente.enviar(telefono, SEGUIMIENTO)) ? 'enviado' : 'no_whatsapp';
+        estado = (await cliente.enviar(telefono, seguimiento())) ? 'enviado' : 'no_whatsapp';
         console.log(`[inspector] seguimiento de cotización ${id}: ${estado}`);
       } catch (err) {
         console.error(`[inspector] seguimiento de cotización ${id}:`, err.message);

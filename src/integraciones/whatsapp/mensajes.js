@@ -32,12 +32,17 @@ function enRuta(nota) {
   ].filter((l) => l !== null).join('\n');
 }
 
+// Según la hora en que sale el mensaje: 00:00–11:59 días, 12:00–18:59 tardes, 19:00–23:59 noches.
+function saludo(fecha = new Date()) {
+  const hora = fecha.getHours();
+  return hora < 12 ? 'buenos días' : hora < 19 ? 'buenas tardes' : 'buenas noches';
+}
+const conMayuscula = (t) => t[0].toUpperCase() + t.slice(1);
+
 // Respuesta automática de El Inspector: nunca lleva precios.
 function bienvenida(fecha = new Date()) {
-  const hora = fecha.getHours();
-  const saludo = hora < 12 ? 'buenos días' : hora < 19 ? 'buenas tardes' : 'buenas noches';
   return [
-    `¡Hola, ${saludo}! 😊 Qué gusto saludarle, gracias por escribirnos a *${whatsapp.negocio}*.`,
+    `¡Hola, ${saludo(fecha)}! 😊 Qué gusto saludarle, gracias por escribirnos a *${whatsapp.negocio}*.`,
     '',
     'Con mucho gusto le ayudamos. Para darle su cotización, ¿nos comparte por favor estos datos?',
     '',
@@ -47,6 +52,7 @@ function bienvenida(fecha = new Date()) {
   ].join('\n');
 }
 
-const SEGUIMIENTO = 'Buenas tardes, ¿qué le pareció la cotización? ¿Algo más en lo que podamos ayudarle?';
+// Recordatorio de 24 horas: el saludo se calcula al momento de mandarlo.
+const seguimiento = (fecha = new Date()) => `${conMayuscula(saludo(fecha))}, ¿qué le pareció la cotización? ¿Algo más en lo que podamos ayudarle?`;
 
-module.exports = { enRuta, bienvenida, SEGUIMIENTO };
+module.exports = { enRuta, bienvenida, seguimiento, saludo };

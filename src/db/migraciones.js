@@ -105,6 +105,13 @@ function choferDario(db) {
   db.prepare('INSERT INTO choferes (nombre) VALUES (?)').run('Darío');
 }
 
+// 2026-11-03: las Estaquitas se llaman por su marca. Sólo renombra si siguen con el nombre viejo.
+function camionesNissan(db) {
+  const renombrar = db.prepare('UPDATE camiones SET nombre = ? WHERE nombre = ?');
+  renombrar.run('Nissan Roja', 'Estaquitas Roja');
+  renombrar.run('Nissan Blanca', 'Estaquitas');
+}
+
 // Foto original del cliente, para revisar la transcripción contra ella.
 function fotoDelCliente(db) {
   for (const tabla of ['notas', 'solicitudes_whatsapp']) {
@@ -209,6 +216,7 @@ module.exports = function migrar(db) {
   choferAlmacen(db);
   notasArchivadas(db);
   choferDario(db);
+  camionesNissan(db);
   fotoDelCliente(db);
   materialSinSufijo(db);
   preciosIniciales(db);

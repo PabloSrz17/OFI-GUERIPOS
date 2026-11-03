@@ -10,6 +10,7 @@ import { montarVisorFoto } from './visor-foto.js';
 import { montarCierre } from './cierre.js';
 import { montarInspector, recargarSolicitudes } from './inspector.js';
 import { montarOctavio, recargarOctavio } from './octavio.js';
+import { montarArchiveros } from './archiveros.js';
 import { normalizar, formatear } from './telefono.js';
 
 const INTERVALO_MS = 60000; // respaldo; los cambios llegan al instante por /api/eventos
@@ -304,6 +305,7 @@ async function iniciar() {
   montarCierre({ notasActuales: () => notasActuales, alCerrar: refrescar, toast });
   montarInspector({ toast, alAprobar: refrescar });
   montarOctavio({ toast, alCambiar: refrescar });
+  montarArchiveros();
   reloj();
   setInterval(reloj, 30000);
   try {

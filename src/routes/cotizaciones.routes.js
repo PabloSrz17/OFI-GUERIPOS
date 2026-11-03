@@ -16,7 +16,8 @@ const clientes = require('../repositories/clientes.repo');
 
 const router = express.Router();
 
-router.get('/', (req, res) => res.json(cotizaciones.recientes(10)));
+// Historial: ?limite= hasta 200 (sin él, las últimas 10).
+router.get('/', (req, res) => res.json(cotizaciones.recientes(Math.min(Math.max(Number(req.query.limite) || 10, 1), 200))));
 router.get('/precios', (req, res) => res.json({ precios: cotizaciones.precios(), fletes: cotizaciones.fletes() }));
 
 // Bandeja de solicitudes que llegaron por WhatsApp (pendientes de revisar).
@@ -153,6 +154,30 @@ router.get('/:id/imagen', async (req, res) => {
   res.type('png');
   if (req.query.descargar) res.attachment(`${cotizacion.folio}.png`);
   res.send(png);
+});
+
+router.get('/:id', (req, res) => {
+  const cotizacion = cotizaciones.obtener(Number(req.params.id));
+  if (!cotizacion) throw httpError(404, 'Cotización no encontrada');
+  res.json(cotizacion);
+});
+
+// Edición manual desde el historial. body: { partidas, enviar? }. Con enviar, sale la imagen corregida
+// por WhatsApp (un humano lo revisó y apretó el botón).
+router.put('/:id', async (req, res) => {
+  const b = req.body ?? {};
+  if (!Array.isArray(b.partidas) || !b.partidas.some((p) => p.tipo !== 'flete')) throw httpError(400, 'La cotización no tiene productos');
+  let calculo;
+  try {
+    calculo = calcular(b.partidas);
+  } catch (err) {
+    throw httpError(400, err.message);
+  }
+  const cotizacion = cotizaciones.editar(Number(req.params.id), calculo);
+  if (!cotizacion) throw httpError(404, 'Cotización no encontrada');
+  bus.emit('solicitud:nueva');
+  const whatsappEstado = b.enviar ? await enviarPorWhatsapp(cotizacion) : null;
+  res.json({ cotizacion: { ...cotizacion, whatsapp: whatsappEstado ?? cotizacion.whatsapp }, whatsapp: whatsappEstado });
 });
 
 router.post('/:id/enviar', async (req, res) => {

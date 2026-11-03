@@ -125,13 +125,14 @@ Construcomer, 7 m3 polvo + 10 cemento maya + 2 armex castillo, Pensiones, tel 98
 - Los productos se buscan en la **lista de precios** por palabras completas ("cal" no es "calle"; "cemento maya" gana sobre "maya"). Escríbelos como en la lista. "Cemento" solo no basta: di cuál.
 - Sale la tabla editable con la pregunta **"🧐 ¿Está correcta esta cotización?"**. Lo que no conoce (producto nuevo o colonia sin flete) aparece **en amarillo**, y "Sí, aprobar" se activa hasta que todo tiene precio.
 - **Aprende al aprobar:** los productos nuevos se agregan a la lista, el flete de la colonia se guarda y, con la casilla "Guardar precios nuevos o corregidos" marcada, los precios cambiados se actualizan. La Oficina dice qué aprendió ("🧠 Aprendí: …").
-- **Imagen tipo Excel** (sin nombre ni logo): folio C-0001…, fecha, cliente, colonia, partidas y total. Se descarga o, con la casilla "Mandársela por WhatsApp", se envía al cliente. "Últimas cotizaciones" lista las 10 más recientes.
+- **Imagen tipo Excel** (sin nombre ni logo): folio C-0001…, fecha, cliente, colonia, partidas y total. Se descarga o, con la casilla "Mandársela por WhatsApp", se envía al cliente. "Historial de cotizaciones" lista las últimas 200, con buscador por folio, cliente o colonia.
+- **✏️ Editar** (en el historial): tabla editable de cantidades, descripción, unidad y precio; **＋ Agregar renglón / material** y **✕** para quitar. El total se recalcula al escribir. **💬 Actualizar y Reenviar** guarda y manda la imagen corregida al WhatsApp del cliente; **✔ Sólo guardar** no manda nada. El folio, cliente y fecha no cambian, y editar no toca la lista de precios.
 - **Flete opcional:** sin precio o en $0 no aparece en la cotización ni en su imagen. En las notas de Pulpos tampoco se anota el envío en $0.
 - **Bienvenida automática por WhatsApp** (`src/integraciones/inspector/solicitudes.js`, texto en `whatsapp/mensajes.js`): al primer mensaje o pregunta suelta en un chat privado de texto saluda con "buenos días", "buenas tardes" (desde las 12) o "buenas noches" (desde las 19) y pide material, colonia/poblado y método de pago. **Nunca lleva precios.** Máximo una cada 24 horas por número. No se manda a choferes registrados, ni a quien recibió de nosotros una cotización, recordatorio o aviso de ruta en las últimas 24 horas, ni a mensajes atrasados más de 5 minutos.
 - **Cotizaciones por autorizar (tarjetas en el Pizarrón):** los mensajes de cada número se juntan (tabla `conversaciones_whatsapp`) y Claude Haiku saca productos, cantidades, colonia, pago y nombre, si el texto menciona material o si ya se le pidieron los datos. Con los tres datos, o con productos cuando ya hablamos con él en las últimas 24 horas, sale una tarjeta con el borrador calculado (tabla `solicitudes_whatsapp`); si manda más datos, se actualiza la misma tarjeta, sin pisar lo que ya editaste. Todo se puede cambiar ahí mismo. **[Aceptar y Enviar]** guarda y manda la imagen; se activa cuando todo tiene cantidad y precio, y si WhatsApp está desconectado no se envía nada y la tarjeta se queda. **El precio solo sale con ese clic.**
-- **Seguimiento a las 24 horas** (`inspector/seguimiento.js`, revisa cada minuto): al salir la cotización se guarda `enviada_en` y `seguimiento_para`. Si sigue sin marcarse, manda "Buenas tardes, ¿qué le pareció la cotización? ¿Algo más en lo que podamos ayudarle?". En "Últimas cotizaciones", **💰 Pagada** o **🚫 Cerrar** cancelan el recordatorio y **↩ Deshacer** lo reactiva. Si la PC estaba apagada, sale al volver a conectar.
+- **Seguimiento a las 24 horas** (`inspector/seguimiento.js`, revisa cada minuto): al salir la cotización se guarda `enviada_en` y `seguimiento_para`. Si sigue sin marcarse, manda "Buenos días / Buenas tardes / Buenas noches (según la hora: hasta 11:59, hasta 18:59, desde 19:00), ¿qué le pareció la cotización? ¿Algo más en lo que podamos ayudarle?". En "Últimas cotizaciones", **💰 Pagada** o **🚫 Cerrar** cancelan el recordatorio y **↩ Deshacer** lo reactiva. Si la PC estaba apagada, sale al volver a conectar.
 - **Cuándo atiende Chatito:** sólo si el cliente escribe "necesito material", "requiero material", "cotización", "cotizar", "cotiza", "cotízame" o "presupuesto" (sin importar mayúsculas ni acentos), por texto o en el pie de una foto. Lo demás queda para la atención manual. Quien ya pidió cotización puede seguir contestando sin repetir la palabra. Si manda la lista o una foto y en menos de 2 minutos escribe la palabra, se junta todo; esos mensajes esperan sólo en memoria, y se pierden si la Oficina se reinicia en ese momento. Las palabras están en `DISPARADORES` de `solicitudes.js`.
-- **Fotos:** si el cliente manda por WhatsApp la foto de una lista o nota de materiales, la IA la transcribe (también fracciones) y sale una tarjeta por autorizar con la foto al lado; un clic la amplía y otro la pone a tamaño real. **Pasar a Notas** la manda a Pendiente con folio `WA-n` y sin avisarle nada al cliente. Las fotos que no son pedidos se ignoran. Se guardan en `data/fotos/`.
+- **Fotos:** si el cliente manda por WhatsApp la foto de una lista o nota de materiales, primero la lee Tesseract en esta PC (gratis, la foto no sale; `inspector/ocr.js`). Sólo se usa si la confianza es de 80 o más y TODOS los renglones con cantidad existen en la lista de precios; si no (letra a mano, foto borrosa), la transcribe la IA como antes (también fracciones). Si salen productos, el grupo del equipo recibe la imagen de la tarjeta con "Así quedó la cotización en la Oficina. ¿Me autorizas enviarla?"; se autoriza en la Oficina, nunca desde el grupo. Sale una tarjeta por autorizar con la foto al lado; un clic la amplía y otro la pone a tamaño real. **Pasar a Notas** la manda a Pendiente con folio `WA-n` y sin avisarle nada al cliente. Las fotos que no son pedidos se ignoran. Se guardan en `data/fotos/`.
 - **Reporte:** pregúntale a El Inspector en su chat, por ejemplo "¿cuántas cotizaciones se hicieron ventas hoy y de cuánto fue el total?". Cuenta las marcadas como Pagadas el día de `pagada_en`.
 - Lista inicial: Polvo y Grava $550/m³ · Cemento Maya $150 · Cemento Apasco y Holcim $130 (bulto 25 kg) · Cal $110 · Armex de castillo y de cadena $195.
 
@@ -167,14 +168,21 @@ Si WhatsApp está desconectado, la orden no se aprueba: la alerta sigue abierta 
 Botón **📊 Reporte semanal** arriba (`public/reporte.html`, `repositories/reporte.repo.js`). La semana va del **lunes 08:00 al cierre del sábado** (antes del domingo 00:00); se elige con cualquier día de ella, y se puede imprimir.
 - **Octavio:** órdenes de compra recibidas en la semana (sin las descartadas) y entradas de almacén capturadas.
 - **Chatito:** cotizaciones hechas en la semana y, de ésas mismas, las marcadas 💰 Pagada antes del cierre. Una cotización de otra semana pagada en ésta no cuenta, y 🚫 Cerrada es sin venta.
-- **Edgar:** notas cuya última entrega cayó en la semana y siguen en Entregado, por chofer y unidad. Cada nota cuenta como un viaje, ALMACÉN incluido.
+- **Edgar:** notas cuya última entrega cayó en la semana y siguen en Entregado, por chofer y unidad, ALMACÉN incluido. Notas del mismo chofer y unidad que salieron (pasaron a En ruta) con 20 minutos o menos entre una y la siguiente cuentan como un solo viaje; sin hora de salida se usa la de entrega. Aplica también al Archivero de Edgar.
 
 ### Grupo de WhatsApp "AGENTES IA CHAT"
 
-`integraciones/agentes/grupo.js`. En el grupo del equipo (nombre en `WHATSAPP_GRUPO_AGENTES`), el mensaje que nombra a un agente (Edgar, Chatito, Sulema u Octavio) lo atiende sólo el primero que se nombra, y contesta en el grupo citando el mensaje. Sin nombre no contesta nadie; los demás grupos se ignoran. Los mensajes que escribe el propio número del negocio no se atienden.
-- **Edgar + combustible** ("Edgar, la nissan blanca echó 500 de gas"): la IA saca unidad, importe, gasolina o diésel y litros; se guarda en la tabla `combustible` y contesta **Anotado ✅**. Si falta la unidad o el importe, no anota y dice cómo escribirlo. Una pregunta ("¿cuánta gasolina llevamos?") la contesta como cualquier otra.
+`integraciones/agentes/grupo.js`. En el grupo del equipo (nombre en `WHATSAPP_GRUPO_AGENTES`), el mensaje que nombra a un agente (Edgar, Chatito, Sulema u Octavio) lo atiende sólo el primero que se nombra, y contesta en el grupo sin citar el mensaje. Sin nombre no contesta nadie; los demás grupos se ignoran. Los mensajes que escribe el propio número del negocio no se atienden.
+- **Edgar + combustible** ("Edgar, la nissan blanca echó 500 de gas"): la IA saca unidad, importe, gasolina o diésel y litros; se guarda en la tabla `combustible` y contesta **Enterado ✅** (también en chat privado si el mensaje nombra a Edgar; se consulta en ⛽ Control de Gasolina del panel de Edgar). Si falta la unidad o el importe, no anota y dice cómo escribirlo. Una pregunta ("¿cuánta gasolina llevamos?") la contesta como cualquier otra.
 - **Chatito + cotización** ("Chatito, hazme una cotización formal…"): sale como tarjeta por autorizar en su panel, igual que las de clientes; no se le manda nada a nadie. No genera PDF: al autorizarla sale la imagen de siempre.
 - **Lo demás:** lo contesta el agente con su chat de IA, que queda guardado en su panel.
+
+### Evidencias de entrega y archiveros
+
+- **Sulema + foto** (`integraciones/sulema/evidencias.js`): en un chat privado o en el grupo, una foto con las palabras **Sulema** y **nota** (juntas o en mensajes de la misma persona con hasta 5 minutos entre ellos), por ejemplo "Sulema nota 33249". El folio sale del texto; si no viene, la IA lo lee de la foto. La foto se guarda en `data/evidencias/AAAA-MM_Mes/` y la tabla `evidencias`; la nota En Ruta (o en Cargando si es ALMACÉN) pasa a Entregado como con el botón (historial y hoja), y su tarjeta dice "📸 Entregada con evidencia". Si va más atrás, guarda la foto pero no brinca pasos. Si no encuentra el folio, pregunta y la foto espera 5 minutos a que le escriban el correcto.
+- **Regla de 6 meses** (`sulema/paquetes.js`, al arrancar y cada día): los meses anteriores a los últimos 6 se empaquetan en `data/evidencias/paquetes/AAAA/AAAA-MM_Mes.zip` y su carpeta se borra. En el archivero salen con el nombre de su .zip, sin foto.
+- **🗄 Archivero de Sulema** (junto a su escritorio): busca notas firmadas por folio y fechas; clic en la foto la amplía.
+- **🗄 Archivero de Edgar** (junto a su escritorio): por día, entregas con chofer y unidad, viajes por chofer y unidad, y combustible con el total de diésel. ◀ ▶ cambian de día.
 
 ### Preguntarle a un agente (IA)
 
@@ -351,7 +359,9 @@ oficina-virtual/
 | POST | `/api/agentes/:id/preguntar` | `{ pregunta }` → `{ respuesta }` (`rutas`, `chasis`, `inspector`, `octavio`) |
 | POST | `/api/cotizaciones/borrador` | `{ texto }` → borrador con partidas (precio `null` = falta) |
 | POST | `/api/cotizaciones` | Aprueba: `{ cliente, telefono?, colonia, solicitud, partidas, actualizarPrecios?, enviar? }`. Recalcula importes, guarda, aprende y (si `enviar`) manda la imagen |
-| GET | `/api/cotizaciones` · `/api/cotizaciones/precios` | Últimas 10 · lista de precios y fletes |
+| GET | `/api/cotizaciones?limite=` · `/api/cotizaciones/precios` | Últimas 10 (hasta 200) · lista de precios y fletes |
+| GET | `/api/cotizaciones/:id` | Cotización con sus partidas |
+| PUT | `/api/cotizaciones/:id` | Edición manual: `{ partidas, enviar? }`. Recalcula, guarda y (si `enviar`) manda la imagen por WhatsApp |
 | GET · PUT | `/api/asistencias` | Pizarra de asistencias: `?desde=&hasta=` · `{ trabajador_id, fecha, estado: "asistio" \| "falta" \| null }`. Plantilla en la tabla `trabajadores` |
 | DELETE | `/api/notas/:id` | Cancela la nota (✕ de la tarjeta): la borra con su historial; Pulpos no la vuelve a traer |
 | GET | `/api/cotizaciones/solicitudes` | Solicitudes de WhatsApp pendientes (con su borrador) |
@@ -369,6 +379,9 @@ oficina-virtual/
 | GET · POST | `/api/octavio/entradas` | Entradas de almacén · `{ folio, proveedor?, nota?, renglones: [{ cantidad, unidad?, material }] }` |
 | PUT | `/api/octavio/entradas/:id` | Edita una entrada, con los mismos datos |
 | GET | `/api/reportes/semanal?dia=AAAA-MM-DD` | Reporte de la semana de ese día (sin `dia`, la actual) |
+| GET | `/api/reportes/dia?dia=AAAA-MM-DD` | Archivero de Edgar: entregas, viajes y combustible del día |
+| GET | `/api/evidencias?folio=&desde=&hasta=` | Archivero de Sulema: fotos de notas firmadas (hasta 200) |
+| GET | `/api/evidencias/:id/foto` | La foto; 410 si ya está empaquetada |
 | GET | `/api/resumen` | Conteos por estado, `sin_chofer`, `clientes` y `integraciones` (estado de cada conector) |
 
 ## Base de datos

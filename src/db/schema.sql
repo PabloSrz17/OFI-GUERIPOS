@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS choferes (
 -- El chofer y el camión se eligen por separado en cada nota: no siempre van juntos.
 CREATE TABLE IF NOT EXISTS camiones (
   id     INTEGER PRIMARY KEY AUTOINCREMENT,
-  nombre TEXT NOT NULL,         -- ej. "Ram 4000", "Estaquitas Roja"
+  nombre TEXT NOT NULL,         -- ej. "Ram 4000", "Nissan Roja"
   activo INTEGER NOT NULL DEFAULT 1
 );
 
@@ -115,6 +115,20 @@ CREATE TABLE IF NOT EXISTS agentes_chat (
   texto  TEXT NOT NULL,
   fecha  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
+
+-- Fotos de notas firmadas que le mandan a Sulema por WhatsApp ("Sulema, nota 33249" + foto).
+-- archivo: AAAA-MM_Mes/nombre dentro de data/evidencias; paquete: el .zip donde quedó tras 6 meses.
+CREATE TABLE IF NOT EXISTS evidencias (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  nota_id   INTEGER REFERENCES notas(id) ON DELETE SET NULL,
+  folio     TEXT NOT NULL,
+  cliente   TEXT,
+  archivo   TEXT NOT NULL,
+  paquete   TEXT,
+  envio     TEXT,                       -- quién la mandó
+  creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_evidencias_folio ON evidencias(folio);
 
 -- Cargas de combustible que el equipo le reporta a Edgar en el grupo de WhatsApp.
 CREATE TABLE IF NOT EXISTS combustible (

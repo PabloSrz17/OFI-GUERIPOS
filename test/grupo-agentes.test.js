@@ -40,7 +40,7 @@ function mensaje(body, { from = GRUPO, nombreGrupo = 'Agentes IA Chat', extra = 
     respuestas: [],
     getChat: async () => ({ name: nombreGrupo }),
     getContact: async () => ({ pushname: 'Moisés' }),
-    reply: async (t) => { m.respuestas.push(t); },
+    client: { sendMessage: async (a, t) => { m.respuestas.push(t); } },
     ...extra,
   };
   return m;
@@ -70,10 +70,18 @@ test('sólo el grupo AGENTES IA CHAT: otros grupos y chats privados no reciben r
   assert.deepEqual(llamadas, []);
 });
 
-test('Edgar anota la carga de combustible y contesta sólo "Anotado ✅"', async () => {
+test('Edgar anota la carga de combustible y contesta sólo "Enterado ✅"', async () => {
   carga = { es_carga: true, unidad: 'Nissan blanca', importe: 500, concepto: 'gasolina', litros: 0 };
-  assert.deepEqual(await enviar('Edgar, la nissan blanca echó 500 de gas'), ['Anotado ✅']);
+  assert.deepEqual(await enviar('Edgar, la nissan blanca echó 500 de gas'), ['Enterado ✅']);
   assert.deepEqual(cargas().at(-1), { unidad: 'NISSAN BLANCA', importe: 500, concepto: 'gasolina', litros: null, reporto: 'Moisés' });
+});
+
+test('en chat privado, "Edgar ... gasolina" también se anota y contesta "Enterado ✅"', async () => {
+  carga = { es_carga: true, unidad: 'estaquitas', importe: 500, concepto: 'gasolina', litros: 0 };
+  const m = mensaje('Edgar, la estaquitas echó 500 de gasolina', { from: '5219810000001@c.us' });
+  await solicitudes.procesarMensaje(m);
+  assert.deepEqual(m.respuestas, ['Enterado ✅']);
+  assert.deepEqual(cargas().at(-1), { unidad: 'ESTAQUITAS', importe: 500, concepto: 'gasolina', litros: null, reporto: 'Moisés' });
 });
 
 test('si a la carga le falta el importe, no anota y dice cómo escribirlo', async () => {
@@ -108,4 +116,12 @@ test('las demás preguntas van al agente nombrado y la respuesta sale en el grup
   assert.deepEqual(llamadas, ['pregunta']);
   assert.equal(db.prepare(`SELECT texto FROM agentes_chat WHERE agente = 'chasis' AND de = 'tu' ORDER BY id DESC`).get().texto,
     'Moisés en el grupo: Sulema y Edgar, ¿cuántas notas entraron hoy?');
+});
+
+test('si getChat falla (error "r" de la librería), el nombre del grupo se lee en la página', async () => {
+  const m = mensaje('Edgar, ¿cuántas notas hay?', { from: '120363000000000003@g.us' });
+  m.getChat = async () => { throw new Error('r'); };
+  m.client.pupPage = { evaluate: async () => 'AGENTES IA CHAT' };
+  await grupo.procesarMensaje(m);
+  assert.deepEqual(m.respuestas, ['Respuesta del agente']);
 });

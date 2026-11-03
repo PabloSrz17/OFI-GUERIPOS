@@ -13,7 +13,7 @@ if (db.prepare('SELECT COUNT(*) AS n FROM choferes').get().n > 0) {
 }
 
 const CHOFERES = ['Antonio', 'Moises Sosa', 'Moises Arias', 'Francisco'];
-const CAMIONES = ['Estaquitas', 'Ram 4000', 'Ford F450', 'Estaquitas Roja', 'Torton'];
+const CAMIONES = ['Nissan Blanca', 'Ram 4000', 'Ford F450', 'Nissan Roja', 'Torton'];
 const clientes = [
   ['Constructora Del Valle', '5215500000001', 'Norte'],
   ['Ing. Ramírez (obra Las Palmas)', '5215500000002', 'Centro'],

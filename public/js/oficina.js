@@ -11,7 +11,7 @@ const AGENTES = {
 const ESTADOS = { disponible: 'Disponible', procesando: 'Procesando', espera: 'En espera' };
 const ESTADO_CAMION = { patio: 'En patio', cargando: 'Cargando', en_ruta: 'En ruta' };
 
-const NOMBRES_CONECTOR = { pulpos: 'Pulpos', sicar: 'SICAR', whatsapp: 'WhatsApp', sheets: 'Sheets', respaldos: 'Respaldo' };
+const NOMBRES_CONECTOR = { pulpos: 'PS', sicar: 'SC', whatsapp: 'WhatsApp', sheets: 'Sheets', respaldos: 'Respaldo' };
 const CONECTORES_DE_VENTAS = ['pulpos', 'sicar']; // los vigila Sulema; WhatsApp lo vigila Edgar
 
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
@@ -25,7 +25,8 @@ const pensando = new Set();   // agentes contestando una pregunta (se muestran "
 const botones = {};
 const objetos = {}; // etiquetas de las pizarras
 
-const OBJETOS = { notas: '📦 Notas Pendientes', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Pizarrón de Octavio', chatito: '💬 Chatito Waspat' };
+const OBJETOS = { notas: '📦 Notas Pendientes', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Pizarrón de Octavio', chatito: '💬 Chatito Waspat',
+  archivo_sulema: '🗄 Archivero de Sulema', archivo_edgar: '🗄 Archivero de Edgar' };
 const COLOR_NOTA = { pendiente: '#f2994a', cargando: '#d4a106', en_ruta: '#2f7fd1' };
 
 export function ponerCuenta(id, n) {
@@ -198,6 +199,7 @@ const historial = { chasis: [], rutas: [], inspector: [], octavio: [] }; // se g
 
 // El chat queda abajo del panel: se baja a él, salvo que haya cotizaciones esperando autorización arriba.
 function verChat() {
+  if (conversacion.classList.contains('cerrada')) return;
   const porAutorizar = panel.dataset.agente === 'inspector' && !panel.querySelector('#solicitudes').hidden;
   if (!porAutorizar && historial[panel.dataset.agente].length) panel.scrollTop = 1e9;
 }
@@ -240,13 +242,23 @@ function abrirPanel(id) {
   document.querySelectorAll('.ventana[open]').forEach((d) => d.close());
   if (!panel.open) panel.show(); // no modal: el resto de la oficina sigue usable
   panel.scrollTop = 0;
-  verChat();
-  panel.querySelector('textarea').focus({ preventScroll: true });
+  mostrarConversacion(false); // siempre empieza retraída
   cargarChat(id);
 }
 
 panel.querySelector('.panel__cerrar').addEventListener('click', () => panel.close());
-panel.querySelector('.panel__irchat').addEventListener('click', () => { panel.scrollTop = 1e9; });
+const conversacion = panel.querySelector('.panel__conversacion');
+const botonChat = panel.querySelector('.panel__irchat');
+function mostrarConversacion(abierta) {
+  conversacion.classList.toggle('cerrada', !abierta);
+  botonChat.setAttribute('aria-expanded', String(abierta));
+  botonChat.textContent = abierta ? '💬 Ocultar conversación ↑' : '💬 Ver conversación ↓';
+  if (!abierta) return;
+  panel.querySelector('.panel__chat').scrollTop = 1e9;
+  panel.querySelector('textarea').focus({ preventScroll: true });
+  setTimeout(() => conversacion.scrollIntoView({ behavior: 'smooth', block: 'end' }), 300); // al terminar de abrirse
+}
+botonChat.addEventListener('click', () => mostrarConversacion(conversacion.classList.contains('cerrada')));
 panel.querySelector('.panel__form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = panel.dataset.agente;

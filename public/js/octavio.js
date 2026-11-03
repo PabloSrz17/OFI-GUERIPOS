@@ -134,6 +134,7 @@ export function montarOctavio({ toast, alCambiar }) {
           <button type="button" class="btn btn--secundario" data-editar-orden="${o.id}">✎ Editar</button>
           <a class="btn btn--secundario" href="/api/octavio/ordenes/${o.id}/imagen" target="_blank" rel="noopener">🖼 Imagen</a>
           ${sinEnviar ? `<button type="button" class="btn" data-reenviar="${o.id}">Reenviar 💬</button>` : ''}
+          ${o.estado === 'cancelada' ? `<button type="button" class="btn btn--peligro" data-eliminar-orden="${o.id}">🗑 Eliminar</button>` : ''}
         </div>
       </article>`;
   }
@@ -380,6 +381,24 @@ export function montarOctavio({ toast, alCambiar }) {
         toast(err.message, true);
       }
       await recargar(); // si falló, la tarjeta vuelve a mostrar lo que hay en la base
+      alCambiar();
+    }
+    // Dos clics: el primero pregunta en el mismo botón; a los 4 s sin confirmar se regresa.
+    const eliminar = e.target.closest('[data-eliminar-orden]');
+    if (eliminar && !eliminar.dataset.seguro) {
+      eliminar.dataset.seguro = '1';
+      eliminar.textContent = '¿Seguro? Eliminar';
+      setTimeout(() => { if (eliminar.isConnected) { delete eliminar.dataset.seguro; eliminar.textContent = '🗑 Eliminar'; } }, 4000);
+    } else if (eliminar) {
+      eliminar.disabled = true;
+      try {
+        const o = ordenes.find((x) => x.id === Number(eliminar.dataset.eliminarOrden));
+        await api.delete(`/api/octavio/ordenes/${eliminar.dataset.eliminarOrden}`);
+        toast(`${o?.folio ?? 'Orden'} eliminada`);
+      } catch (err) {
+        toast(err.message, true);
+      }
+      await recargar();
       alCambiar();
     }
     const reenviar = e.target.closest('[data-reenviar]');

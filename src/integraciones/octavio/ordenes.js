@@ -26,6 +26,8 @@ const stmts = {
     nota = @nota, estado = @estado, actualizado_en = datetime('now', 'localtime') WHERE id = @id AND estado IN ('aprobada', 'surtida', 'cancelada')`),
   mover: db.prepare(`UPDATE ordenes_compra SET estado = @estado, actualizado_en = datetime('now', 'localtime') WHERE id = @id AND estado IN ('aprobada', 'surtida', 'cancelada')`),
   whatsapp: db.prepare('UPDATE ordenes_compra SET whatsapp = ? WHERE id = ?'),
+  // Eliminar desde Canceladas: queda como descartada (sale del pizarrón y del reporte; no se borra la fila).
+  eliminar: db.prepare(`UPDATE ordenes_compra SET estado = 'descartada', actualizado_en = datetime('now', 'localtime') WHERE id = ? AND estado = 'cancelada'`),
   porAprobar: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'por_aprobar'`),
   porSurtir: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'aprobada'`),
   entrada: db.prepare('INSERT INTO entradas_almacen (proveedor, folio, nota, renglones) VALUES (@proveedor, @folio, @nota, @renglones)'),
@@ -178,6 +180,13 @@ function descartar(id) {
   return hecho;
 }
 
+// Sólo las canceladas. No le avisa a nadie.
+function eliminar(id) {
+  const hecho = stmts.eliminar.run(id).changes > 0;
+  if (hecho) avisar();
+  return hecho;
+}
+
 // Un renglón a medias detiene todo: lo que entró a bodega no se pierde en silencio.
 function renglonesDeEntrada(lista) {
   const renglones = (Array.isArray(lista) ? lista : [])
@@ -228,6 +237,7 @@ module.exports = {
   editar,
   mover,
   descartar,
+  eliminar,
   obtener,
   registrarEntrada,
   editarEntrada,

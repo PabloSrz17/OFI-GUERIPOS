@@ -138,6 +138,7 @@ function tarjeta(nota, { choferes, camiones }) {
       ${choferHtml}
       ${AVISO_WHATSAPP[nota.whatsapp] ? `<div class="dato dato--whatsapp">${AVISO_WHATSAPP[nota.whatsapp]}</div>` : ''}
       ${nota.estado === 'entregado' && REGISTRO_SHEETS[nota.sheets] ? `<div class="dato">${REGISTRO_SHEETS[nota.sheets]}</div>` : ''}
+      ${nota.evidencias ? `<div class="dato">📸 ${nota.estado === 'entregado' ? 'Entregada con evidencia' : 'Con foto de evidencia'}</div>` : ''}
       ${boton}
     </article>`;
 }

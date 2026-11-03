@@ -8,14 +8,39 @@ const estado = require('../estado');
 
 const ORIGEN = 'whatsapp';
 const hora = () => new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+const horaLog = () => new Date().toLocaleTimeString('es-MX', { hour12: false });
+const REVISAR_MS = 15_000;
+const SIN_AVANCE_MS = 90_000;
+const MAX_INTENTO_MS = 10 * 60_000;
 
 let cliente = null;
 let listo = false;
 let qrActual = null;
 let reintento = null;
 let vigia = null;
+let inicioIntento = 0;
+let ultimoAvance = 0;
 const alConectar = [];
 const alMensaje = [];
+
+// A veces WhatsApp Web se queda cargando sin error. Cada 15 s se revisa: si no conectó, no pide QR
+// y lleva 90 s sin señal de avance, se reintenta (con avance, hasta 10 min en total). En los registros
+// del 2026-11-03 el intento bueno conecta 8–25 s después de arrancar y el trabado se queda en
+// "abriendo chats"; revisando cada 2 min, cada intento trabado costaba hasta 4 min.
+function vigilar() {
+  clearTimeout(vigia);
+  vigia = setTimeout(() => {
+    if (listo || qrActual) return;
+    const avanza = Date.now() - Math.max(inicioIntento, ultimoAvance) < SIN_AVANCE_MS;
+    if (avanza && Date.now() - inicioIntento < MAX_INTENTO_MS) {
+      vigilar();
+      return;
+    }
+    estado.reportar(ORIGEN, false, 'WhatsApp tardó demasiado en abrir; reintentando…');
+    console.error(`[whatsapp] ${horaLog()} se quedó cargando${avanza ? ' más de 10 min' : ' sin avanzar'}; reintentando`);
+    reconectarEn(1000);
+  }, REVISAR_MS);
+}
 
 function reconectarEn(ms) {
   clearTimeout(reintento);
@@ -66,6 +91,15 @@ function conectar() {
     qrActual = qr;
     estado.reportar(ORIGEN, false, 'Falta vincular: abre /whatsapp.html y escanea el QR');
   });
+  // Señales de que sigue cargando: el vigilante no corta un intento que avanza.
+  cliente.on('loading_screen', (porcentaje) => {
+    ultimoAvance = Date.now();
+    console.log(`[whatsapp] ${horaLog()} cargando ${porcentaje}%`);
+  });
+  cliente.on('authenticated', () => {
+    ultimoAvance = Date.now();
+    console.log(`[whatsapp] ${horaLog()} sesión aceptada, abriendo chats…`);
+  });
   cliente.on('ready', async () => {
     const limite = new Promise((_, falla) => setTimeout(() => falla(new Error('tardó más de 15 s')), 15_000));
     await Promise.race([corregirEnvioDeImagenes(), limite])
@@ -73,7 +107,7 @@ function conectar() {
     qrActual = null;
     listo = true;
     estado.reportar(ORIGEN, true, `Conectado · ${hora()}`);
-    console.log('[whatsapp] conectado');
+    console.log(`[whatsapp] conectado ${horaLog()}, a los ${Math.round((Date.now() - inicioIntento) / 1000)} s del intento`);
     alConectar.forEach((fn) => fn());
   });
   // Mensajes entrantes (sólo los que te escriben, no los que mandas tú).
@@ -89,14 +123,9 @@ function conectar() {
   });
 
   estado.reportar(ORIGEN, false, 'Conectando…');
-  // A veces WhatsApp Web se queda cargando sin error: si en 2 min no conecta ni pide QR, se reintenta.
-  clearTimeout(vigia);
-  vigia = setTimeout(() => {
-    if (listo || qrActual) return;
-    estado.reportar(ORIGEN, false, 'WhatsApp tardó demasiado en abrir; reintentando…');
-    console.error('[whatsapp] se quedó cargando; reintentando');
-    reconectarEn(1000);
-  }, 120_000);
+  inicioIntento = Date.now();
+  ultimoAvance = 0;
+  vigilar();
   cliente.initialize().catch((err) => {
     estado.reportar(ORIGEN, false, `No pude abrir WhatsApp: ${err.message}`);
     console.error('[whatsapp]', err);
@@ -123,6 +152,22 @@ async function enviarImagen(telefono, png, nombreArchivo, pie) {
   return true;
 }
 
+// Imagen a un grupo por su nombre (sin acentos ni mayúsculas). Devuelve false si no lo encuentra.
+// El id se busca dentro de la página: getChats() de 1.34.7 falla con los grupos.
+async function enviarImagenAGrupo(nombreGrupo, png, nombreArchivo, pie) {
+  if (!listo) throw new Error('WhatsApp no está conectado');
+  const id = await cliente.pupPage.evaluate((buscado) => {
+    const limpio = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+    const chat = window.require('WAWebCollections').Chat.getModelsArray()
+      .find((c) => c.id?.server === 'g.us' && limpio(c.formattedTitle ?? c.name ?? c.groupMetadata?.subject) === limpio(buscado));
+    return chat?.id?._serialized ?? null;
+  }, nombreGrupo);
+  if (!id) return false;
+  const imagen = new MessageMedia('image/png', png.toString('base64'), nombreArchivo);
+  await cliente.sendMessage(id, imagen, { caption: pie, sendSeen: false });
+  return true;
+}
+
 function iniciar() {
   if (!config.activo) {
     estado.reportar(ORIGEN, null, 'Desactivado (WHATSAPP_ACTIVO=true en .env)');
@@ -142,6 +187,7 @@ module.exports = {
   detener,
   enviar,
   enviarImagen,
+  enviarImagenAGrupo,
   estaListo: () => listo,
   alConectar: (fn) => alConectar.push(fn),
   alMensaje: (fn) => alMensaje.push(fn),

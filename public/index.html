@@ -101,6 +101,67 @@
     </section>
   </dialog>
 
+  <!-- Archivero de Sulema: fotos de notas firmadas -->
+  <dialog id="ventana-archivo_sulema" class="ventana ventana--media" aria-labelledby="archivo-sulema-titulo">
+    <header class="ventana__cabeza">
+      <h2 id="archivo-sulema-titulo">🗄 Archivero de Sulema · notas firmadas</h2>
+      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
+    </header>
+    <form id="archivo-sulema-filtros" class="archivo__filtros">
+      <label class="campo">Folio <input name="folio" type="search" placeholder="ej. 33249"></label>
+      <label class="campo">Desde <input name="desde" type="date"></label>
+      <label class="campo">Hasta <input name="hasta" type="date"></label>
+      <button type="submit" class="btn">🔍 Buscar</button>
+    </form>
+    <p class="archivo__ayuda">Por WhatsApp: manda la foto de la nota firmada con "Sulema nota 33249".</p>
+    <div id="archivo-sulema-lista" class="archivo__fotos"></div>
+  </dialog>
+
+  <!-- Archivero de Edgar: entregas, viajes y combustible de un día -->
+  <dialog id="ventana-archivo_edgar" class="ventana ventana--media" aria-labelledby="archivo-edgar-titulo">
+    <header class="ventana__cabeza">
+      <h2 id="archivo-edgar-titulo">🗄 Archivero de Edgar · reparto del día</h2>
+      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
+    </header>
+    <div class="archivo__filtros">
+      <button type="button" class="btn btn--secundario" data-dia="-1" aria-label="Día anterior">◀</button>
+      <label class="campo">Día <input id="archivo-edgar-dia" type="date"></label>
+      <button type="button" class="btn btn--secundario" data-dia="1" aria-label="Día siguiente">▶</button>
+    </div>
+    <div id="archivo-edgar-contenido" class="archivo--limpio"></div>
+  </dialog>
+
+  <!-- Control de Gasolina de Edgar: cargas reportadas por WhatsApp -->
+  <dialog id="ventana-gasolina" class="ventana ventana--media" aria-labelledby="gasolina-titulo">
+    <header class="ventana__cabeza">
+      <h2 id="gasolina-titulo">⛽ Control de Gasolina</h2>
+      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
+    </header>
+    <form id="gasolina-nueva" class="archivo__filtros gasolina__nueva">
+      <label class="campo">Unidad <input name="unidad" required maxlength="60" placeholder="ej. Nissan Blanca"></label>
+      <label class="campo">Importe $ <input name="importe" type="number" required min="0.01" step="any" inputmode="decimal"></label>
+      <label class="campo">Concepto
+        <select name="concepto"><option value="gasolina">Gasolina</option><option value="diesel">Diésel</option></select>
+      </label>
+      <label class="campo">Litros <input name="litros" type="number" min="0" step="any" inputmode="decimal" placeholder="opcional"></label>
+      <button type="submit" class="btn">➕ Anotar carga</button>
+      <span id="gasolina-aviso" role="status"></span>
+      <span class="ayuda" tabindex="0" role="note" title='También por WhatsApp, en el grupo o en chat privado: "Edgar, la Nissan Blanca echó 500 de gasolina". Edgar contesta "Enterado ✅".' aria-label='También por WhatsApp: "Edgar, la Nissan Blanca echó 500 de gasolina"'>?</span>
+    </form>
+    <details class="gasolina__filtros">
+      <summary>Filtros ▾</summary>
+      <form id="gasolina-filtros" class="archivo__filtros">
+        <label class="campo">Desde <input name="desde" type="date"></label>
+        <label class="campo">Hasta <input name="hasta" type="date"></label>
+        <label class="campo">Unidad <input name="unidad" type="search" placeholder="ej. Nissan Blanca"></label>
+        <label class="campo">Importe mín. <input name="min" type="number" min="0" step="any" inputmode="decimal"></label>
+        <label class="campo">Importe máx. <input name="max" type="number" min="0" step="any" inputmode="decimal"></label>
+        <button type="submit" class="btn">🔍 Filtrar</button>
+      </form>
+    </details>
+    <div id="gasolina-contenido" class="archivo--limpio"></div>
+  </dialog>
+
   <!-- Pizarra de Octavio: órdenes de compra aprobadas y entradas de almacén -->
   <dialog id="ventana-ordenes" class="ventana" aria-labelledby="ordenes-titulo">
     <header class="ventana__cabeza">
@@ -141,7 +202,7 @@
     </header>
     <p class="panel__titulo">AHORA</p>
     <p class="panel__ahora"></p>
-    <button type="button" class="btn btn--secundario panel__irchat">💬 Ver conversación ↓</button>
+    <button type="button" class="btn btn--secundario panel__irchat" aria-expanded="false" aria-controls="panel-conversacion">💬 Ver conversación ↓</button>
 
     <div class="panel__funcion" data-funcion="chasis" hidden>
       <div id="sin-direccion" class="autorizar" hidden>
@@ -181,8 +242,9 @@
       </section>
     </div>
 
-    <div class="panel__funcion" data-funcion="rutas" hidden>
+    <div class="panel__funcion panel__botones" data-funcion="rutas" hidden>
       <button type="button" class="btn" data-objeto="notas">📦 Abrir Notas Pendientes</button>
+      <button type="button" class="btn" data-objeto="gasolina">⛽ Control de Gasolina</button>
     </div>
 
     <div class="panel__funcion" data-funcion="inspector" hidden>
@@ -199,6 +261,7 @@
           </div>
           <div id="cotizar-articulos"></div>
           <button type="button" class="btn btn--secundario captura__agregar" data-agregar>＋ Agregar artículo</button>
+          <p id="cotizar-total" class="cotizar__total" aria-live="polite"></p>
           <div class="editar__datos">
             <label class="campo editar__ancho">Dirección / Colonia <input name="colonia" required></label>
           </div>
@@ -214,7 +277,8 @@
         </details>
         <div id="cotizacion" hidden></div>
         <details class="inspector__recientes" open>
-          <summary>Últimas cotizaciones</summary>
+          <summary>Historial de cotizaciones</summary>
+          <input id="cotizaciones-buscar" type="search" placeholder="Buscar folio, cliente o colonia" aria-label="Buscar cotización">
           <ul id="cotizaciones-recientes"></ul>
         </details>
       </section>
@@ -246,7 +310,7 @@
       </section>
     </div>
 
-    <section class="panel__conversacion" aria-label="Conversación">
+    <section id="panel-conversacion" class="panel__conversacion cerrada" aria-label="Conversación">
       <p class="panel__titulo">💬 CONVERSACIÓN</p>
       <div class="panel__chat" aria-live="polite"></div>
       <form class="panel__form">

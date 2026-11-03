@@ -230,10 +230,11 @@ function dina() {
   return { grupo: g, altura: 2.6 };
 }
 
-// Cada unidad se reconoce por su nombre en la Oficina. El orden importa: "Estaquitas Roja" antes que "Estaquitas".
+// Cada unidad se reconoce por su nombre en la Oficina (Nissan Roja / Nissan Blanca; antes Estaquitas
+// Roja / Estaquitas). El orden importa: la roja antes que la blanca.
 const MODELOS = [
-  [/estaquitas.*roja/i, np300],
-  [/estaquitas/i, frontier],
+  [/(nissan|estaquitas).*roja/i, np300],
+  [/nissan|estaquitas/i, frontier],
   [/f-?\s?450/i, f450],
   [/\bram\b/i, ram],
   [/torton|dina/i, dina],

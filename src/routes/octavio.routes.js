@@ -59,6 +59,12 @@ router.put('/ordenes/:id', (req, res) => {
   res.json(ordenes.obtener(id));
 });
 
+// Sólo desde la columna Canceladas.
+router.delete('/ordenes/:id', (req, res) => {
+  if (!ordenes.eliminar(ordenDe(req).id)) throw httpError(409, 'Sólo se eliminan órdenes canceladas');
+  res.status(204).end();
+});
+
 router.patch('/ordenes/:id/estado', (req, res) => {
   const id = ordenDe(req).id;
   try {

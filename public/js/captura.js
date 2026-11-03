@@ -17,6 +17,13 @@ export const filaArticulo = (a = {}) => `
     <button type="button" class="fila-articulo__quitar" data-quitar aria-label="Quitar artículo">✕</button>
   </div>`;
 
+// La de Nueva cotización: además, precio unitario e importe (cantidad × precio, se calcula solo).
+export const filaArticuloConPrecio = (a = {}) => filaArticulo(a)
+  .replace('<div class="fila-articulo">', '<div class="fila-articulo fila-articulo--precio">')
+  .replace('<button type="button" class="fila-articulo__quitar"', `<label class="campo">Precio $ <input data-articulo="precio" type="number" min="0" step="any" inputmode="decimal" value="${esc(a.precio ?? '')}" placeholder="de la lista"></label>
+    <p class="campo fila-articulo__importe">Importe <output data-articulo="importe">—</output></p>
+    <button type="button" class="fila-articulo__quitar"`);
+
 export function montarCaptura({ alGuardar, toast }) {
   const form = document.querySelector('#form-captura');
   const filas = document.querySelector('#captura-articulos');

@@ -4,7 +4,7 @@
 import { api } from './api.js';
 import { formatear } from './telefono.js';
 import { miniaturaFoto } from './visor-foto.js';
-import { filaArticulo } from './captura.js';
+import { filaArticuloConPrecio as filaArticulo } from './captura.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const dinero = (n) => `$${Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -39,7 +39,7 @@ function filaHtml(p, i) {
 }
 
 // Datos y tabla editables: los usan el cotizador y las tarjetas del Pizarrón.
-function editorHtml(b, extra = '') {
+function editorHtml(b, extra = '', quitar = false) {
   return `
     <div class="cot__datos">
       <label class="campo">Cliente <input data-dato="cliente" value="${esc(b.cliente)}"></label>
@@ -47,12 +47,22 @@ function editorHtml(b, extra = '') {
       <label class="campo">Colonia <input data-dato="colonia" value="${esc(b.colonia)}" placeholder="¿colonia?"></label>
       ${extra}
     </div>
+    ${tablaHtml(b.partidas, quitar)}`;
+}
+
+// quitar: cada producto lleva su ✕ y abajo va "＋ Agregar artículo" (tarjetas y edición del historial).
+function tablaHtml(partidas, quitar = false) {
+  const fila = (p, i) => (quitar
+    ? filaHtml(p, i).replace(/<\/tr>\s*$/, `<td>${p.tipo === 'flete' ? '' : `<button type="button" class="btn btn--secundario" data-quitar="${i}" aria-label="Quitar renglón">✕</button>`}</td></tr>`)
+    : filaHtml(p, i));
+  return `
     <div class="cot__tabla">
       <table>
-        <thead><tr><th>Descripción</th><th class="n">Cantidad</th><th>Unidad</th><th class="n">Precio</th><th class="n">Importe</th></tr></thead>
-        <tbody>${b.partidas.map(filaHtml).join('')}</tbody>
-        <tfoot><tr><td colspan="4" class="n">TOTAL</td><td class="n" data-total></td></tr></tfoot>
+        <thead><tr><th>Descripción</th><th class="n">Cantidad</th><th>Unidad</th><th class="n">Precio</th><th class="n">Importe</th>${quitar ? '<th></th>' : ''}</tr></thead>
+        <tbody>${partidas.map(fila).join('')}</tbody>
+        <tfoot><tr><td colspan="4" class="n">TOTAL</td><td class="n" data-total></td>${quitar ? '<td></td>' : ''}</tr></tfoot>
       </table>
+      ${quitar ? '<button type="button" class="btn btn--secundario cot__agregar" data-renglon>＋ Agregar artículo</button>' : ''}
     </div>
     <p data-aviso class="cot__aviso"></p>`;
 }
@@ -79,6 +89,32 @@ function recalcular(raiz, b) {
     sinFlete && 'Sin flete: no aparecerá en la cotización.',
   ].filter(Boolean).join(' ');
   raiz.querySelector('[data-accion="aprobar"]').disabled = !completos;
+}
+
+// cambio(partidas) agrega o quita; devuelve el índice a enfocar (o nada).
+function cambiarRenglones(raiz, b, cambio) {
+  recalcular(raiz, b); // guarda lo escrito antes de volver a pintar
+  const foco = cambio(b.partidas);
+  raiz.querySelector('[data-aviso]').remove();
+  raiz.querySelector('.cot__tabla').outerHTML = tablaHtml(b.partidas, true);
+  recalcular(raiz, b);
+  if (foco !== undefined) raiz.querySelector(`tr[data-i="${foco}"] [data-campo="descripcion"]`)?.focus();
+}
+
+const agregarRenglon = (partidas) => {
+  const flete = partidas.findIndex((p) => p.tipo === 'flete');
+  const i = flete < 0 ? partidas.length : flete; // antes del flete
+  partidas.splice(i, 0, { tipo: 'producto', descripcion: '', cantidad: '', unidad: '', precio: '' });
+  return i;
+};
+
+// Clic en ✕ o en "＋ Agregar artículo"; true si era uno de ésos.
+function clicRenglon(raiz, b, e) {
+  const quitar = e.target.closest('button[data-quitar]');
+  if (quitar) cambiarRenglones(raiz, b, (partidas) => { partidas.splice(Number(quitar.dataset.quitar), 1); });
+  else if (e.target.closest('button[data-renglon]')) cambiarRenglones(raiz, b, agregarRenglon);
+  else return false;
+  return true;
 }
 
 function alEscribir(raiz, b, e) {
@@ -115,6 +151,47 @@ export function montarInspector({ toast, alAprobar }) {
   const caja = document.querySelector('#cotizacion');
   const recientes = document.querySelector('#cotizaciones-recientes');
   let borrador = null;
+  let editando = null; // { cot, partidas }: cotización del historial abierta para corregir
+  let historial = [];
+  const buscar = document.querySelector('#cotizaciones-buscar');
+  // Lista de precios para sugerir el precio al escribir el material (mismas reglas que buscarPrecio del servidor).
+  let catalogo = [];
+  api.get('/api/cotizaciones/precios').then((r) => { catalogo = r.precios; }).catch(() => {});
+  const clave = (t) => ` ${String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9ñ ]/g, ' ').replace(/s+/g, ' ').trim()} `;
+  function precioDeLista(material) {
+    const t = clave(material);
+    let mejor = null;
+    for (const p of catalogo) {
+      for (const k of p.claves.split(',').map((x) => x.trim()).filter(Boolean)) {
+        if (t.includes(` ${k} `) && k.length > (mejor?.largo ?? 0)) mejor = { precio: p.precio, largo: k.length };
+      }
+    }
+    return mejor?.precio ?? null;
+  }
+  // Importe de cada renglón y total abajo de los artículos.
+  function recalcularFilas() {
+    let total = 0;
+    let faltan = false;
+    for (const fila of filas.querySelectorAll('.fila-articulo')) {
+      const material = fila.querySelector('[data-articulo="material"]').value.trim();
+      const importe = aNumero(fila.querySelector('[data-articulo="cantidad"]').value) * Number(fila.querySelector('[data-articulo="precio"]').value || NaN);
+      fila.querySelector('[data-articulo="importe"]').textContent = importe >= 0 ? dinero(importe) : '—';
+      if (importe >= 0) total += importe;
+      else if (material) faltan = true;
+    }
+    document.querySelector('#cotizar-total').textContent = `Total artículos: ${dinero(total)}${faltan ? ' (faltan precios: salen de la lista)' : ''} · el flete se suma al generar`;
+  }
+  filas.addEventListener('input', (e) => {
+    const precio = e.target.closest('.fila-articulo')?.querySelector('[data-articulo="precio"]');
+    if (e.target.dataset.articulo === 'precio') delete e.target.dataset.sugerido;
+    // Al escribir el material se sugiere el de la lista, sin pisar uno escrito a mano.
+    if (e.target.dataset.articulo === 'material' && precio && (!precio.value || precio.dataset.sugerido)) {
+      const sugerido = precioDeLista(e.target.value);
+      precio.value = sugerido ?? '';
+      if (sugerido != null) precio.dataset.sugerido = '1';
+    }
+    recalcularFilas();
+  });
 
   function mostrarBorrador() {
     caja.innerHTML = `
@@ -144,6 +221,7 @@ export function montarInspector({ toast, alAprobar }) {
   function limpiarFormulario() {
     form.reset();
     filas.innerHTML = filaArticulo();
+    recalcularFilas();
   }
 
   function mostrarResultado({ cotizacion, aprendido }) {
@@ -184,17 +262,76 @@ export function montarInspector({ toast, alAprobar }) {
           · ${esc(c.cliente)} · ${esc(c.colonia)} · ${dinero(c.total)} · ${esc(c.creado_en.slice(0, 16))}
           ${c.whatsapp === 'enviado' ? '· 💬' : ''} ${recordatorio ? `· ${recordatorio}` : ''}</span>
         <span class="solicitudes__botones">
+          <button type="button" class="btn btn--secundario" data-editar>✏️ Editar</button>
           ${botones}
           ${c.cliente_telefono && c.whatsapp !== 'enviado' ? '<button type="button" class="btn btn--secundario" data-reenviar>💬 Reenviar</button>' : ''}
         </span>
       </li>`;
   }
 
+  function pintarRecientes() {
+    const t = buscar.value.trim().toLowerCase();
+    const lista = t ? historial.filter((c) => `${c.folio} ${c.cliente} ${c.colonia}`.toLowerCase().includes(t)) : historial;
+    recientes.innerHTML = lista.length ? lista.map(filaReciente).join('') : `<li>${t ? 'Ninguna cotización coincide.' : 'Todavía no hay cotizaciones.'}</li>`;
+  }
+
   async function cargarRecientes() {
     try {
-      const lista = await api.get('/api/cotizaciones');
-      recientes.innerHTML = lista.length ? lista.map(filaReciente).join('') : '<li>Todavía no hay cotizaciones.</li>';
+      historial = await api.get('/api/cotizaciones?limite=200');
+      pintarRecientes();
     } catch { /* se reintenta en la siguiente */ }
+  }
+  buscar.addEventListener('input', pintarRecientes);
+
+  // ---- Edición manual de una cotización del historial ----
+  function pintarEdicion() {
+    const { cot, partidas } = editando;
+    const tel = cot.cliente_telefono;
+    caja.innerHTML = `
+      <div class="cot">
+        <p class="cot__pregunta">✏️ Editando ${esc(cot.folio)} · ${esc(cot.cliente)} · ${esc(cot.colonia)}</p>
+        ${tablaHtml(partidas, true)}
+        <div class="captura__botones cot__botones">
+          <button type="button" class="btn" data-accion="aprobar">${tel ? '💬 Actualizar y Reenviar' : '✔ Guardar cambios'}</button>
+          ${tel ? '<button type="button" class="btn btn--secundario" data-accion="guardar">✔ Sólo guardar</button>' : ''}
+          <button type="button" class="btn btn--secundario" data-accion="cancelar">✖ Cancelar</button>
+        </div>
+        ${tel ? '' : '<p>El cliente no tiene WhatsApp: guárdala y descarga la imagen para mandarla tú.</p>'}
+      </div>`;
+    caja.hidden = false;
+    recalcularEdicion();
+  }
+
+  function recalcularEdicion() {
+    recalcular(caja, editando);
+    const guardar = caja.querySelector('[data-accion="guardar"]');
+    if (guardar) guardar.disabled = caja.querySelector('[data-accion="aprobar"]').disabled;
+  }
+
+  async function abrirEdicion(id) {
+    const cot = await api.get(`/api/cotizaciones/${id}`);
+    const partidas = cot.partidas.map(({ tipo, descripcion, cantidad, unidad, precio }) => ({ tipo, descripcion, cantidad: String(cantidad), unidad, precio }));
+    if (!partidas.some((p) => p.tipo === 'flete')) partidas.push({ tipo: 'flete', descripcion: `Flete a ${cot.colonia ?? ''}`, cantidad: '1', unidad: 'viaje', precio: '' });
+    borrador = null;
+    editando = { cot, partidas };
+    pintarEdicion();
+    caja.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function guardarEdicion(enviar) {
+    const { cotizacion, whatsapp } = await api.put(`/api/cotizaciones/${editando.cot.id}`, { partidas: editando.partidas, enviar });
+    editando = null;
+    caja.innerHTML = `
+      <div class="cot cot--lista">
+        <p class="cot__pregunta">✅ Cotización ${esc(cotizacion.folio)} actualizada · ${dinero(cotizacion.total)}</p>
+        ${whatsapp ? `<p>${ESTADO_WHATSAPP[whatsapp] ?? ''}</p>` : ''}
+        <img class="cot__imagen" src="/api/cotizaciones/${cotizacion.id}/imagen?v=${Date.now()}" alt="Cotización ${esc(cotizacion.folio)}">
+        <div class="captura__botones cot__botones">
+          <a class="btn" href="/api/cotizaciones/${cotizacion.id}/imagen?descargar=1">⬇ Descargar imagen</a>
+          <button type="button" class="btn btn--secundario" data-accion="cancelar">Cerrar</button>
+        </div>
+      </div>`;
+    if (whatsapp && whatsapp !== 'enviado') toast(ESTADO_WHATSAPP[whatsapp] ?? 'No se pudo enviar', true);
   }
 
   recientes.addEventListener('click', async (e) => {
@@ -203,6 +340,11 @@ export function montarInspector({ toast, alAprobar }) {
     if (!id) return;
     boton.disabled = true;
     try {
+      if (boton.dataset.editar !== undefined) {
+        await abrirEdicion(id);
+        boton.disabled = false;
+        return;
+      }
       if (boton.dataset.marcar) {
         await api.post(`/api/cotizaciones/${id}/estado`, { estado: boton.dataset.marcar });
       } else {
@@ -220,6 +362,7 @@ export function montarInspector({ toast, alAprobar }) {
       cantidad: fila.querySelector('[data-articulo="cantidad"]').value.trim(),
       unidad: fila.querySelector('[data-articulo="unidad"]').value.trim(),
       material: fila.querySelector('[data-articulo="material"]').value.trim(),
+      precio: fila.querySelector('[data-articulo="precio"]')?.value.trim() ?? '',
     })).filter((a) => a.material);
   }
 
@@ -231,6 +374,7 @@ export function montarInspector({ toast, alAprobar }) {
     if (e.target.closest('[data-quitar]')) {
       e.target.closest('.fila-articulo').remove();
       if (!filas.children.length) filas.innerHTML = filaArticulo();
+      recalcularFilas();
     }
   });
 
@@ -250,6 +394,8 @@ export function montarInspector({ toast, alAprobar }) {
       borrador = await api.post('/api/cotizaciones/borrador', {
         cliente: c.cliente.value, telefono: c.telefono.value, colonia: c.colonia.value, productos,
       });
+      // El precio escrito en el renglón manda sobre el de la lista (las partidas vienen en el mismo orden).
+      productos.forEach((p, i) => { if (p.precio !== '' && Number(p.precio) >= 0) borrador.partidas[i].precio = Number(p.precio); });
       borrador.solicitud = productos.map((p) => [p.cantidad, p.unidad, p.material].filter(Boolean).join(' ')).join(' + ');
       mostrarBorrador();
     } catch (err) {
@@ -265,14 +411,15 @@ export function montarInspector({ toast, alAprobar }) {
       c.cliente.value = b.cliente;
       c.telefono.value = formatear(b.telefono);
       c.colonia.value = b.colonia;
-      filas.innerHTML = b.productos.map(filaArticulo).join('');
+      filas.innerHTML = b.productos.map((p, i) => filaArticulo({ ...p, precio: b.partidas[i]?.precio })).join('');
+      recalcularFilas();
       entrada.value = '';
     } catch (err) {
       toast(err.message, true);
     }
   });
 
-  caja.addEventListener('input', (e) => alEscribir(caja, borrador, e));
+  caja.addEventListener('input', (e) => (editando ? recalcularEdicion() : alEscribir(caja, borrador, e)));
   caja.addEventListener('change', (e) => { if (e.target.id === 'cot-enviar') textoDeAprobar(); });
 
   // ---- Tarjetas por autorizar (panel de El Inspector): cotizaciones que llegaron por WhatsApp ----
@@ -289,7 +436,7 @@ export function montarInspector({ toast, alAprobar }) {
       <div class="auditoria">
         ${miniaturaFoto(s.foto)}
         <div class="auditoria__texto">
-          ${editorHtml(t.borrador, `<label class="campo">Método de pago <input data-dato="metodo_pago" value="${esc(s.borrador.metodo_pago)}" placeholder="¿pago?"></label>`)}
+          ${editorHtml(t.borrador, `<label class="campo">Método de pago <input data-dato="metodo_pago" value="${esc(s.borrador.metodo_pago)}" placeholder="¿pago?"></label>`, true)}
         </div>
       </div>
       <label class="cot__opcion"><input type="checkbox" data-guardar checked> Guardar precios nuevos o corregidos en mi lista</label>
@@ -333,6 +480,11 @@ export function montarInspector({ toast, alAprobar }) {
     alEscribir(t.el, t.borrador, e);
   });
   lista.addEventListener('click', async (e) => {
+    const tarjeta = tarjetas.get(Number(e.target.closest('[data-id]')?.dataset.id));
+    if (tarjeta && clicRenglon(tarjeta.el, tarjeta.borrador, e)) {
+      tarjeta.tocada = true; // ya no se pisa con lo que mande el cliente
+      return;
+    }
     const boton = e.target.closest('button[data-accion]');
     if (!boton) return;
     const id = Number(boton.closest('[data-id]').dataset.id);
@@ -364,12 +516,28 @@ export function montarInspector({ toast, alAprobar }) {
   recargarSolicitudes = () => { cargarSolicitudes(); cargarRecientes(); };
 
   caja.addEventListener('click', async (e) => {
+    if (editando && clicRenglon(caja, editando, e)) {
+      recalcularEdicion();
+      return;
+    }
     const boton = e.target.closest('button[data-accion]');
     if (!boton) return;
+    if (editando && (boton.dataset.accion === 'aprobar' || boton.dataset.accion === 'guardar')) {
+      caja.querySelectorAll('[data-accion="aprobar"], [data-accion="guardar"]').forEach((b) => { b.disabled = true; });
+      try {
+        await guardarEdicion(boton.dataset.accion === 'aprobar' && Boolean(editando.cot.cliente_telefono));
+        cargarRecientes();
+      } catch (err) {
+        toast(err.message, true);
+        recalcularEdicion();
+      }
+      return;
+    }
     if (boton.dataset.accion === 'cancelar') {
       caja.hidden = true;
       caja.innerHTML = '';
       borrador = null;
+      editando = null;
       c.cliente.focus();
       return;
     }

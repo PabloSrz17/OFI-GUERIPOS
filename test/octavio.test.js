@@ -224,6 +224,21 @@ test('en el pizarrón la orden va y regresa entre columnas sin avisar ni perder 
   assert.equal(ordenes.obtener(o.id).nota, null);
 });
 
+test('eliminar: sólo desde Canceladas; la saca del pizarrón y no contesta', async () => {
+  const tel = persona();
+  await solicitudes.procesarMensaje(mensaje(tel, `${AVISO}\n1 pz malla`));
+  const o = ultimaDe(tel);
+  ordenes.aprobar(o.id, datos(o));
+  salidas.length = 0;
+  assert.equal(ordenes.eliminar(o.id), false); // aprobada: no
+  ordenes.mover(o.id, 'cancelada');
+  assert.equal(ordenes.eliminar(o.id), true);
+  assert.equal(ordenes.eliminar(o.id), false);
+  assert.equal(ordenes.listar().some((x) => x.id === o.id), false);
+  assert.equal(ordenes.mover(o.id, 'aprobada'), false); // ya no vuelve al pizarrón
+  assert.equal(salidas.length, 0);
+});
+
 test('descartar saca la orden de la lista y no contesta', async () => {
   const tel = persona();
   await solicitudes.procesarMensaje(mensaje(tel, `${AVISO}\n1 pz malla`));

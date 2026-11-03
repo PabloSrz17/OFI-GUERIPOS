@@ -13,7 +13,7 @@ const db = require('../src/db/connection');
 const cotizaciones = require('../src/repositories/cotizaciones.repo');
 const seguimiento = require('../src/integraciones/inspector/seguimiento');
 const solicitudes = require('../src/integraciones/inspector/solicitudes');
-const { bienvenida, SEGUIMIENTO } = require('../src/integraciones/whatsapp/mensajes');
+const { bienvenida, seguimiento: textoSeguimiento } = require('../src/integraciones/whatsapp/mensajes');
 
 function cotizacionEnviada(telefono) {
   const { cotizacion } = cotizaciones.aprobar({
@@ -44,7 +44,7 @@ test('antes de 24 horas no sale; al cumplirse sale una sola vez', async () => {
   vencer(id);
   await seguimiento.revisar(cliente);
   await seguimiento.revisar(cliente);
-  assert.deepEqual(cliente.enviados, [['529810000002', SEGUIMIENTO]]);
+  assert.deepEqual(cliente.enviados, [['529810000002', textoSeguimiento()]]);
   assert.equal(fila(id).seguimiento_estado, 'enviado');
 });
 
@@ -82,6 +82,17 @@ test('la bienvenida depende de la hora y nunca lleva precios', () => {
   assert.doesNotMatch(bienvenida(), /\$/);
 });
 
+test('el recordatorio saluda según la hora en que sale (nunca "buenas tardes" a las 8:50)', () => {
+  const a = (h, m) => textoSeguimiento(new Date(2026, 10, 3, h, m));
+  assert.match(a(0, 0), /^Buenos días, ¿qué le pareció/);
+  assert.match(a(8, 50), /^Buenos días,/);
+  assert.match(a(11, 59), /^Buenos días,/);
+  assert.match(a(12, 0), /^Buenas tardes,/);
+  assert.match(a(18, 59), /^Buenas tardes,/);
+  assert.match(a(19, 0), /^Buenas noches,/);
+  assert.match(a(23, 59), /^Buenas noches,/);
+});
+
 const mensaje = (numero, body) => {
   const enviados = [];
   return {
@@ -112,4 +123,20 @@ test('bienvenida automática una sola vez, y no a quien contesta una cotización
   const responde = mensaje('5219810000007', 'gracias, luego les pido otra cotización');
   await solicitudes.procesarMensaje(responde);
   assert.equal(responde.enviados.length, 0);
+});
+
+test('editar a mano: cambia renglones y total, agrega partidas y conserva folio y cliente', () => {
+  const { calcular } = require('../src/integraciones/inspector/cotizador');
+  const id = cotizacionEnviada('529810000009');
+  const antes = cotizaciones.obtener(id);
+  const editada = cotizaciones.editar(id, calcular([
+    { tipo: 'producto', descripcion: 'Grava', cantidad: '2', unidad: 'm³', precio: 600 },
+    { tipo: 'producto', descripcion: 'Cemento Maya', cantidad: '10', unidad: 'bulto', precio: 150 },
+    { tipo: 'flete', descripcion: 'Flete a Fovi', cantidad: '1', unidad: 'viaje', precio: 300 },
+  ]));
+  assert.equal(editada.folio, antes.folio);
+  assert.equal(editada.cliente, 'CLIENTE');
+  assert.equal(editada.total, 1200 + 1500 + 300);
+  assert.deepEqual(editada.partidas.map((p) => [p.descripcion, p.importe]), [['Grava', 1200], ['Cemento Maya', 1500], ['Flete a Fovi', 300]]);
+  assert.equal(cotizaciones.editar(999999, calcular([{ descripcion: 'X', cantidad: 1, unidad: 'pz', precio: 1 }])), null);
 });

@@ -56,3 +56,32 @@ test('un sticker o un audio se ignoran', async () => {
   }
   assert.equal(solicitudes.pendientes().length, 0);
 });
+
+test('Tesseract: sólo vale si todos los renglones con cantidad se entienden y están en la lista', () => {
+  const { productosDeTexto } = require('../src/integraciones/inspector/ocr');
+  const catalogo = [{ claves: 'grava', nombre: 'Grava', unidad: 'm³', precio: 550 }, { claves: 'cemento maya', nombre: 'Cemento Maya', unidad: 'bulto', precio: 150 }];
+  assert.deepEqual(productosDeTexto('Lista\n3 m3 grava\n10 bultos cemento maya', catalogo).map((p) => [p.cantidad, p.producto]),
+    [['3', 'GRAVA'], ['10', 'CEMENTO MAYA']]);
+  assert.equal(productosDeTexto('3 m3 grava\n10 bultos chicle', catalogo), null); // no está en la lista
+  assert.equal(productosDeTexto('3 m3 grava\nHhhks de (o 4 ad', catalogo), null); // renglón ilegible
+  assert.equal(productosDeTexto('hola buenas tardes', catalogo), null);
+});
+
+test('tarjeta con productos de foto: el grupo recibe su imagen pidiendo autorización (sin enviar al cliente)', async () => {
+  const grupo = require('../src/integraciones/agentes/grupo');
+  const db = require('../src/db/connection');
+  const borrador = { cliente: 'JUAN', colonia: 'Fovi', metodo_pago: 'efectivo', partidas: [
+    { tipo: 'producto', descripcion: 'Grava', cantidad: '2', unidad: 'm³', precio: 550 },
+    { tipo: 'producto', descripcion: 'Chicle', cantidad: '1', unidad: '', precio: null },
+    { tipo: 'flete', descripcion: 'Flete a Fovi', cantidad: 1, unidad: 'viaje', precio: null }] };
+  const id = db.prepare('INSERT INTO solicitudes_whatsapp (telefono, nombre, mensaje, borrador) VALUES (?, ?, ?, ?)')
+    .run('529810000099', 'JUAN', '[Foto]', JSON.stringify(borrador)).lastInsertRowid;
+  const enviados = [];
+  const whatsapp = { estaListo: () => true, enviarImagenAGrupo: async (...a) => { enviados.push(a); return true; } };
+  await grupo.avisarTarjeta(whatsapp, id);
+  assert.equal(enviados.length, 1);
+  const [nombreGrupo, png, , pie] = enviados[0];
+  assert.ok(nombreGrupo);
+  assert.equal(png.subarray(1, 4).toString(), 'PNG');
+  assert.equal(pie, 'Así quedó la cotización en la Oficina. ¿Me autorizas enviarla?');
+});
