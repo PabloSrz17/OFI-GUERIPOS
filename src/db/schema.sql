@@ -116,6 +116,18 @@ CREATE TABLE IF NOT EXISTS agentes_chat (
   fecha  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
+-- Cargas de combustible que el equipo le reporta a Edgar en el grupo de WhatsApp.
+CREATE TABLE IF NOT EXISTS combustible (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  unidad    TEXT NOT NULL,              -- tal como la nombran, ej. "NISSAN BLANCA"
+  importe   REAL NOT NULL CHECK (importe > 0),
+  concepto  TEXT NOT NULL CHECK (concepto IN ('gasolina', 'diesel')),
+  litros    REAL,
+  reporto   TEXT,                       -- quién lo escribió en el grupo
+  mensaje   TEXT NOT NULL,
+  creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
 CREATE TABLE IF NOT EXISTS agentes_memoria (
   id     INTEGER PRIMARY KEY AUTOINCREMENT,
   agente TEXT NOT NULL,            -- rutas | chasis | inspector

@@ -162,6 +162,20 @@ Si WhatsApp está desconectado, la orden no se aprueba: la alerta sigue abierta 
 
 **Entradas de Almacén**, en el panel de Octavio, se capturan como una nota: proveedor, folio o factura (obligatorio), nota opcional y los renglones que hagan falta, con las mismas abreviaturas (B = BOLSAS, CB = CON BOLSA). También salen en la pestaña **Entradas de Almacén** del pizarrón, con tarjetas naranjas para no confundirlas con las órdenes, que van en azul. En cualquiera de los dos lugares, **✎ Editar** corrige cualquier dato de una entrada ya guardada; no queda registro de lo que tenía antes. Es sólo un registro manual: no suma ni descuenta inventario, porque el sistema no lleva inventario.
 
+### Reporte semanal
+
+Botón **📊 Reporte semanal** arriba (`public/reporte.html`, `repositories/reporte.repo.js`). La semana va del **lunes 08:00 al cierre del sábado** (antes del domingo 00:00); se elige con cualquier día de ella, y se puede imprimir.
+- **Octavio:** órdenes de compra recibidas en la semana (sin las descartadas) y entradas de almacén capturadas.
+- **Chatito:** cotizaciones hechas en la semana y, de ésas mismas, las marcadas 💰 Pagada antes del cierre. Una cotización de otra semana pagada en ésta no cuenta, y 🚫 Cerrada es sin venta.
+- **Edgar:** notas cuya última entrega cayó en la semana y siguen en Entregado, por chofer y unidad. Cada nota cuenta como un viaje, ALMACÉN incluido.
+
+### Grupo de WhatsApp "AGENTES IA CHAT"
+
+`integraciones/agentes/grupo.js`. En el grupo del equipo (nombre en `WHATSAPP_GRUPO_AGENTES`), el mensaje que nombra a un agente (Edgar, Chatito, Sulema u Octavio) lo atiende sólo el primero que se nombra, y contesta en el grupo citando el mensaje. Sin nombre no contesta nadie; los demás grupos se ignoran. Los mensajes que escribe el propio número del negocio no se atienden.
+- **Edgar + combustible** ("Edgar, la nissan blanca echó 500 de gas"): la IA saca unidad, importe, gasolina o diésel y litros; se guarda en la tabla `combustible` y contesta **Anotado ✅**. Si falta la unidad o el importe, no anota y dice cómo escribirlo. Una pregunta ("¿cuánta gasolina llevamos?") la contesta como cualquier otra.
+- **Chatito + cotización** ("Chatito, hazme una cotización formal…"): sale como tarjeta por autorizar en su panel, igual que las de clientes; no se le manda nada a nadie. No genera PDF: al autorizarla sale la imagen de siempre.
+- **Lo demás:** lo contesta el agente con su chat de IA, que queda guardado en su panel.
+
 ### Preguntarle a un agente (IA)
 
 **Da clic en un agente** y se abre su panel con su rol, su estado, lo que está haciendo y un chat ("Escríbele a El Rutas…"). Pregunta en español: "¿qué camión llevó la N923?", "¿cuánto vendimos hoy en Pulpos?", "¿cuánto cuesta el armex de castillo?". Enter envía; Shift+Enter hace salto de línea. La conversación se guarda en la base (`agentes_chat`), así que sigue ahí al cerrar el panel o recargar, y es la misma en todas las PCs.
@@ -354,6 +368,7 @@ oficina-virtual/
 | GET | `/api/octavio/ordenes/:id/imagen` | PNG de la orden |
 | GET · POST | `/api/octavio/entradas` | Entradas de almacén · `{ folio, proveedor?, nota?, renglones: [{ cantidad, unidad?, material }] }` |
 | PUT | `/api/octavio/entradas/:id` | Edita una entrada, con los mismos datos |
+| GET | `/api/reportes/semanal?dia=AAAA-MM-DD` | Reporte de la semana de ese día (sin `dia`, la actual) |
 | GET | `/api/resumen` | Conteos por estado, `sin_chofer`, `clientes` y `integraciones` (estado de cada conector) |
 
 ## Base de datos

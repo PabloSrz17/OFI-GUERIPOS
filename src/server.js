@@ -47,6 +47,7 @@ app.use('/api/cotizaciones', require('./routes/cotizaciones.routes'));
 app.use('/api/octavio', require('./routes/octavio.routes'));
 app.use('/api/pizarron', require('./routes/pizarron.routes'));
 app.use('/api/asistencias', require('./routes/asistencias.routes'));
+app.use('/api/reportes', require('./routes/reportes.routes'));
 
 // Tiempo real (Server-Sent Events): cada pantalla abierta recibe un aviso al cambiar algo y se refresca.
 const EVENTOS = {
@@ -101,6 +102,7 @@ app.listen(config.port, config.host, () => {
   conectorSicar.iniciar();
   avisosWhatsapp.iniciar();
   solicitudes.iniciar(whatsapp);
+  require('./integraciones/agentes/grupo').iniciar(whatsapp);
   require('./integraciones/inspector/seguimiento').iniciar();
   require('./integraciones/recordatorio-lista').iniciar();
   whatsapp.iniciar();

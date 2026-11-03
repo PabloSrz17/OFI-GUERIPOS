@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reporte semanal</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .reporte { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+    .reporte h1 { font: 800 21px var(--pixel); color: #4a3221; margin: 0 0 12px; }
+    .reporte__semana label { color: #4a3221; font-weight: 700; }
+    .reporte__semana { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .reporte section { margin-bottom: 16px; padding: 14px 16px; background: var(--panel-2); border: 2px solid #000; box-shadow: var(--sombra); }
+    .reporte h2 { margin: 0 0 10px; font: 800 16px var(--pixel); }
+    .cifras { display: flex; flex-wrap: wrap; gap: 24px; }
+    .cifras b { display: block; font-size: 30px; }
+    .reporte table { width: 100%; margin-top: 12px; border-collapse: collapse; }
+    .reporte th, .reporte td { padding: 6px 8px; border-bottom: 1px solid #0006; text-align: left; }
+    .reporte td:last-child, .reporte th:last-child { text-align: right; }
+    .reporte a { color: var(--en-ruta); }
+    @media print { .reporte__semana label, .reporte__semana button, .volver { display: none; } }
+  </style>
+</head>
+<body>
+  <main class="reporte">
+    <h1>📊 Reporte semanal</h1>
+    <div class="reporte__semana">
+      <label>Semana del día <input type="date" id="dia"></label>
+      <button type="button" id="imprimir" class="btn btn--secundario">🖨 Imprimir</button>
+      <span id="periodo" class="badge">Cargando…</span>
+    </div>
+    <section>
+      <h2>Octavio · compras y almacén</h2>
+      <div class="cifras">
+        <p>Órdenes de compra solicitadas<b id="ordenes">–</b></p>
+        <p>Entradas de material<b id="entradas">–</b></p>
+      </div>
+    </section>
+    <section>
+      <h2>Chatito · cotizaciones</h2>
+      <div class="cifras">
+        <p>Cotizaciones hechas<b id="creadas">–</b></p>
+        <p>De ésas, pagadas<b id="pagadas">–</b></p>
+      </div>
+    </section>
+    <section>
+      <h2>Edgar · reparto</h2>
+      <div class="cifras"><p>Pedidos despachados<b id="despachados">–</b></p></div>
+      <table>
+        <thead><tr><th>Chofer</th><th>Unidad</th><th>Viajes</th></tr></thead>
+        <tbody id="viajes"></tbody>
+      </table>
+    </section>
+    <p class="volver"><a href="/">← Volver a la Oficina Virtual</a></p>
+  </main>
+  <script type="module" src="/js/reporte.js"></script>
+</body>
+</html>

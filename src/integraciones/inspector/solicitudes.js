@@ -303,6 +303,18 @@ function guardarSolicitud(clave, { telefono, contacto, datos, textos, conv, foto
   bus.emit('solicitud:nueva');
 }
 
+// Cotización pedida en el grupo del equipo: sale como tarjeta por autorizar, igual que las de clientes.
+// No se le manda nada a nadie: un humano la revisa, la genera y la envía.
+async function cotizacionDelGrupo(clave, texto) {
+  const leida = process.env.ANTHROPIC_API_KEY ? await interpretar(texto).catch(() => null) : null;
+  const datos = leida ?? { nombre_cliente: '', colonia: '', metodo_pago: '', productos: [] };
+  datos.nombre_cliente ||= 'COTIZACIÓN DEL GRUPO';
+  const renglones = datos.productos.filter((p) => p.producto).length;
+  if (!renglones) datos.productos = [{ cantidad: '', unidad: '', producto: '' }];
+  guardarSolicitud(clave, { telefono: null, contacto: null, datos, textos: texto.slice(-2000), conv: { esperando: 0, solicitud_id: null } });
+  return { cliente: datos.nombre_cliente.toUpperCase(), renglones };
+}
+
 // Uno a la vez: si llegan dos mensajes seguidos del mismo número, no salen dos bienvenidas.
 function iniciar(whatsapp) {
   let cola = Promise.resolve();
@@ -317,6 +329,7 @@ module.exports = {
   obtener: (id) => stmts.porId.get(id),
   pideCotizacion,
   procesarMensaje,
+  cotizacionDelGrupo,
   pendientes: () => stmts.pendientes.all().map((s) => ({ ...s, borrador: JSON.parse(s.borrador) })),
   sigueAbierta: (id) => Boolean(stmts.abierta.get(id)),
   marcar: (id, estado, cotizacionId = null) => {

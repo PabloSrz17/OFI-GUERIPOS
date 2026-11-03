@@ -15,8 +15,8 @@ const MAX_CONTEXTO = 12; // mensajes anteriores que se le mandan a la IA para se
 const AGENTES = {
   rutas: {
     nombre: 'Edgar',
-    area: 'la logística de reparto: notas por entregar, cargando, en ruta y entregadas; choferes, camiones, avisos de WhatsApp y registro en Google Sheets. El chofer ALMACÉN significa que el cliente recoge en bodega, sin camión ni reparto',
-    tablas: ['notas', 'clientes', 'choferes', 'camiones', 'historial_estados', 'whatsapp_envios', 'sheets_registros'],
+    area: 'la logística de reparto: notas por entregar, cargando, en ruta y entregadas; choferes, camiones, avisos de WhatsApp, registro en Google Sheets y las cargas de combustible que te reportan en el grupo (tabla combustible: importe en pesos, unidad tal como la nombraron). El chofer ALMACÉN significa que el cliente recoge en bodega, sin camión ni reparto',
+    tablas: ['notas', 'clientes', 'choferes', 'camiones', 'historial_estados', 'whatsapp_envios', 'sheets_registros', 'combustible'],
   },
   chasis: {
     nombre: 'Sulema',

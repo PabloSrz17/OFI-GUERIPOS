@@ -23,6 +23,7 @@ module.exports = {
   whatsapp: {
     activo: process.env.WHATSAPP_ACTIVO === 'true',
     negocio: process.env.WHATSAPP_NEGOCIO || 'Materiales El Güero',
+    grupoAgentes: process.env.WHATSAPP_GRUPO_AGENTES || 'AGENTES IA CHAT', // grupo del equipo donde contestan los agentes
     sesion: path.join(DATA, 'whatsapp-sesion'), // vinculación (equivale a WhatsApp Web)
     cache: path.join(DATA, 'whatsapp-cache'),
   },
