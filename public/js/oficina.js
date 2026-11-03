@@ -243,6 +243,7 @@ function abrirPanel(id) {
   if (!panel.open) panel.show(); // no modal: el resto de la oficina sigue usable
   panel.scrollTop = 0;
   mostrarConversacion(false); // siempre empieza retraída
+  panel.querySelectorAll('details.plegable').forEach((d) => { d.open = false; });
   cargarChat(id);
 }
 

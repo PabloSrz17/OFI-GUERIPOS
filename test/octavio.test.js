@@ -301,3 +301,26 @@ test('entradas de almacén: un folio con varios artículos y las abreviaturas de
     { cantidad: '3', unidad: 'CON BOLSA', material: 'ARENA' },
   ]);
 });
+
+test('orden capturada en la Oficina: sin folio, Aprobada en Almacén y sin contestar a nadie', () => {
+  salidas.length = 0;
+  const o = ordenes.crearManual({ solicitante: 'almacén', renglones: [{ cantidad: '10', unidad: 'bultos', material: 'cemento maya' }] });
+  assert.match(o.folio, /^OC-\d+$/);
+  assert.equal(o.estado, 'aprobada');
+  assert.equal(o.sucursal, 'Almacén');
+  assert.equal(o.solicitante, 'ALMACÉN');
+  assert.ok(ordenes.listar().some((x) => x.id === o.id));
+  assert.equal(salidas.length, 0);
+  assert.throws(() => ordenes.crearManual({ solicitante: '', renglones: [{ cantidad: '1', material: 'grava' }] }), /quién/);
+  assert.throws(() => ordenes.crearManual({ solicitante: 'X', renglones: [] }));
+});
+
+test('hoja impresa de entradas: sólo las de esas fechas, de la más vieja a la más nueva', () => {
+  ordenes.registrarEntrada({ proveedor: 'promexma', folio: 'f-1', renglones: [{ cantidad: '10', unidad: 'b', material: 'cemento maya' }] });
+  ordenes.registrarEntrada({ proveedor: 'cemex', folio: 'f-2', renglones: [{ cantidad: '5', unidad: 'pz', material: 'varilla' }] });
+  const hoy = new Date().toLocaleDateString('sv-SE');
+  const lista = ordenes.entradasEntre(hoy, hoy).filter((e) => /^F-[12]$/.test(e.folio));
+  assert.deepEqual(lista.map((e) => e.folio), ['F-1', 'F-2']);
+  assert.equal(lista[0].renglones[0].material, 'CEMENTO MAYA');
+  assert.equal(ordenes.entradasEntre('2000-01-01', '2000-01-02').length, 0);
+});

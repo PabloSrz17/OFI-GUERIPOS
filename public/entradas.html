@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entradas de Almacén</title>
+  <style>
+    /* Igual que la libreta de la bodega: blanco y negro, cuadrícula, 4 columnas. */
+    @page { size: letter; margin: 12mm; }
+    body { margin: 0; padding: 16px; color: #000; background: #fff; font: 12px Arial, Helvetica, sans-serif; }
+    .barra { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 14px; }
+    .barra label { display: grid; gap: 2px; font-size: 12px; }
+    .barra input, .barra button { font: inherit; padding: 6px 8px; border: 1px solid #000; background: #fff; }
+    .barra button { cursor: pointer; font-weight: bold; }
+    h1 { margin: 0 0 2px; font-size: 16px; letter-spacing: .04em; }
+    .periodo { margin: 0 0 10px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid #000; padding: 5px 6px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    th { font-size: 11px; letter-spacing: .06em; background: #fff; }
+    col.fecha { width: 13%; } col.factura { width: 15%; } col.proveedor { width: 22%; }
+    td ul { margin: 0; padding: 0; list-style: none; }
+    td li + li { margin-top: 2px; }
+    tr { break-inside: avoid; }
+    thead { display: table-header-group; } /* el encabezado se repite en cada hoja */
+    .vacio td { height: 22px; }
+    @media print { .barra { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="barra">
+    <label>Desde <input type="date" id="desde"></label>
+    <label>Hasta <input type="date" id="hasta"></label>
+    <button type="button" id="ver">Ver</button>
+    <button type="button" id="imprimir">🖨 Imprimir / Guardar PDF</button>
+  </div>
+  <h1>ENTRADAS DE ALMACÉN</h1>
+  <p class="periodo" id="periodo">Cargando…</p>
+  <table>
+    <colgroup><col class="fecha"><col class="factura"><col class="proveedor"><col></colgroup>
+    <thead><tr><th>FECHA</th><th>FACTURA</th><th>PROVEEDOR</th><th>MATERIAL</th></tr></thead>
+    <tbody id="filas"></tbody>
+  </table>
+  <script type="module" src="/js/entradas-imprimir.js"></script>
+</body>
+</html>

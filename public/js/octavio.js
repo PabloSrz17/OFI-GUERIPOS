@@ -56,6 +56,9 @@ export function montarOctavio({ toast, alCambiar }) {
   let entradas = [];
   const filasEntrada = $('#entrada-articulos');
   filasEntrada.innerHTML = filaArticulo();
+  const filasNueva = $('#orden-nueva-articulos');
+  filasNueva.innerHTML = filaArticulo();
+  let creando = false;
   const dialogoEntrada = $('#editar-entrada');
   const formEditarEntrada = dialogoEntrada.querySelector('form');
   const filasEditarEntrada = $('#editar-entrada-articulos');
@@ -113,13 +116,14 @@ export function montarOctavio({ toast, alCambiar }) {
   function pintarEspera() {
     const lista = porAprobar();
     espera.hidden = !lista.length;
+    $('#ordenes-espera-n').textContent = lista.length;
     $('#ordenes-espera-lista').innerHTML = lista.map((o) => `
       <li><b>${esc(o.folio)}</b> ${esc(o.solicitante)}
         <button type="button" class="btn btn--secundario" data-revisar="${o.id}">Revisar</button></li>`).join('');
   }
 
   function tarjeta(o) {
-    const sinEnviar = o.estado === 'aprobada' && o.whatsapp !== 'enviado';
+    const sinEnviar = o.estado === 'aprobada' && o.whatsapp !== 'enviado' && o.telefono; // las capturadas aquí no tienen a quién
     return `
       <article class="orden">
         <header><b>${esc(o.folio)}</b> <span class="orden__estado orden__estado--${esc(o.estado)}">${esc(ESTATUS[o.estado])}</span> <span>${esc(o.sucursal)}</span></header>
@@ -139,14 +143,20 @@ export function montarOctavio({ toast, alCambiar }) {
       </article>`;
   }
 
+  // Dos tableros iguales: las de la sucursal (Concordia, por WhatsApp) y las de Almacén (capturadas aquí
+  // o cambiadas a sucursal "Almacén" al editar).
+  const esAlmacen = (o) => /^almac[eé]n$/i.test(String(o.sucursal ?? '').trim());
   function pintarPizarron() {
-    for (const estado of ['aprobada', 'surtida', 'cancelada']) {
-      const lista = ordenes.filter((o) => o.estado === estado);
-      const col = document.querySelector(`[data-orden-estado="${estado}"]`);
-      col.querySelector('.contador').textContent = lista.length;
-      col.querySelector('.ordenes__lista').innerHTML = lista.map(tarjeta).join('') || '<p class="ordenes__vacio">Sin órdenes</p>';
+    for (const [tablero, contador, filtro] of [['#pizarron-ordenes', '#pestana-ordenes-n', (o) => !esAlmacen(o)], ['#pizarron-almacen', '#pestana-almacen-n', esAlmacen]]) {
+      const suyas = ordenes.filter((o) => o.estado in ESTATUS && filtro(o));
+      for (const estado of ['aprobada', 'surtida', 'cancelada']) {
+        const lista = suyas.filter((o) => o.estado === estado);
+        const col = document.querySelector(`${tablero} [data-orden-estado="${estado}"]`);
+        col.querySelector('.contador').textContent = lista.length;
+        col.querySelector('.ordenes__lista').innerHTML = lista.map(tarjeta).join('') || '<p class="ordenes__vacio">Sin órdenes</p>';
+      }
+      $(contador).textContent = suyas.length;
     }
-    $('#pestana-ordenes-n').textContent = ordenes.filter((o) => o.estado in ESTATUS).length;
   }
 
   function tarjetaEntrada(e) {
@@ -268,6 +278,37 @@ export function montarOctavio({ toast, alCambiar }) {
     pintarAlerta(orden, porAprobar().length);
   });
 
+  // ---- Orden de compra capturada aquí (sin folio) ----
+  $('#form-orden-nueva').addEventListener('click', (e) => {
+    if (e.target.closest('[data-agregar]')) {
+      filasNueva.insertAdjacentHTML('beforeend', filaArticulo());
+      filasNueva.lastElementChild.querySelector('input').focus();
+    }
+    if (e.target.closest('[data-quitar]')) {
+      e.target.closest('.fila-articulo').remove();
+      if (!filasNueva.children.length) filasNueva.innerHTML = filaArticulo();
+    }
+  });
+  $('#form-orden-nueva').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (creando) return;
+    creando = true;
+    const form = e.target;
+    try {
+      const orden = await api.post('/api/octavio/ordenes', {
+        solicitante: form.elements.solicitante.value, nota: form.elements.nota.value, renglones: leerFilas(filasNueva),
+      });
+      toast(`${orden.folio} creada en Órdenes de Compra Almacén`);
+      form.reset();
+      filasNueva.innerHTML = filaArticulo();
+      await recargar();
+    } catch (err) {
+      toast(err.message, true); // lo escrito se queda para corregirlo
+    } finally {
+      creando = false;
+    }
+  });
+
   $('#form-entrada').addEventListener('click', (e) => {
     if (e.target.closest('[data-agregar]')) {
       filasEntrada.insertAdjacentHTML('beforeend', filaArticulo());
@@ -353,6 +394,7 @@ export function montarOctavio({ toast, alCambiar }) {
       p.setAttribute('aria-selected', String(p === elegida));
       document.getElementById(p.getAttribute('aria-controls')).hidden = p !== elegida;
     }
+    $('#pizarron-entradas-barra').hidden = elegida.id !== 'pestana-entradas';
   });
 
   $('#ventana-ordenes').addEventListener('click', async (e) => {

@@ -32,6 +32,15 @@ function ordenDe(req) {
 
 router.get('/ordenes', (req, res) => res.json(ordenes.listar()));
 
+// Orden de compra capturada en el panel (sin folio): queda Aprobada en "Órdenes de Compra Almacén".
+router.post('/ordenes', (req, res) => {
+  try {
+    res.status(201).json(ordenes.crearManual(req.body ?? {}));
+  } catch (err) {
+    throw httpError(400, err.message);
+  }
+});
+
 // Aprobar es contestar: si no se puede enviar, la alerta se queda como está.
 router.post('/ordenes/:id/aprobar', async (req, res) => {
   const id = ordenDe(req).id;
@@ -86,6 +95,15 @@ router.get('/ordenes/:id/imagen', async (req, res) => {
 });
 
 router.get('/entradas', (req, res) => res.json(ordenes.entradas()));
+
+// Hoja impresa (/entradas.html): entradas entre dos fechas, máximo un año.
+router.get('/entradas/rango', (req, res) => {
+  const fecha = /^\d{4}-\d{2}-\d{2}$/;
+  const { desde, hasta } = req.query;
+  if (!fecha.test(desde ?? '') || !fecha.test(hasta ?? '') || desde > hasta) throw httpError(400, 'Fechas inválidas');
+  if ((new Date(hasta) - new Date(desde)) / 86_400_000 > 366) throw httpError(400, 'Máximo un año por hoja');
+  res.json(ordenes.entradasEntre(desde, hasta));
+});
 
 router.post('/entradas', (req, res) => {
   try {

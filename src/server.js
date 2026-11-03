@@ -107,6 +107,7 @@ app.listen(config.port, config.host, () => {
   require('./integraciones/sulema/paquetes').iniciar();
   require('./integraciones/inspector/seguimiento').iniciar();
   require('./integraciones/recordatorio-lista').iniciar();
+  require('./integraciones/avisos-celular').iniciar();
   whatsapp.iniciar();
   registroSheets.iniciar();
   respaldos.iniciar();

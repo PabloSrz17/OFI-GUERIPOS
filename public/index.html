@@ -170,6 +170,7 @@
     </header>
     <div class="pestanas" role="tablist" aria-label="Secciones del pizarrón">
       <button type="button" class="pestana pestana--ordenes" role="tab" id="pestana-ordenes" aria-controls="pizarron-ordenes" aria-selected="true">🧾 Órdenes de Compra - Concordia <span class="contador" id="pestana-ordenes-n">0</span></button>
+      <button type="button" class="pestana pestana--almacen" role="tab" id="pestana-almacen" aria-controls="pizarron-almacen" aria-selected="false">🏭 Órdenes de Compra Almacén <span class="contador" id="pestana-almacen-n">0</span></button>
       <button type="button" class="pestana pestana--entradas" role="tab" id="pestana-entradas" aria-controls="pizarron-entradas" aria-selected="false">📦 Entradas de Almacén <span class="contador" id="pestana-entradas-n">0</span></button>
     </div>
     <section class="ordenes" id="pizarron-ordenes" role="tabpanel" aria-labelledby="pestana-ordenes">
@@ -186,6 +187,23 @@
         <div class="ordenes__lista"></div>
       </div>
     </section>
+    <section class="ordenes" id="pizarron-almacen" role="tabpanel" aria-labelledby="pestana-almacen" hidden>
+      <div class="columna" data-orden-estado="aprobada">
+        <header><h2>Aprobadas</h2><span class="contador">0</span></header>
+        <div class="ordenes__lista"></div>
+      </div>
+      <div class="columna" data-orden-estado="surtida">
+        <header><h2>Surtidas</h2><span class="contador">0</span></header>
+        <div class="ordenes__lista"></div>
+      </div>
+      <div class="columna" data-orden-estado="cancelada">
+        <header><h2>Canceladas</h2><span class="contador">0</span></header>
+        <div class="ordenes__lista"></div>
+      </div>
+    </section>
+    <div class="entradas-imprimir" id="pizarron-entradas-barra" hidden>
+      <a class="btn btn--secundario" href="/entradas.html" target="_blank" rel="noopener">🖨 PDF / Imprimir reporte</a>
+    </div>
     <section class="tablero-entradas" id="pizarron-entradas" role="tabpanel" aria-labelledby="pestana-entradas" hidden></section>
   </dialog>
 
@@ -285,13 +303,26 @@
     </div>
 
     <div class="panel__funcion" data-funcion="octavio" hidden>
-      <div id="ordenes-espera" class="autorizar" hidden>
-        <h3>📥 Órdenes por aprobar</h3>
+      <details id="ordenes-espera" class="autorizar plegable" hidden>
+        <summary><h3>📥 Órdenes por aprobar <span id="ordenes-espera-n" class="contador">0</span></h3></summary>
         <ul id="ordenes-espera-lista" class="ordenes-espera"></ul>
-      </div>
+      </details>
       <button type="button" class="btn" data-objeto="ordenes">🧾 Abrir Pizarrón de Octavio</button>
-      <section class="captura captura--campos entradas" aria-labelledby="entradas-titulo">
-        <h2 id="entradas-titulo">📦 Entradas de Almacén</h2>
+      <details class="captura captura--campos entradas plegable">
+        <summary><h2 id="orden-nueva-titulo">🧾 Órdenes de Compra</h2></summary>
+        <p class="captura__ayuda">Sin folio: toma el siguiente OC. Queda Aprobada en "Órdenes de Compra Almacén" del pizarrón. No se le manda nada a nadie.</p>
+        <form id="form-orden-nueva" autocomplete="off">
+          <div class="editar__datos">
+            <label class="campo">Solicita <input name="solicitante" required placeholder="ALMACÉN"></label>
+            <label class="campo editar__ancho">Nota <input name="nota" placeholder="opcional: proveedor, para cuándo…"></label>
+          </div>
+          <div id="orden-nueva-articulos"></div>
+          <button type="button" class="btn btn--secundario captura__agregar" data-agregar>＋ Agregar artículo</button>
+          <button type="submit" class="btn btn--ruta captura__guardar">Crear orden ✔</button>
+        </form>
+      </details>
+      <details class="captura captura--campos entradas plegable">
+        <summary><h2 id="entradas-titulo">📦 Entradas de Almacén</h2></summary>
         <p class="captura__ayuda">Es sólo un registro: no descuenta ni suma a ningún inventario.</p>
         <form id="form-entrada" autocomplete="off">
           <div class="editar__datos">
@@ -302,12 +333,13 @@
           <div id="entrada-articulos"></div>
           <button type="button" class="btn btn--secundario captura__agregar" data-agregar>＋ Agregar artículo</button>
           <button type="submit" class="btn btn--ruta captura__guardar">Registrar entrada ✔</button>
+          <a class="btn btn--secundario entradas-imprimir__boton" href="/entradas.html" target="_blank" rel="noopener">🖨 PDF / Imprimir reporte</a>
         </form>
-        <details class="inspector__recientes" open>
+        <details class="inspector__recientes plegable">
           <summary>Últimas entradas</summary>
           <ul id="entradas-lista"></ul>
         </details>
-      </section>
+      </details>
     </div>
 
     <section id="panel-conversacion" class="panel__conversacion cerrada" aria-label="Conversación">

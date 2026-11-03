@@ -163,6 +163,8 @@ Si WhatsApp está desconectado, la orden no se aprueba: la alerta sigue abierta 
 
 **Entradas de Almacén**, en el panel de Octavio, se capturan como una nota: proveedor, folio o factura (obligatorio), nota opcional y los renglones que hagan falta, con las mismas abreviaturas (B = BOLSAS, CB = CON BOLSA). También salen en la pestaña **Entradas de Almacén** del pizarrón, con tarjetas naranjas para no confundirlas con las órdenes, que van en azul. En cualquiera de los dos lugares, **✎ Editar** corrige cualquier dato de una entrada ya guardada; no queda registro de lo que tenía antes. Es sólo un registro manual: no suma ni descuenta inventario, porque el sistema no lleva inventario.
 
+**Órdenes de Compra Almacén:** en el panel de Octavio, la sección "🧾 Órdenes de Compra" captura una orden a mano con varios artículos, sin folio (toma el siguiente OC-n). Queda Aprobada en la pestaña "Órdenes de Compra Almacén" del pizarrón, con las mismas columnas (Aprobadas, Surtidas, Canceladas), y no se le manda nada a nadie. Una orden de WhatsApp a la que se le cambie la sucursal a "Almacén" al editarla también pasa a esa pestaña. Las secciones del panel de Octavio empiezan cerradas cada vez que se abre.
+
 ### Reporte semanal
 
 Botón **📊 Reporte semanal** arriba (`public/reporte.html`, `repositories/reporte.repo.js`). La semana va del **lunes 08:00 al cierre del sábado** (antes del domingo 00:00); se elige con cualquier día de ella, y se puede imprimir.
@@ -192,6 +194,10 @@ Botón **📊 Reporte semanal** arriba (`public/reporte.html`, `repositories/rep
 - **Solo lectura:** cada agente consulta la base con una conexión de solo lectura y únicamente las tablas de su área (`src/integraciones/agentes/agentes.js`, `AGENTES`). Se rechazan escrituras, varias consultas juntas y tablas de otra área. Si la pregunta no es de su área, dice a qué agente le toca.
 - **Memoria:** "recuerda que…" se guarda en `agentes_memoria` y se le da al agente en cada pregunta. Para borrar un recuerdo, por ahora se borra en esa tabla.
 - **Privacidad:** la pregunta y los datos que consulta el agente se envían a Anthropic para responder.
+
+### Avisos a tu celular
+
+Si WhatsApp lleva más de 10 minutos sin conectar (`AVISOS_MINUTOS`), llega una notificación a la app gratis **ntfy** del celular, y otra cuando vuelve; los cortes cortos que se arreglan solos no avisan. Sólo dice qué se cayó, nunca datos de clientes. Si la Oficina o la PC se apagan, no pueden avisar solas: cada 5 minutos la Oficina "late" a healthchecks.io y, si deja de latir, ese servicio te avisa. Las dos cosas son opcionales: `AVISOS_NTFY` y `AVISOS_LATIDO_URL` en `.env` (ver `.env.example`). Código en `src/integraciones/avisos-celular.js`.
 
 ## Pulpos (robot)
 

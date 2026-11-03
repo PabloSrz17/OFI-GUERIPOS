@@ -14,6 +14,9 @@ const ESTADOS_PIZARRON = ['aprobada', 'surtida', 'cancelada'];
 const stmts = {
   crear: db.prepare('INSERT INTO ordenes_compra (clave, telefono, solicitante, mensaje, foto, original, renglones) VALUES (@clave, @telefono, @solicitante, @mensaje, @foto, @renglones, @renglones)'),
   porId: db.prepare('SELECT * FROM ordenes_compra WHERE id = ?'),
+  // Capturada a mano en la Oficina: la aprobó quien la escribe, no se le contesta a nadie.
+  crearManual: db.prepare(`INSERT INTO ordenes_compra (clave, solicitante, sucursal, original, renglones, nota, estado, aprobada_en)
+    VALUES ('oficina', @solicitante, @sucursal, @renglones, @renglones, @nota, 'aprobada', datetime('now', 'localtime'))`),
   abierta: db.prepare(`SELECT * FROM ordenes_compra WHERE clave = ? AND estado = 'por_aprobar' AND actualizado_en >= ${VENTANA} ORDER BY id DESC`),
   sumar: db.prepare(`UPDATE ordenes_compra SET mensaje = @mensaje, foto = @foto, original = @renglones, renglones = @renglones,
     actualizado_en = datetime('now', 'localtime') WHERE id = @id AND estado = 'por_aprobar'`),
@@ -33,6 +36,8 @@ const stmts = {
   entrada: db.prepare('INSERT INTO entradas_almacen (proveedor, folio, nota, renglones) VALUES (@proveedor, @folio, @nota, @renglones)'),
   editarEntrada: db.prepare('UPDATE entradas_almacen SET proveedor = @proveedor, folio = @folio, nota = @nota, renglones = @renglones WHERE id = @id'),
   entradas: db.prepare('SELECT * FROM entradas_almacen ORDER BY id DESC LIMIT 50'),
+  // Para la hoja impresa: de la más vieja a la más nueva, como se anotan en la libreta.
+  entradasEntre: db.prepare('SELECT * FROM entradas_almacen WHERE date(creado_en) BETWEEN ? AND ? ORDER BY creado_en, id'),
 };
 
 const conDatos = (o) => o && { ...o, folio: `OC-${o.id}`, original: JSON.parse(o.original), renglones: JSON.parse(o.renglones) };
@@ -187,6 +192,20 @@ function eliminar(id) {
   return hecho;
 }
 
+// Orden de compra capturada en el panel de Octavio. Sin folio que escribir: el folio es OC-n.
+function crearManual({ solicitante, sucursal = 'Almacén', nota, renglones }) {
+  const quien = String(solicitante ?? '').trim().toUpperCase();
+  if (!quien) throw new Error('Falta quién la solicita');
+  const id = stmts.crearManual.run({
+    solicitante: quien,
+    sucursal: String(sucursal ?? '').trim() || 'Almacén',
+    nota: String(nota ?? '').trim() || null,
+    renglones: JSON.stringify(validarRenglones(renglones)),
+  }).lastInsertRowid;
+  avisar();
+  return obtener(id);
+}
+
 // Un renglón a medias detiene todo: lo que entró a bodega no se pierde en silencio.
 function renglonesDeEntrada(lista) {
   const renglones = (Array.isArray(lista) ? lista : [])
@@ -238,11 +257,13 @@ module.exports = {
   mover,
   descartar,
   eliminar,
+  crearManual,
   obtener,
   registrarEntrada,
   editarEntrada,
   listar: () => stmts.listar.all().map(conDatos),
   entradas: () => stmts.entradas.all().map((e) => ({ ...e, renglones: JSON.parse(e.renglones) })),
+  entradasEntre: (desde, hasta) => stmts.entradasEntre.all(desde, hasta).map((e) => ({ ...e, renglones: JSON.parse(e.renglones) })),
   porAprobar: () => stmts.porAprobar.get().n,
   porSurtir: () => stmts.porSurtir.get().n,
 };
