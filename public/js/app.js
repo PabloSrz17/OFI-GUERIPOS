@@ -315,6 +315,19 @@ $('#ventana-notas').addEventListener('change', async (e) => {
   }
 });
 
+// Viaje desde Notas pendientes: misma ruta que al arrastrar en el corcho.
+$('#ventana-notas').addEventListener('change', async (e) => {
+  const select = e.target.closest('select[data-accion="viaje"]');
+  if (!select) return;
+  try {
+    await api.patch(`/api/notas/${select.dataset.id}/viaje`, { camion_id: Number(select.dataset.camion), viaje: Number(select.value) });
+    select.blur();
+    await refrescar();
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
 // Tiempo real: el servidor avisa cuando cambia el tablero o el pizarrón (EventSource se reconecta solo).
 function escucharEventos() {
   const eventos = new EventSource('/api/eventos');

@@ -62,6 +62,25 @@ function hora(fecha) {
   return esHoy ? tiempo.slice(0, 5) : `${d}/${m} ${tiempo.slice(0, 5)}`;
 }
 
+// Igual que en los corchos: unidad, número de viaje y chofer de cada nota.
+const VIAJES = ['1er', '2do', '3er', '4to', '5to'];
+const viajeDe = (n) => Math.min(Math.max(Number(n.viaje) || 1, 1), VIAJES.length);
+
+function logistica(nota) {
+  if (nota.es_almacen) return '';
+  if (!nota.camion_id) return `<div class="logistica logistica--falta">🚚 Sin unidad ni viaje${nota.chofer ? ` · 👷 ${esc(nota.chofer)}` : ''}</div>`;
+  return `<div class="logistica">🚚 <b>${esc(nota.camion)}</b> · <b>${VIAJES[viajeDe(nota) - 1]} viaje</b> · 👷 ${nota.chofer ? esc(nota.chofer) : 'Sin chofer'}</div>`;
+}
+
+function selectorViaje(nota) {
+  return `
+    <label class="campo">Viaje
+      <select data-accion="viaje" data-id="${nota.id}" data-camion="${nota.camion_id}">
+        ${VIAJES.map((v, k) => `<option value="${k + 1}" ${viajeDe(nota) === k + 1 ? 'selected' : ''}>${v}</option>`).join('')}
+      </select>
+    </label>`;
+}
+
 // campo: 'chofer' | 'camion'. Se eligen por separado: no siempre va el mismo chofer en el mismo camión.
 export function selector(nota, campo, opciones) {
   const actual = nota[`${campo}_id`];
@@ -96,8 +115,8 @@ function tarjeta(nota, { choferes, camiones }) {
   const faltaAsignar = !nota.chofer_id || (!nota.camion_id && !nota.es_almacen);
   const almacenHtml = nota.es_almacen ? '<div class="recoge-almacen">🏬 Recoge en almacén</div>' : '';
   const choferHtml = esSaldo ? '' : CHOFER_EDITABLE.includes(nota.estado)
-    ? `<div class="asignacion">${selector(nota, 'chofer', choferes)}${nota.es_almacen ? '' : selector(nota, 'camion', camiones)}</div>${almacenHtml}`
-    : almacenHtml || `<div class="dato">🚚 ${esc(nota.chofer)}${nota.camion ? ` · ${esc(nota.camion)}` : ''}</div>`;
+    ? `<div class="asignacion">${selector(nota, 'chofer', choferes)}${nota.es_almacen ? '' : selector(nota, 'camion', camiones)}${!nota.es_almacen && nota.camion_id ? selectorViaje(nota) : ''}</div>${almacenHtml}`
+    : almacenHtml;
   const bloqueo = CHOFER_EDITABLE.includes(nota.estado) && faltaAsignar
     ? 'Elige chofer y camión, o ALMACÉN'
     : accion?.siguiente === 'en_ruta' && faltaDireccion(nota) ? 'Falta la dirección de entrega' : '';
@@ -129,6 +148,7 @@ function tarjeta(nota, { choferes, camiones }) {
         <span class="hora" title="Hora de la venta">${hora(nota.creado_en)}</span>
       </div>
       <div class="cliente">${esc(nota.cliente)}</div>
+      ${esSaldo ? '' : logistica(nota)}
       ${nota.cliente_telefono ? `<div class="dato">📱 ${formatear(nota.cliente_telefono)}</div>` : ''}
       <div class="auditoria">
         ${miniaturaFoto(nota.foto)}
@@ -154,7 +174,10 @@ function tarjeta(nota, { choferes, camiones }) {
 // catalogos: { choferes, camiones }
 export function renderKanban(tablero, notas, catalogos) {
   for (const columna of tablero.querySelectorAll('.columna')) {
-    const lista = notas.filter((n) => (n.saldo ? 'saldo' : n.estado) === columna.dataset.estado);
+    // Ordenadas como el corcho: por unidad (orden de la lista de camiones), luego por viaje; sin unidad al final.
+    const orden = (n) => (n.camion_id ? catalogos.camiones.findIndex((c) => c.id === n.camion_id) : 999);
+    const lista = notas.filter((n) => (n.saldo ? 'saldo' : n.estado) === columna.dataset.estado)
+      .sort((a, b) => orden(a) - orden(b) || viajeDe(a) - viajeDe(b) || a.id - b.id);
     columna.querySelector('.contador').textContent = lista.length;
     columna.querySelector('.columna__lista').innerHTML = lista.length
       ? lista.map((n) => tarjeta(n, catalogos)).join('')

@@ -66,11 +66,17 @@
         <button type="button" class="pestana" role="tab" id="pestana-corcho" data-pestana="corcho" aria-controls="vista-corcho" aria-selected="true">🚚 Reparto del día</button>
         <button type="button" class="pestana" role="tab" id="pestana-manana" data-pestana="manana" aria-controls="vista-manana" aria-selected="false">⏰ Reparto de mañana <span class="contador" id="pestana-manana-n">0</span></button>
         <button type="button" class="pestana" role="tab" id="pestana-futuras" data-pestana="futuras" aria-controls="vista-futuras" aria-selected="false">🗓 Por Confirmar · Otro día <span class="contador" id="pestana-futuras-n">0</span></button>
-        <button type="button" class="pestana" role="tab" id="pestana-notas" data-pestana="notas" aria-controls="vista-notas" aria-selected="false">📦 Notas pendientes <span class="contador" id="pestana-notas-n">0</span></button>
       </div>
       <button type="button" class="btn btn--secundario ventana__historial" data-ver-historial hidden>📚 Historial</button>
       <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
     </header>
+
+    <!-- Reparto del día en dos formatos: corchos por unidad o bandejas por estado (las mismas notas). -->
+    <div class="formato-dia" id="formato-dia" role="group" aria-label="Mismas notas / Otro formato">
+      <span class="formato-dia__leyenda">Mismas notas / Otro formato:</span>
+      <button type="button" class="formato-dia__opcion" data-formato="corcho" aria-pressed="true">📌 Corchos por unidad</button>
+      <button type="button" class="formato-dia__opcion" data-formato="notas" aria-pressed="false">📋 Notas pendientes</button>
+    </div>
 
     <div class="operacion__vista" id="vista-corcho" role="tabpanel" aria-labelledby="pestana-corcho">
       <p class="corcho__ayuda"><b id="corcho-fecha"></b> · Arrastra una nota a otro viaje o a otra unidad: se guarda al soltarla.</p>
@@ -92,7 +98,7 @@
       <div id="futuras-contenido" class="corcho corcho--futuras"></div>
     </div>
 
-    <div class="operacion__vista" id="vista-notas" role="tabpanel" aria-labelledby="pestana-notas" hidden>
+    <div class="operacion__vista" id="vista-notas" role="tabpanel" aria-labelledby="pestana-corcho" hidden>
     <section id="tablero" class="kanban" aria-label="Tablero logístico">
       <div class="columna" data-estado="saldo">
         <header><h2>Saldos Pendientes</h2><span class="contador">0</span></header>

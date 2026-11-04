@@ -185,9 +185,16 @@ async function cambiarUnidad(id, columna, viaje) {
 
 // Pestañas exclusivas: sólo una vista a la vez, a pantalla completa.
 let activa = 'corcho';
+let formatoDia = 'corcho'; // 'corcho' | 'notas': el último que eligieron en Reparto del día
 function mostrar(pestana) {
+  if (pestana === 'corcho' || pestana === 'notas') {
+    if (pestana === 'corcho') pestana = formatoDia; // la pestaña abre el formato que estaban usando
+  }
   activa = pestana;
-  document.querySelectorAll('#ventana-notas [data-pestana]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.pestana === pestana)));
+  const delDia = pestana === 'corcho' || pestana === 'notas';
+  document.querySelectorAll('#ventana-notas [data-pestana]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.pestana === (delDia ? 'corcho' : pestana))));
+  $('#formato-dia').hidden = !delDia;
+  document.querySelectorAll('#formato-dia [data-formato]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.formato === pestana)));
   document.querySelectorAll('#ventana-notas .operacion__vista').forEach((v) => { v.hidden = v.id !== `vista-${pestana}`; });
   $('#ventana-notas [data-ver-historial]').hidden = pestana !== 'notas';
   if (pestana === 'corcho') pintarDia();
@@ -201,6 +208,11 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
   ventana.addEventListener('click', (e) => {
     const p = e.target.closest('[data-pestana]');
     if (p) mostrar(p.dataset.pestana);
+    const f = e.target.closest('[data-formato]');
+    if (f) {
+      formatoDia = f.dataset.formato;
+      mostrar(formatoDia);
+    }
   });
 
   // Arrastrar: en el corcho de hoy y en el de mañana (acomodar con anticipación).
@@ -270,7 +282,6 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
 export function recargarCorcho(notas) {
   notasDelDia = notas;
   if (!ctx) return;
-  $('#pestana-notas-n').textContent = notas.filter((n) => n.estado !== 'entregado').length;
   const abierta = $('#ventana-notas').open;
   const eligiendo = $('#corcho-contenido').contains(document.activeElement) && document.activeElement.tagName === 'SELECT';
   if (abierta && activa === 'corcho' && !arrastrada && !eligiendo) pintarDia();
