@@ -31,10 +31,11 @@ export function montarCierre({ notasActuales, alCerrar, toast }) {
     dialogo.showModal();
   };
 
-  const verResultado = ({ archivadas, conservadas: c, respaldo }) => {
+  const verResultado = ({ archivadas, deManana, conservadas: c, respaldo }) => {
     titulo.textContent = '✅ Jornada cerrada';
     resumen.innerHTML = `
       <div>📚 ${plural(archivadas, 'nota pasó', 'notas pasaron')} al historial</div>
+      ${deManana ? `<div>🚚 ${plural(deManana, 'nota de mañana pasó', 'notas de mañana pasaron')} al Reparto del día</div>` : ''}
       <div>📌 Listo para mañana: <b>${c.saldos}</b> en Saldos, <b>${c.pendiente}</b> en Pendiente, <b>${c.cargando}</b> en Cargando y <b>${c.enRuta}</b> en Ruta</div>
       ${respaldo ? `<div>💾 Respaldo guardado: ${esc(respaldo)}</div>` : ''}`;
     aviso.textContent = respaldo ? '' : '⚠️ El cierre se hizo, pero el respaldo falló. Avísale a quien da soporte.';

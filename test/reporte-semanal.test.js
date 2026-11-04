@@ -9,6 +9,8 @@ process.env.DB_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'oficina-p
 
 const db = require('../src/db/connection');
 const reporte = require('../src/repositories/reporte.repo');
+// Viajes de Edgar sin la parte de combustible (tiene su propia prueba).
+const viajesEdgar = (dia) => { const { combustible, entregas, ...resto } = reporte.generar(dia).edgar; return resto; };
 
 // Semana de prueba: lunes 26 de octubre 08:00 al cierre del sábado 31 de octubre de 2026.
 const cliente = db.prepare("INSERT INTO clientes (nombre) VALUES ('CLIENTE REPORTE')").run().lastInsertRowid;
@@ -56,7 +58,11 @@ test('Octavio: órdenes sin las descartadas y entradas de la semana', () => {
   const entrada = db.prepare("INSERT INTO entradas_almacen (folio, renglones, creado_en) VALUES ('F1', '[]', ?)");
   entrada.run('2026-10-31 18:00:00');
   entrada.run('2026-10-25 18:00:00');
-  assert.deepEqual(reporte.generar('2026-10-28').octavio, { ordenes: 2, entradas: 1 });
+  const { ordenes, entradas, lista_ordenes, lista_entradas } = reporte.generar('2026-10-28').octavio;
+  assert.deepEqual({ ordenes, entradas }, { ordenes: 2, entradas: 1 });
+  assert.equal(lista_ordenes.length, 2); // la descartada no sale
+  assert.equal(lista_entradas.length, 1);
+  assert.ok(Array.isArray(lista_ordenes[0].renglones));
 });
 
 test('Edgar: entregas de la semana por chofer y unidad, sin las regresadas', () => {
@@ -71,7 +77,7 @@ test('Edgar: entregas de la semana por chofer y unidad, sin las regresadas', () 
   nota({ chofer_id: jose, camion_id: ram, entregas: ['2026-10-30 10:00:00', '2026-11-02 10:00:00'] }); // última: otra semana
   nota({ chofer_id: jose, camion_id: dina, estado: 'en_ruta', entregas: ['2026-10-29 10:00:00'] }); // la regresaron
   nota({ chofer_id: jose, camion_id: dina, entregas: ['2026-10-24 10:00:00'] });
-  assert.deepEqual(reporte.generar('2026-10-28').edgar, {
+  assert.deepEqual(viajesEdgar('2026-10-28'), {
     despachados: 4,
     viajes: [
       { chofer: 'Darío', unidad: 'Ram 4000', viajes: 2 },
@@ -103,7 +109,7 @@ test('Edgar: notas del mismo chofer y unidad que salen con 20 minutos o menos en
   nota({ chofer_id: luis, camion_id: ram, entregas: entrega, salio: '2026-11-10 10:20:00' }); // justo 20 min: mismo viaje
   nota({ chofer_id: luis, camion_id: dina, entregas: entrega, salio: '2026-11-10 09:05:00' }); // otra unidad: otro viaje
   nota({ chofer_id: luis, camion_id: ram, entregas: ['2026-11-11 12:00:00'] }); // sin "En ruta": cuenta su hora de entrega
-  assert.deepEqual(reporte.generar('2026-11-10').edgar, {
+  assert.deepEqual(viajesEdgar('2026-11-10'), {
     despachados: 4,
     viajes: [
       { chofer: 'Luis', unidad: 'Ram 2000', viajes: 3 },
@@ -114,4 +120,24 @@ test('Edgar: notas del mismo chofer y unidad que salen con 20 minutos o menos en
     { chofer: 'Luis', unidad: 'Ram 2000', viajes: 2 },
     { chofer: 'Luis', unidad: 'Dina 2', viajes: 1 },
   ]);
+});
+
+test('reporte semanal de Edgar: gasto, litros y cargas de combustible por unidad', () => {
+  const cargar = (unidad, importe, litros, concepto, creado_en) => db.prepare(
+    "INSERT INTO combustible (unidad, importe, concepto, litros, reporto, mensaje, creado_en) VALUES (?, ?, ?, ?, 'Edgar', '', ?)",
+  ).run(unidad, importe, concepto, litros, creado_en);
+  cargar('TORTON', 1500, 60, 'diesel', '2026-11-17 09:00:00');
+  cargar('TORTON', 1000, 40, 'diesel', '2026-11-19 09:00:00');
+  cargar('RAM', 600, null, 'gasolina', '2026-11-18 12:00:00');
+  cargar('RAM', 999, 30, 'gasolina', '2026-11-16 07:59:00'); // antes del lunes 08:00: semana anterior
+  const g = reporte.generar('2026-11-18').edgar.combustible;
+  assert.equal(g.importe, 3100);
+  assert.equal(g.litros, 100);
+  assert.equal(g.sin_litros, 1);
+  assert.equal(g.cargas.length, 3);
+  assert.deepEqual(g.por_unidad, [
+    { unidad: 'TORTON', cargas: 2, importe: 2500, litros: 100 },
+    { unidad: 'RAM', cargas: 1, importe: 600, litros: 0 },
+  ]);
+  assert.equal(g.cargas[0].reporto, 'Edgar');
 });

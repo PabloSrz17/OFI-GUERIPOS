@@ -9,8 +9,6 @@ process.env.DB_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'oficina-p
 
 const notas = require('../src/repositories/notas.repo');
 const importador = require('../src/integraciones/importador');
-const avisos = require('../src/integraciones/avisos-celular');
-const avisoManana = require('../src/integraciones/aviso-manana');
 
 let folio = 0;
 const nueva = () => importador.registrar({
@@ -44,22 +42,6 @@ test('sólo se programa una nota pendiente y para mañana en adelante', () => {
   assert.throws(() => notas.programar(id, dia(2)), /pendiente/);
 });
 
-test('aviso "Esta nota es para mañana": una vez al día, desde las 8, sólo folios', async () => {
-  const { id, folio: f } = nueva();
-  notas.programar(id, dia(1));
-  assert.deepEqual(notas.foliosParaManana(), [f]);
-  avisos.config.ntfy = 'https://ntfy.invalid/tema';
-  const enviados = [];
-  const enviar = async (url, op) => enviados.push(op.body);
-  const temprano = new Date(); temprano.setHours(7, 0, 0, 0);
-  const tarde = new Date(); tarde.setHours(9, 0, 0, 0);
-  assert.equal(await avisoManana.revisar(temprano, enviar), null);
-  assert.deepEqual(await avisoManana.revisar(tarde, enviar), [f]);
-  assert.equal(await avisoManana.revisar(tarde, enviar), null); // ya se avisó hoy
-  assert.equal(enviados.length, 1);
-  assert.match(enviados[0], new RegExp(`Esta nota es para mañana: ${f}$`));
-});
-
 test('corcho: soltar en un viaje guarda camión y número de viaje; sin unidad lo borra', () => {
   const { id } = nueva();
   const camion = require('../src/db/connection').prepare("INSERT INTO camiones (nombre) VALUES ('Nissan Prueba')").run().lastInsertRowid;
@@ -80,4 +62,21 @@ test('"Él avisa": sale del tablero sin fecha fija y no dispara el aviso de mañ
   assert.ok(notas.listarProgramadas().some((x) => x.id === id));
   assert.ok(!notas.foliosParaManana().includes(n.folio));
   notas.programar(id, null);
+});
+
+test('cierre de jornada: el Reparto de mañana pasa al del día con su camión y viaje', () => {
+  const { id } = nueva();
+  const otra = nueva();
+  const camion = require('../src/db/connection').prepare("INSERT INTO camiones (nombre) VALUES ('Nissan Cierre')").run().lastInsertRowid;
+  notas.programar(id, dia(1));
+  notas.ponerViaje(id, camion, 3);
+  notas.programar(otra.id, dia(4));
+  const r = notas.cerrarJornada();
+  assert.ok(r.deManana >= 1);
+  const n = notas.listarTablero().find((x) => x.id === id);
+  assert.ok(n, 'debe verse hoy');
+  assert.equal(n.camion_id, camion);
+  assert.equal(n.viaje, 3);
+  assert.ok(notas.listarProgramadas().some((x) => x.id === otra.id)); // la de otro día se queda
+  notas.programar(otra.id, null);
 });

@@ -65,7 +65,8 @@ test('la etiqueta se elige a mano y queda guardada; manda sobre el folio', async
   assert.equal(et({ origen: 'sicar', folio: 'N500' }), 'SALIDA');
   assert.equal(et({ origen: 'sicar', folio: '33219', etiqueta: 'SALIDA' }), 'SALIDA');
   assert.equal(et({ origen: 'sicar', folio: 'N500', etiqueta: 'SC' }), 'SC');
-  assert.equal(et({ origen: 'pulpos', folio: 'N500', etiqueta: 'SALIDA' }), 'PS');
+  assert.equal(et({ origen: 'pulpos', folio: 'N500', etiqueta: 'SALIDA' }), 'SALIDA'); // marcada a mano, p. ej. tras un parcial
+  assert.equal(et({ origen: 'pulpos', folio: 'N500', etiqueta: null }), 'PS');
 
   const cliente_id = clientes.obtenerOCrear({ nombre: 'ETIQUETA' });
   const nota = notas.crear({ origen: 'sicar', cliente_id, folio: 'E1', material: 'GRAVA', cantidad: 1, direccion: 'Centro', etiqueta: 'SALIDA' });

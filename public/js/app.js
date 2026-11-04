@@ -12,6 +12,7 @@ import { montarInspector, recargarSolicitudes } from './inspector.js';
 import { montarOctavio, recargarOctavio } from './octavio.js';
 import { montarArchiveros } from './archiveros.js';
 import { montarCorcho, recargarCorcho } from './corcho.js';
+import { montarProgramarNueva, revisarNuevas } from './programar-nueva.js';
 import { normalizar, formatear } from './telefono.js';
 
 const INTERVALO_MS = 60000; // respaldo; los cambios llegan al instante por /api/eventos
@@ -46,7 +47,8 @@ function setConexion(ok) {
 async function refrescar() {
   // No re-renderizar mientras alguien está eligiendo chofer o arrastrando una tarjeta.
   if (arrastrando) return;
-  if (tablero.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+  // (en el tablero o en el corcho: los dos están en la ventana de reparto)
+  if ($('#ventana-notas').contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
   try {
     const [notas, resumen] = await Promise.all([api.get('/api/notas'), api.get('/api/resumen')]);
     // Notas que acaban de salir de Cargando a En Ruta (aquí o desde otro equipo): sale el camión.
@@ -57,6 +59,7 @@ async function refrescar() {
     notasActuales = notas;
     renderKanban(tablero, notas, catalogos);
     recargarCorcho(notas);
+    revisarNuevas(notas);
     pintarSinDireccion(notas);
     actualizarOficina(resumen, notas);
     actualizarFlota(resumen.camiones);
@@ -165,8 +168,8 @@ tablero.addEventListener('click', async (e) => {
   if (!(await mover(nota, destino))) btn.disabled = false;
 });
 
-// Clic en la etiqueta: cambia entre SC y SALIDA.
-tablero.addEventListener('click', async (e) => {
+// Clic en la etiqueta: cambia a SALIDA y de regreso (SC o la de su origen).
+$('#ventana-notas').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-accion="etiqueta"]');
   if (!btn) return;
   btn.disabled = true;
@@ -204,7 +207,8 @@ $('#otro-dia').addEventListener('click', (e) => {
   const rapido = e.target.closest('[data-dias]');
   if (rapido) $('#otro-dia-fecha').value = diaLocal(Number(rapido.dataset.dias));
 });
-tablero.addEventListener('click', async (e) => {
+// Tarjetas del tablero y del corcho.
+$('#ventana-notas').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-accion="otro-dia"]');
   if (!btn) return;
   const nota = notaPorId(btn.dataset.id);
@@ -231,7 +235,7 @@ tablero.addEventListener('click', async (e) => {
 // ✕ de cada tarjeta: pide confirmación antes de borrar.
 async function confirmarCancelacion(nota) {
   const dialogo = $('#cancelar-nota');
-  $('#cancelar-resumen').innerHTML = `<div>¿Estás seguro de cancelar la nota <b>${esc(nota.folio)} · ${esc(nota.cliente)}</b>?</div>`;
+  $('#cancelar-resumen').innerHTML = `<div>¿Seguro que quieres eliminar la nota <b>${esc(nota.folio)} · ${esc(nota.cliente)}</b>? No se puede deshacer.</div>`;
   $('#cancelar-aviso').textContent = nota.estado === 'entregado'
     ? 'Ya se entregó: su renglón también se borra de la hoja de reparto.'
     : nota.estado === 'en_ruta' ? 'Ya va en ruta y el cliente pudo recibir el aviso por WhatsApp.' : '';
@@ -242,14 +246,16 @@ async function confirmarCancelacion(nota) {
   });
 }
 
-tablero.addEventListener('click', async (e) => {
+// En el tablero y en los corchos (las de mañana u otro día no vienen en el tablero: se buscan aparte).
+$('#ventana-notas').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-accion="cancelar"]');
   if (!btn) return;
-  const nota = notaPorId(btn.dataset.id);
-  if (!(await confirmarCancelacion(nota))) return;
+  const nota = notaPorId(btn.dataset.id)
+    ?? (await api.get('/api/notas/programadas').catch(() => [])).find((n) => String(n.id) === btn.dataset.id);
+  if (!nota || !(await confirmarCancelacion(nota))) return;
   try {
     await api.delete(`/api/notas/${nota.id}`);
-    toast(`${nota.folio} cancelada`);
+    toast(`${nota.folio} eliminada`);
     await refrescar();
   } catch (err) {
     toast(err.message, true);
@@ -295,7 +301,8 @@ tablero.addEventListener('drop', async (e) => {
   await mover(nota, col.dataset.estado);
 });
 
-tablero.addEventListener('change', async (e) => {
+// Chofer y camión: en el tablero y en las tarjetas del corcho.
+$('#ventana-notas').addEventListener('change', async (e) => {
   const select = e.target.closest('select[data-accion="chofer"], select[data-accion="camion"]');
   if (!select) return;
   const campo = select.dataset.accion;
@@ -342,7 +349,8 @@ async function iniciar() {
   montarInspector({ toast, alAprobar: refrescar });
   montarOctavio({ toast, alCambiar: refrescar });
   montarArchiveros();
-  montarCorcho({ catalogos, toast });
+  montarProgramarNueva({ catalogos, toast });
+  montarCorcho({ catalogos, toast, avanzar: (id) => { const n = notaPorId(id); return n ? mover(n, siguienteDe(n)) : false; } });
   reloj();
   setInterval(reloj, 30000);
   try {

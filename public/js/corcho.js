@@ -1,17 +1,19 @@
 // Corchos de Edgar: (1) programación del día por unidad, (2) notas para otro día.
 // Las notas programadas no salen en el tablero ni en el corcho del día hasta su fecha (lo filtra el servidor).
 import { api } from './api.js';
+import { renglones, selector, botonEtiqueta } from './kanban.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const NOMBRE_ESTADO = { pendiente: 'Pendiente', cargando: 'Cargando', en_ruta: 'En Ruta' };
+const NOMBRE_ESTADO = { pendiente: 'Pendiente', cargando: 'Cargando', en_ruta: 'En Ruta', entregado: 'Entregado ✓' };
 
-// Columnas fijas; lo que no es de estas cuatro (sin camión, Almacén, Torton…) va en la última.
-const UNIDADES = [
+// Columnas fijas; lo que no es de estas cinco (sin camión, Almacén…) va en la última.
+export const UNIDADES = [
   { nombre: 'Nissan Blanca', es: /nissan\s*blanca/i },
   { nombre: 'Nissan Roja', es: /nissan\s*roja/i },
   { nombre: 'RAM', es: /^ram\b/i },
   { nombre: 'Ford F450', es: /f\s*-?\s*450/i },
+  { nombre: 'Torton', es: /torton/i },
 ];
 const OTRAS = 'Sin unidad u otras';
 const EL_AVISA = '9999-12-31'; // "Él avisa": sin día fijo (notas.repo.js)
@@ -19,7 +21,7 @@ const VIAJES = ['1er', '2do', '3er', '4to', '5to'];
 // Notas con camión pero sin viaje anotado (asignadas desde el tablero) se ven en el 1er viaje.
 const viajeDe = (n) => Math.min(Math.max(Number(n.viaje) || 1, 1), VIAJES.length);
 
-const dia = (desplazar = 0) => {
+export const dia = (desplazar = 0) => {
   const d = new Date();
   d.setDate(d.getDate() + desplazar);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -35,59 +37,103 @@ function columnaDe(nota) {
   return UNIDADES.find((u) => u.es.test(nota.camion ?? ''))?.nombre ?? OTRAS;
 }
 
-function tarjeta(n, { manana = false, futura = false } = {}) {
-  const mover = !futura && !n.es_almacen && ['pendiente', 'cargando'].includes(n.estado);
+// Mismo paso que en Notas pendientes (y misma confirmación antes de salir a ruta).
+function botonEstatus(n) {
+  const texto = n.estado === 'pendiente' ? 'Empezar a cargar ▶'
+    : n.estado === 'cargando' ? (n.es_almacen ? 'Marcar entregado ✓' : 'Enviar a ruta ▶')
+      : n.estado === 'en_ruta' ? 'Marcar entregado ✓' : '';
+  return texto ? `<button type="button" class="btn corcho__avanzar corcho__avanzar--${n.estado}" data-avanzar>${texto}</button>` : '';
+}
+
+// Lo mismo que en Notas pendientes: chofer (el camión lo da la columna), envío parcial y otro día.
+// Los manejan app.js y parcial.js por data-accion, igual que en el tablero.
+function herramientas(n) {
+  const editable = !n.saldo && ['pendiente', 'cargando'].includes(n.estado);
+  if (!editable) return n.chofer ? `<p class="corcho__suave">👤 ${esc(n.chofer)}</p>` : '';
   return `
-    <article class="corcho__nota${manana ? ' corcho__nota--manana' : ''}" data-id="${n.id}" ${mover ? 'draggable="true"' : ''}>
+    <div class="corcho__chofer">${selector(n, 'chofer', ctx.catalogos.choferes)}</div>
+    <div class="corcho__acciones">
+      <button type="button" class="btn btn--secundario" data-accion="parcial" data-id="${n.id}">✂ Parcial</button>
+      ${n.estado === 'pendiente' ? '<button type="button" class="btn btn--secundario" data-reprogramar>🔁 Reprogramar</button>' : ''}
+    </div>`;
+}
+
+// Todo el material de la nota (todos los renglones); si es muy larga, se desplaza dentro de la tarjeta.
+function tarjeta(n, { manana = false, futura = false } = {}) {
+  const entregada = n.estado === 'entregado';
+  const mover = !n.es_almacen && ['pendiente', 'cargando'].includes(n.estado) && (!futura || manana);
+  return `
+    <article class="corcho__nota${manana ? ' corcho__nota--manana' : ''}${entregada ? ' corcho__nota--entregado' : ''}${n.saldo ? ' corcho__nota--saldo' : ''}${futura ? '' : ` corcho__nota--e-${n.estado}`}" data-id="${n.id}" ${mover ? 'draggable="true"' : ''}>
       ${manana ? '<p class="corcho__alerta">⏰ Esta nota es para mañana</p>' : ''}
-      <header><b>${esc(n.folio)}</b>${futura ? (n.camion ? `<span class="corcho__chip">${esc(n.camion)}</span>` : '') : `<span class="corcho__chip corcho__chip--${n.estado}">${NOMBRE_ESTADO[n.estado] ?? esc(n.estado)}</span>`}</header>
+      ${n.saldo ? '<p class="corcho__alerta corcho__alerta--saldo">⚠ Saldo pendiente</p>' : ''}
+      <button type="button" class="corcho__eliminar" data-accion="cancelar" data-id="${n.id}" title="Eliminar nota" aria-label="Eliminar nota ${esc(n.folio)}">🗑</button>
+      <header><b>${esc(n.folio)}</b>${botonEtiqueta(n)}${futura ? (n.camion && !manana ? `<span class="corcho__chip">${esc(n.camion)}</span>` : '') : `<span class="corcho__chip corcho__chip--${n.estado}">${NOMBRE_ESTADO[n.estado] ?? esc(n.estado)}</span>`}</header>
       <p class="corcho__cliente">${esc(n.cliente)}</p>
-      <p>${esc(n.cantidad)} ${esc(n.unidad)} · ${esc(n.material)}</p>
+      <div class="corcho__material">${renglones(n)}</div>
       <p class="corcho__suave">📍 ${esc(n.zona || n.direccion)}</p>
-      ${!futura && n.chofer ? `<p class="corcho__suave">👤 ${esc(n.chofer)}</p>` : ''}
-      ${futura ? `
+      ${futura ? '' : herramientas(n)}
+      ${futura ? '' : botonEstatus(n)}
+      ${futura && manana ? `
         <div class="corcho__acciones">
-          <input type="date" aria-label="${n.programada_para === EL_AVISA ? 'Poner fecha a' : 'Cambiar fecha de'} ${esc(n.folio)}" value="${n.programada_para === EL_AVISA ? '' : n.programada_para}" min="${dia(1)}" data-fecha>
+          <button type="button" class="btn btn--secundario" data-reprogramar>🔁 Reprogramar</button>
           <button type="button" class="btn btn--secundario" data-hoy>↩ A hoy</button>
-        </div>` : n.estado === 'pendiente' ? '<div class="corcho__acciones"><button type="button" class="btn btn--secundario" data-otro-dia>🗓 Otro día</button></div>' : ''}
+        </div>` : ''}
+      ${futura && !manana ? `
+        <div class="corcho__acciones corcho__fecha">
+          <label>Fecha del cliente <input type="date" value="${n.programada_para === EL_AVISA ? '' : n.programada_para}" min="${dia(1)}" data-fecha></label>
+          <label class="corcho__avisa"><input type="checkbox" data-avisa${n.programada_para === EL_AVISA ? ' checked' : ''}> 📞 Él avisa</label>
+        </div>
+        <div class="corcho__acciones">
+          <button type="button" class="btn btn--secundario" data-hoy>↩ Reparto del día</button>
+          <button type="button" class="btn btn--secundario" data-a-manana>⏰ Reparto de mañana</button>
+        </div>` : ''}
     </article>`;
 }
 
-function pintarDia() {
-  const activas = notasDelDia.filter((n) => n.estado !== 'entregado');
+// Cuadrícula unidad × viaje. Hoy: las entregadas se quedan en su viaje, en verde, como registro del día
+// (se archivan con el Cierre de Jornada). Mañana: se acomodan con anticipación y mañana ya salen así.
+function rejilla(notas, opciones = {}) {
   const columnas = [...UNIDADES.map((u) => u.nombre), OTRAS];
-  $('#corcho-fecha').textContent = fechaLarga(dia());
-  $('#corcho-contenido').innerHTML = columnas.map((nombre) => {
-    const suyas = activas.filter((n) => columnaDe(n) === nombre);
-    const m3 = suyas.filter((n) => /m³|m3/i.test(n.unidad ?? '') && Number(n.cantidad)).reduce((s, n) => s + Number(n.cantidad), 0);
+  return columnas.map((nombre) => {
+    const suyas = notas.filter((n) => columnaDe(n) === nombre);
+    const entregadas = suyas.filter((n) => n.estado === 'entregado').length;
+    const m3 = suyas.filter((n) => /m³|m3/i.test(n.unidad ?? '') && Number(n.cantidad)).reduce((t, n) => t + Number(n.cantidad), 0);
     return `
       <section class="corcho__columna${nombre === OTRAS ? ' corcho__columna--otras' : ''}">
         <h3>${nombre === OTRAS ? '' : '🚚 '}${esc(nombre)}</h3>
-        <p class="corcho__cuenta">${suyas.length} ${suyas.length === 1 ? 'nota' : 'notas'}${m3 ? ` · ${Math.round(m3 * 10) / 10} m³` : ''}</p>
+        <p class="corcho__cuenta">${suyas.length} ${suyas.length === 1 ? 'nota' : 'notas'}${entregadas ? ` · <span class="corcho__ok">${entregadas} entregada${entregadas === 1 ? '' : 's'}</span>` : ''}${m3 ? ` · ${Math.round(m3 * 10) / 10} m³` : ''}</p>
         ${nombre === OTRAS
-          ? `<div class="corcho__zona corcho__zona--otras" data-zona data-columna="${esc(nombre)}">${suyas.map((n) => tarjeta(n)).join('') || '<p class="corcho__vacio">Sin notas</p>'}</div>`
-          : VIAJES.map((v, i) => {
-            const delViaje = suyas.filter((n) => viajeDe(n) === i + 1);
-            return `
-            <div class="corcho__zona corcho__viaje" data-zona data-columna="${esc(nombre)}" data-viaje="${i + 1}">
-              <h4>${v} viaje${delViaje.length ? ` <span>${delViaje.length}</span>` : ''}</h4>
-              ${delViaje.map((n) => tarjeta(n)).join('')}
+    ? `<div class="corcho__zona corcho__zona--otras" data-zona data-columna="${esc(nombre)}">${suyas.map((n) => tarjeta(n, opciones)).join('') || '<p class="corcho__vacio">Sin notas</p>'}</div>`
+    : VIAJES.map((v, k) => {
+      const delViaje = suyas.filter((n) => viajeDe(n) === k + 1);
+      const listo = delViaje.length && delViaje.every((n) => n.estado === 'entregado');
+      return `
+            <div class="corcho__zona corcho__viaje${listo ? ' corcho__viaje--listo' : ''}" data-zona data-columna="${esc(nombre)}" data-viaje="${k + 1}">
+              <h4>${v} viaje${delViaje.length ? ` <span>${listo ? '✓ ' : ''}${delViaje.length}</span>` : ''}</h4>
+              ${delViaje.map((n) => tarjeta(n, opciones)).join('')}
             </div>`;
-          }).join('')}
+    }).join('')}
       </section>`;
   }).join('');
 }
 
+function pintarDia() {
+  $('#corcho-fecha').textContent = fechaLarga(dia());
+  $('#corcho-contenido').innerHTML = rejilla(notasDelDia);
+}
+
 function pintarFuturas() {
   const manana = dia(1);
-  // "Él avisa" va primero: son las que hay que estar siguiendo con el cliente.
-  const fechas = [...new Set(programadas.map((n) => n.programada_para))].sort((a, b) => (a === EL_AVISA ? -1 : b === EL_AVISA ? 1 : a.localeCompare(b)));
+  $('#manana-fecha').textContent = fechaLarga(manana);
+  $('#manana-contenido').innerHTML = rejilla(programadas.filter((n) => n.programada_para === manana), { futura: true, manana: true });
+  // Por Confirmar · Otro día: primero "Él avisa" (sin día), luego por fecha después de mañana.
+  const otras = programadas.filter((n) => n.programada_para !== manana);
+  const fechas = [...new Set(otras.map((n) => n.programada_para))].sort((a, b) => (a === EL_AVISA ? -1 : b === EL_AVISA ? 1 : a.localeCompare(b)));
   $('#futuras-contenido').innerHTML = fechas.map((f) => `
-    <section class="corcho__columna${f === manana ? ' corcho__columna--manana' : ''}${f === EL_AVISA ? ' corcho__columna--avisa' : ''}">
-      <h3>${f === EL_AVISA ? '📞 Notas sin día programado' : `${f === manana ? '⏰ Mañana · ' : ''}${esc(fechaLarga(f))}`}</h3>
-      ${f === EL_AVISA ? '<p class="corcho__cuenta">El cliente avisa. Ponle fecha cuando confirme.</p>' : ''}
-      ${programadas.filter((n) => n.programada_para === f).map((n) => tarjeta(n, { manana: f === manana, futura: true })).join('')}
-    </section>`).join('') || '<p class="corcho__vacio">No hay notas para otro día. Prográmalas arriba o con «🗓 Otro día» en el corcho por unidad.</p>';
+    <section class="corcho__columna${f === EL_AVISA ? ' corcho__columna--avisa' : ''}">
+      <h3>${f === EL_AVISA ? '📞 Él avisa · por confirmar' : esc(fechaLarga(f))}</h3>
+      ${otras.filter((n) => n.programada_para === f).map((n) => tarjeta(n, { futura: true })).join('')}
+    </section>`).join('') || '<p class="corcho__vacio">Ninguna nota por confirmar ni para otro día.</p>';
   // Para programar: las pendientes de hoy.
   const select = $('#futuras-nota');
   const elegida = select.value;
@@ -98,10 +144,14 @@ function pintarFuturas() {
   $('#futuras-fecha').min = manana;
 }
 
-async function cargarFuturas() {
+async function cargarFuturas(pintar = true) {
   try {
     programadas = await api.get('/api/notas/programadas');
-    pintarFuturas();
+    const manana = dia(1);
+    const cuenta = (fn) => programadas.filter(fn).length;
+    $('#pestana-manana-n').textContent = cuenta((x) => x.programada_para === manana);
+    $('#pestana-futuras-n').textContent = cuenta((x) => x.programada_para !== manana);
+    if (pintar) pintarFuturas();
   } catch (err) {
     ctx.toast(`No se cargaron las notas para otro día: ${err.message}`, true);
   }
@@ -110,7 +160,7 @@ async function cargarFuturas() {
 async function programar(id, fecha) {
   try {
     const nota = await api.patch(`/api/notas/${id}/programar`, { fecha });
-    ctx.toast(fecha === 'avisa' ? `${nota.folio} quedó sin día: el cliente avisa` : fecha ? `${nota.folio} quedó para el ${fechaLarga(fecha)}` : `${nota.folio} regresó a hoy`);
+    ctx.toast(fecha === 'avisa' ? `${nota.folio} pasó a Por Confirmar · Otro día (él avisa)` : fecha ? `${nota.folio} quedó para el ${fechaLarga(fecha)}` : `${nota.folio} regresó a hoy`);
   } catch (err) {
     ctx.toast(err.message, true);
   }
@@ -119,7 +169,7 @@ async function programar(id, fecha) {
 
 // Soltar en un viaje de una unidad = cambiarle camión y número de viaje (mismas reglas que el tablero).
 async function cambiarUnidad(id, columna, viaje) {
-  const nota = notasDelDia.find((n) => n.id === id);
+  const nota = [...notasDelDia, ...programadas].find((n) => n.id === id);
   if (!nota) return;
   const u = UNIDADES.find((x) => x.nombre === columna);
   if (columnaDe(nota) === columna && (!u || viajeDe(nota) === viaje)) return;
@@ -133,14 +183,28 @@ async function cambiarUnidad(id, columna, viaje) {
   }
 }
 
-export function montarCorcho({ catalogos, toast }) {
-  ctx = { catalogos, toast };
-  const ventanaDia = $('#ventana-corcho');
-  const ventanaFuturas = $('#ventana-futuras');
-  ventanaDia.addEventListener('toggle', (e) => { if (e.newState === 'open') pintarDia(); });
-  ventanaFuturas.addEventListener('toggle', (e) => { if (e.newState === 'open') cargarFuturas(); });
+// Pestañas exclusivas: sólo una vista a la vez, a pantalla completa.
+let activa = 'corcho';
+function mostrar(pestana) {
+  activa = pestana;
+  document.querySelectorAll('#ventana-notas [data-pestana]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.pestana === pestana)));
+  document.querySelectorAll('#ventana-notas .operacion__vista').forEach((v) => { v.hidden = v.id !== `vista-${pestana}`; });
+  $('#ventana-notas [data-ver-historial]').hidden = pestana !== 'notas';
+  if (pestana === 'corcho') pintarDia();
+  if (['manana', 'futuras'].includes(pestana)) cargarFuturas();
+}
 
-  const contenido = $('#corcho-contenido');
+export function montarCorcho({ catalogos, toast, avanzar }) {
+  ctx = { catalogos, toast, avanzar };
+  const ventana = $('#ventana-notas');
+  ventana.addEventListener('pestana', (e) => mostrar(e.detail));
+  ventana.addEventListener('click', (e) => {
+    const p = e.target.closest('[data-pestana]');
+    if (p) mostrar(p.dataset.pestana);
+  });
+
+  // Arrastrar: en el corcho de hoy y en el de mañana (acomodar con anticipación).
+  for (const contenido of [$('#corcho-contenido'), $('#manana-contenido')]) {
   contenido.addEventListener('dragstart', (e) => {
     arrastrada = Number(e.target.closest('[data-id]')?.dataset.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -163,15 +227,14 @@ export function montarCorcho({ catalogos, toast }) {
     arrastrada = null;
     limpiar();
   });
-  // «Otro día»: abre el corcho de notas futuras con esa nota ya elegida.
-  contenido.addEventListener('click', (e) => {
-    if (!e.target.closest('[data-otro-dia]')) return;
-    const id = e.target.closest('[data-id]').dataset.id;
-    ventanaDia.close();
-    ventanaFuturas.show();
-    pintarFuturas();
-    $('#futuras-nota').value = id;
-    $('#futuras-fecha').focus();
+  }
+  const contenido = $('#corcho-contenido');
+  contenido.addEventListener('click', async (e) => {
+    const boton = e.target.closest('[data-avanzar]');
+    if (boton) {
+      boton.disabled = true;
+      if (!(await ctx.avanzar(boton.closest('[data-id]').dataset.id))) boton.disabled = false;
+    }
   });
 
   $('#futuras-nueva').addEventListener('submit', (e) => {
@@ -182,12 +245,24 @@ export function montarCorcho({ catalogos, toast }) {
     $('#futuras-nueva').reset();
     programar(id, fecha);
   });
-  const futuras = $('#futuras-contenido');
-  futuras.addEventListener('change', (e) => {
-    if (e.target.matches('[data-fecha]') && e.target.value) programar(e.target.closest('[data-id]').dataset.id, e.target.value);
+  // Reprogramar, fecha del cliente, "Él avisa" y regresar a hoy o a mañana: en cualquier pestaña.
+  const ventana2 = $('#ventana-notas');
+  const idDe = (el) => el.closest('[data-id]').dataset.id;
+  ventana2.addEventListener('change', (e) => {
+    if (e.target.matches('[data-fecha]') && e.target.value) programar(idDe(e.target), e.target.value);
+    if (e.target.matches('[data-avisa]')) {
+      if (e.target.checked) programar(idDe(e.target), 'avisa');
+      else {
+        e.target.checked = true; // sin fecha no puede dejar de ser "Él avisa"
+        e.target.closest('[data-id]').querySelector('[data-fecha]')?.focus();
+        toast('Ponle la fecha del cliente para quitar «Él avisa»');
+      }
+    }
   });
-  futuras.addEventListener('click', (e) => {
-    if (e.target.closest('[data-hoy]')) programar(e.target.closest('[data-id]').dataset.id, null);
+  ventana2.addEventListener('click', (e) => {
+    if (e.target.closest('[data-hoy]')) programar(idDe(e.target), null);
+    if (e.target.closest('[data-a-manana]')) programar(idDe(e.target), dia(1));
+    if (e.target.closest('[data-reprogramar]')) programar(idDe(e.target), 'avisa');
   });
 }
 
@@ -195,6 +270,9 @@ export function montarCorcho({ catalogos, toast }) {
 export function recargarCorcho(notas) {
   notasDelDia = notas;
   if (!ctx) return;
-  if ($('#ventana-corcho').open && !arrastrada) pintarDia();
-  if ($('#ventana-futuras').open && !$('#ventana-futuras').contains(document.activeElement)) cargarFuturas();
+  $('#pestana-notas-n').textContent = notas.filter((n) => n.estado !== 'entregado').length;
+  const abierta = $('#ventana-notas').open;
+  const eligiendo = $('#corcho-contenido').contains(document.activeElement) && document.activeElement.tagName === 'SELECT';
+  if (abierta && activa === 'corcho' && !arrastrada && !eligiendo) pintarDia();
+  cargarFuturas(abierta && ['manana', 'futuras'].includes(activa) && !arrastrada && !$(`#vista-${activa}`).contains(document.activeElement));
 }

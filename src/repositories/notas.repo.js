@@ -45,6 +45,7 @@ const stmts = {
     SELECT folio FROM notas
     WHERE estado <> 'entregado' AND programada_para = date('now', 'localtime', '+1 day') ORDER BY id`),
   viaje: db.prepare('UPDATE notas SET viaje = ? WHERE id = ?'),
+  mananaAHoy: db.prepare(`UPDATE notas SET programada_para = NULL WHERE estado <> 'entregado' AND programada_para = date('now', 'localtime', '+1 day')`),
   programar: db.prepare(`UPDATE notas SET programada_para = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
   // Historial general: todo lo entregado que ya no está en el tablero.
   historial_general: db.prepare(`${SELECT_NOTA}
@@ -59,6 +60,7 @@ const stmts = {
     VALUES (@origen, @folio, @id_externo, @cliente_id, @material, @cantidad, @unidad, @detalle,
             @total, @direccion, @zona, @chofer_id, @foto, @telefono, @etiqueta, COALESCE(@creado_en, datetime('now', 'localtime')))`),
   ponerEtiqueta: db.prepare('UPDATE notas SET etiqueta = ? WHERE id = ?'),
+  ponerFolio: db.prepare('UPDATE notas SET folio = ? WHERE id = ?'),
   ponerTelefono: db.prepare(`UPDATE notas SET telefono = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
   actualizarEstado: db.prepare(`
     UPDATE notas SET estado = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
@@ -182,7 +184,9 @@ function editar(id, datos) {
 const cerrarJornada = db.transaction(() => {
   const { pendiente, saldos, cargando, en_ruta: enRuta, entregado_hoy: archivadas } = stmts.resumen.get();
   stmts.archivar.run(); // también las de días pasados, que ya no se veían en el tablero
-  return { archivadas, conservadas: { pendiente, saldos, cargando, enRuta } };
+  // El Reparto de mañana pasa al Reparto del día tal cual (camión y viaje no se tocan).
+  const deManana = stmts.mananaAHoy.run().changes;
+  return { archivadas, deManana, conservadas: { pendiente, saldos, cargando, enRuta } };
 });
 
 // Folio del saldo: el original con -S1, -S2… La hoja de reparto ubica cada renglón por folio y día,
@@ -212,7 +216,7 @@ function cerrarSaldos(lista, destinoId) {
 // suma; si el viaje se lleva todo, la tarjeta se cierra y devuelve null. Sin saldo todavía, se crea
 // uno. Si no sale nada, la nota entera pasa a Saldos. El total se queda en la nota original para no
 // contarlo dos veces.
-const envioParcial = db.transaction((id, enviar) => {
+function dividirNota(id, enviar) {
   const nota = obtener(id);
   if (nota.saldo || !CHOFER_EDITABLE.includes(nota.estado)) throw httpError(409, 'Sólo se divide una nota en Pendiente o Cargando');
   const hermanas = hermanasDe(nota);
@@ -253,6 +257,31 @@ const envioParcial = db.transaction((id, enviar) => {
   stmts.marcarSaldo.run(lastInsertRowid);
   stmts.historial.run(lastInsertRowid, null, 'saldo');
   return stmts.porId.get(lastInsertRowid);
+}
+
+// Opciones de la ventana: folio nuevo y/o "Salida" para la tarjeta que se va en este viaje.
+// Con folio nuevo, el saldo recién creado se queda con el folio original (la nota original menos lo enviado).
+const envioParcial = db.transaction((id, enviar, { folio, salida } = {}) => {
+  const antes = obtener(id);
+  const nuevoFolio = String(folio ?? '').trim();
+  if (nuevoFolio.length > 40) throw httpError(400, 'El folio es muy largo');
+  const cambiaFolio = nuevoFolio && nuevoFolio !== antes.folio;
+  if (cambiaFolio && stmts.folioOcupado.get(antes.origen, nuevoFolio)) throw httpError(409, `Ya hay una nota con el folio ${nuevoFolio}`);
+  const sinSaldoAntes = !hermanasDe(antes).length;
+  let saldo = dividirNota(id, enviar);
+  if (obtener(id).saldo) return saldo; // no salió nada: la nota entera pasó a Saldos
+  if (cambiaFolio) {
+    // El saldo recién creado pudo tomar justo el folio nuevo (-S1): se aparta un momento y luego se cruzan.
+    const saldoNuevo = saldo && sinSaldoAntes;
+    if (saldoNuevo) stmts.ponerFolio.run(`__parcial_${saldo.id}`, saldo.id);
+    stmts.ponerFolio.run(nuevoFolio, id);
+    if (saldoNuevo) {
+      stmts.ponerFolio.run(antes.folio, saldo.id);
+      saldo = stmts.porId.get(saldo.id);
+    }
+  }
+  if (salida) stmts.ponerEtiqueta.run('SALIDA', id);
+  return saldo;
 });
 
 const reprogramar = db.transaction((id) => {

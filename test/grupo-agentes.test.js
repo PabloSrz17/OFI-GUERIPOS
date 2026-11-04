@@ -10,12 +10,13 @@ process.env.ANTHROPIC_API_KEY = 'prueba';
 const llamadas = [];
 let carga = null;
 let cotizacion = null;
+let ordenIA = null;
 class IAFalsa {
   constructor() {
     this.messages = {
       create: async (p) => {
         const props = p.output_config?.format?.schema?.properties ?? {};
-        const json = props.es_carga ? carga : props.es_cotizacion || props.es_pedido ? cotizacion : null;
+        const json = props.es_carga ? carga : props.es_cotizacion || props.es_pedido ? cotizacion : props.renglones && props.sucursal ? ordenIA : null;
         llamadas.push(props.es_carga ? 'carga' : props.es_cotizacion ? 'cotizacion' : 'pregunta');
         const texto = json ? JSON.stringify(json) : 'Respuesta del agente';
         return { stop_reason: 'end_turn', content: [{ type: 'text', text: texto }] };
@@ -40,7 +41,7 @@ function mensaje(body, { from = GRUPO, nombreGrupo = 'Agentes IA Chat', extra = 
     respuestas: [],
     getChat: async () => ({ name: nombreGrupo }),
     getContact: async () => ({ pushname: 'Moisés' }),
-    client: { sendMessage: async (a, t) => { m.respuestas.push(t); } },
+    client: { sendMessage: async (a, t, o) => { m.respuestas.push(o?.caption ? `[foto] ${o.caption}` : t); } },
     ...extra,
   };
   return m;
@@ -141,4 +142,41 @@ test('foto al grupo con "Chatito": contesta al momento y deja la tarjeta por aut
   const tarjeta = solicitudes.obtener(avisos[0]);
   assert.equal(tarjeta.nombre, 'COTIZACIÓN DEL GRUPO');
   assert.match(tarjeta.borrador, /cemento/i);
+});
+
+test('Octavio en el grupo: imagen con "¿Así está bien?", corrige hasta el sí y la deja en su pestaña', async () => {
+  const octavio = require('../src/integraciones/octavio/grupo');
+  const dibujadas = [];
+  octavio.config.dibujar = async (o) => { dibujadas.push(o); return Buffer.from('png'); };
+  const ordenes = require('../src/integraciones/octavio/ordenes');
+  const antes = ordenes.listar().length;
+
+  assert.ok(!octavio.esPedido('Octavio, ¿qué órdenes hay?'));
+  assert.ok(octavio.esPedido('Octavio mándame este material para almacén'));
+  ordenIA = { sucursal: 'Almacén', renglones: [{ cantidad: '10', unidad: 'bultos', material: 'CEMENTO MAYA' }] };
+  assert.deepEqual(await enviar('Octavio mándame este material para almacén:\n10 bultos cemento maya'), ['[foto] ¿Así está bien?']);
+  assert.equal(dibujadas.at(-1).sucursal, 'Almacén');
+  assert.equal(dibujadas.at(-1).etiqueta, 'VISTA PREVIA · POR CONFIRMAR');
+
+  assert.deepEqual(await enviar('No'), ['¿Qué le cambio?']);
+  ordenIA = { sucursal: 'Almacén', renglones: [{ cantidad: '15', unidad: 'bultos', material: 'CEMENTO MAYA' }, { cantidad: '5', unidad: 'm³', material: 'GRAVA' }] };
+  assert.deepEqual(await enviar('son 15 y agrégale 5 m3 de grava'), ['[foto] ¿Así está bien?']);
+  assert.equal(dibujadas.at(-1).renglones.length, 2);
+
+  assert.equal(ordenes.listar().length, antes); // nada guardado hasta el sí
+  assert.deepEqual(await enviar('Sí'), ['Oki ✅']);
+  const o = ordenes.listar()[0];
+  assert.equal(o.sucursal, 'Almacén');
+  assert.equal(o.estado, 'aprobada');
+  assert.equal(o.solicitante, 'MOISÉS');
+  assert.deepEqual(o.renglones.map((r) => r.cantidad), ['15', '5']);
+  // Ya cerrada: un "sí" suelto no es para Octavio.
+  assert.deepEqual(await enviar('sí'), []);
+
+  // Concordia por "orden de compra"; "cancela" la descarta sin guardar.
+  ordenIA = { sucursal: 'Concordia', renglones: [{ cantidad: '2', unidad: 'pzas', material: 'VARILLA' }] };
+  assert.deepEqual(await enviar('Octavio orden de compra para Concordia: 2 varillas'), ['[foto] ¿Así está bien?']);
+  assert.equal(dibujadas.at(-1).sucursal, 'Concordia');
+  assert.deepEqual(await enviar('cancela'), ['Va, la descarté.']);
+  assert.equal(ordenes.listar().length, antes + 1);
 });

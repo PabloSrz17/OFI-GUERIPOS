@@ -33,13 +33,66 @@
     <button type="button" class="alerta__cerrar" aria-label="Cerrar aviso">✕</button>
   </div>
 
-  <!-- Pizarra "Notas Pendientes": flujo de notas y pedidos -->
-  <dialog id="ventana-notas" class="ventana" aria-labelledby="ventana-notas-titulo">
+  <!-- Sulema: cada nota nueva, ¿para cuándo?, unidad y viaje (programar-nueva.js) -->
+  <dialog id="sulema-programar" class="ventana sulema-programar" aria-labelledby="sp-titulo">
     <header class="ventana__cabeza">
-      <h2 id="ventana-notas-titulo">📦 Notas Pendientes</h2>
-      <button type="button" class="btn btn--secundario ventana__historial" data-ver-historial>📚 Historial</button>
+      <h2 id="sp-titulo">👩 Sulema · nota nueva</h2>
+      <button type="button" class="ventana__cerrar" data-sp-despues aria-label="Ahora no">✕</button>
+    </header>
+    <p id="sp-nota" class="sp__nota"></p>
+    <div id="sp-paso-dia">
+      <p class="sp__pregunta">¿Esta nota es para Reparto del día, Reparto de mañana u Otro día?</p>
+      <div class="sp__opciones">
+        <button type="button" class="btn" data-sp-dia="hoy">🚚 Reparto del día</button>
+        <button type="button" class="btn" data-sp-dia="manana">⏰ Reparto de mañana</button>
+        <button type="button" class="btn btn--secundario" data-sp-dia="otro">🗓 Otro día</button>
+      </div>
+    </div>
+    <div id="sp-paso-viaje" hidden>
+      <p class="sp__suave" id="sp-cuando"></p>
+      <p class="sp__pregunta">¿En qué unidad?</p>
+      <div class="sp__opciones" id="sp-unidades"></div>
+      <p class="sp__pregunta">¿En qué viaje iría?</p>
+      <div class="sp__opciones" id="sp-viajes"></div>
+      <button type="button" class="btn btn--secundario sp__atras" data-sp-atras>← Atrás</button>
+    </div>
+    <p class="sp__aviso" id="sp-aviso" role="alert"></p>
+  </dialog>
+
+  <!-- Operación del día: tres vistas en pestañas a pantalla completa (sólo una a la vez) -->
+  <dialog id="ventana-notas" class="ventana operacion" aria-label="Operación de reparto">
+    <header class="ventana__cabeza operacion__cabeza">
+      <div class="pestanas operacion__pestanas" role="tablist" aria-label="Vistas de reparto">
+        <button type="button" class="pestana" role="tab" id="pestana-corcho" data-pestana="corcho" aria-controls="vista-corcho" aria-selected="true">🚚 Reparto del día</button>
+        <button type="button" class="pestana" role="tab" id="pestana-manana" data-pestana="manana" aria-controls="vista-manana" aria-selected="false">⏰ Reparto de mañana <span class="contador" id="pestana-manana-n">0</span></button>
+        <button type="button" class="pestana" role="tab" id="pestana-futuras" data-pestana="futuras" aria-controls="vista-futuras" aria-selected="false">🗓 Por Confirmar · Otro día <span class="contador" id="pestana-futuras-n">0</span></button>
+        <button type="button" class="pestana" role="tab" id="pestana-notas" data-pestana="notas" aria-controls="vista-notas" aria-selected="false">📦 Notas pendientes <span class="contador" id="pestana-notas-n">0</span></button>
+      </div>
+      <button type="button" class="btn btn--secundario ventana__historial" data-ver-historial hidden>📚 Historial</button>
       <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
     </header>
+
+    <div class="operacion__vista" id="vista-corcho" role="tabpanel" aria-labelledby="pestana-corcho">
+      <p class="corcho__ayuda"><b id="corcho-fecha"></b> · Arrastra una nota a otro viaje o a otra unidad: se guarda al soltarla.</p>
+      <div id="corcho-contenido" class="corcho"></div>
+    </div>
+
+    <div class="operacion__vista" id="vista-manana" role="tabpanel" aria-labelledby="pestana-manana" hidden>
+      <p class="corcho__ayuda"><b id="manana-fecha"></b> · Acomódalas por unidad y viaje desde hoy. Con el Cierre de Jornada pasan así al Reparto del día.</p>
+      <div id="manana-contenido" class="corcho corcho--manana"></div>
+    </div>
+
+    <div class="operacion__vista" id="vista-futuras" role="tabpanel" aria-labelledby="pestana-futuras" hidden>
+      <form id="futuras-nueva" class="archivo__filtros">
+        <label class="campo">Nota pendiente <select id="futuras-nota" required></select></label>
+        <label class="campo">Para el <input id="futuras-fecha" type="date" required></label>
+        <button type="submit" class="btn">📌 Programar</button>
+      </form>
+      <p class="corcho__ayuda">Ponle la fecha que pidió el cliente o márcala «Él avisa». Un día antes pasa sola al Reparto de mañana y sale el aviso.</p>
+      <div id="futuras-contenido" class="corcho corcho--futuras"></div>
+    </div>
+
+    <div class="operacion__vista" id="vista-notas" role="tabpanel" aria-labelledby="pestana-notas" hidden>
     <section id="tablero" class="kanban" aria-label="Tablero logístico">
       <div class="columna" data-estado="saldo">
         <header><h2>Saldos Pendientes</h2><span class="contador">0</span></header>
@@ -62,6 +115,7 @@
         <div class="columna__lista"></div>
       </div>
     </section>
+    </div>
   </dialog>
 
   <!-- Pizarra "Pendientes del Día": avisos y tareas del equipo -->
@@ -162,30 +216,6 @@
     <div id="gasolina-contenido" class="archivo--limpio"></div>
   </dialog>
 
-  <!-- Corcho de Edgar: lo que sale hoy en cada unidad -->
-  <dialog id="ventana-corcho" class="ventana" aria-labelledby="corcho-titulo">
-    <header class="ventana__cabeza">
-      <h2 id="corcho-titulo">📌 Programación del día · <span id="corcho-fecha"></span></h2>
-      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
-    </header>
-    <p class="corcho__ayuda">Arrastra una nota a otro viaje o a otra unidad: se guarda al soltarla.</p>
-    <div id="corcho-contenido" class="corcho"></div>
-  </dialog>
-
-  <!-- Corcho de Edgar: notas para otro día (no salen en el tablero hasta su fecha) -->
-  <dialog id="ventana-futuras" class="ventana ventana--media" aria-labelledby="futuras-titulo">
-    <header class="ventana__cabeza">
-      <h2 id="futuras-titulo">🗓 Notas para otro día</h2>
-      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
-    </header>
-    <form id="futuras-nueva" class="archivo__filtros">
-      <label class="campo">Nota pendiente <select id="futuras-nota" required></select></label>
-      <label class="campo">Para el <input id="futuras-fecha" type="date" required></label>
-      <button type="submit" class="btn">📌 Programar</button>
-    </form>
-    <div id="futuras-contenido" class="corcho corcho--futuras"></div>
-  </dialog>
-
   <!-- Pizarra de Octavio: órdenes de compra aprobadas y entradas de almacén -->
   <dialog id="ventana-ordenes" class="ventana" aria-labelledby="ordenes-titulo">
     <header class="ventana__cabeza">
@@ -193,7 +223,7 @@
       <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
     </header>
     <div class="pestanas" role="tablist" aria-label="Secciones del pizarrón">
-      <button type="button" class="pestana pestana--ordenes" role="tab" id="pestana-ordenes" aria-controls="pizarron-ordenes" aria-selected="true">🧾 Órdenes de Compra - Concordia <span class="contador" id="pestana-ordenes-n">0</span></button>
+      <button type="button" class="pestana pestana--ordenes" role="tab" id="pestana-ordenes" aria-controls="pizarron-ordenes" aria-selected="true">🧾 Órdenes de Concordia <span class="contador" id="pestana-ordenes-n">0</span></button>
       <button type="button" class="pestana pestana--almacen" role="tab" id="pestana-almacen" aria-controls="pizarron-almacen" aria-selected="false">🏭 Órdenes de Compra Almacén <span class="contador" id="pestana-almacen-n">0</span></button>
       <button type="button" class="pestana pestana--entradas" role="tab" id="pestana-entradas" aria-controls="pizarron-entradas" aria-selected="false">📦 Entradas de Almacén <span class="contador" id="pestana-entradas-n">0</span></button>
     </div>
@@ -286,13 +316,11 @@
 
     <div class="panel__funcion edgar" data-funcion="rutas" hidden>
       <button type="button" class="edgar__principal" data-objeto="corcho">
-        <span class="edgar__icono" aria-hidden="true">📌</span>
-        <span><b>Corcho por unidad</b><small>Salidas de hoy · Nissan Blanca, Nissan Roja, RAM y Ford F450</small></span>
+        <span class="edgar__icono" aria-hidden="true">🚚</span>
+        <span><b>Reparto del día</b><small>Por unidad y viaje · mañana, por confirmar y notas pendientes en sus pestañas</small></span>
         <span class="edgar__flecha" aria-hidden="true">›</span>
       </button>
       <div class="edgar__atajos">
-        <button type="button" class="edgar__atajo" data-objeto="notas"><span aria-hidden="true">📦</span>Notas pendientes</button>
-        <button type="button" class="edgar__atajo" data-objeto="futuras"><span aria-hidden="true">🗓</span>Otro día</button>
         <button type="button" class="edgar__atajo" data-objeto="gasolina"><span aria-hidden="true">⛽</span>Gasolina</button>
       </div>
     </div>
@@ -339,13 +367,19 @@
         <summary><h3>📥 Órdenes por aprobar <span id="ordenes-espera-n" class="contador">0</span></h3></summary>
         <ul id="ordenes-espera-lista" class="ordenes-espera"></ul>
       </details>
-      <button type="button" class="btn" data-objeto="ordenes">🧾 Abrir Pizarrón de Octavio</button>
+      <div class="octavio__accesos">
+        <button type="button" class="btn" data-objeto="ordenes" data-pizarron-pestana="pestana-ordenes">🧾 Órdenes de Concordia</button>
+        <button type="button" class="btn btn--secundario" data-objeto="ordenes">Abrir Pizarrón de Octavio</button>
+      </div>
       <details class="captura captura--campos entradas plegable">
         <summary><h2 id="orden-nueva-titulo">🧾 Órdenes de Compra</h2></summary>
-        <p class="captura__ayuda">Sin folio: toma el siguiente OC. Queda Aprobada en "Órdenes de Compra Almacén" del pizarrón. No se le manda nada a nadie.</p>
+        <p class="captura__ayuda">Sin folio: toma el siguiente OC. Queda Aprobada en la pestaña que elijas del pizarrón. No se le manda nada a nadie.</p>
         <form id="form-orden-nueva" autocomplete="off">
           <div class="editar__datos">
-            <label class="campo">Solicita <input name="solicitante" required placeholder="ALMACÉN"></label>
+            <label class="campo editar__ancho">Va a <select name="sucursal">
+              <option value="Almacén">🏭 Órdenes de Compra Almacén</option>
+              <option value="Concordia">🧾 Órdenes de Concordia</option>
+            </select></label>
             <label class="campo editar__ancho">Nota <input name="nota" placeholder="opcional: proveedor, para cuándo…"></label>
           </div>
           <div id="orden-nueva-articulos"></div>
@@ -471,6 +505,11 @@
       <div id="parcial-resumen" class="dialogo__resumen"></div>
       <p>Escribe lo que va en este viaje. Si subes la cantidad se toma del saldo; si la bajas, regresa al saldo. Pon 0 en lo que no va.</p>
       <div id="parcial-renglones"></div>
+      <div class="parcial__salida">
+        <label class="parcial__va"><input type="checkbox" id="parcial-es-salida"> Marcar como <b>Salida</b></label>
+        <label class="campo">Folio de lo que va en este viaje <input id="parcial-folio" autocomplete="off" maxlength="40"></label>
+        <small>Si cambias el folio, lo que queda se queda con el folio original.</small>
+      </div>
       <p id="parcial-aviso" class="dialogo__aviso dialogo__aviso--error"></p>
       <div class="dialogo__botones">
         <button type="button" class="btn btn--regresar" data-cerrar>Cancelar</button>
@@ -500,12 +539,12 @@
 
   <dialog id="cancelar-nota" class="dialogo" aria-labelledby="cancelar-titulo">
     <form method="dialog">
-      <h2 id="cancelar-titulo">✕ Cancelar nota</h2>
+      <h2 id="cancelar-titulo">🗑 Eliminar nota</h2>
       <div id="cancelar-resumen" class="dialogo__resumen"></div>
       <p id="cancelar-aviso" class="dialogo__aviso dialogo__aviso--error"></p>
       <div class="dialogo__botones">
-        <button value="no" class="btn btn--secundario" autofocus>Cancelar</button>
-        <button value="confirmar" class="btn btn--peligro">Confirmar Cancelación</button>
+        <button value="no" class="btn btn--secundario" autofocus>No, dejarla</button>
+        <button value="confirmar" class="btn btn--peligro">🗑 Sí, eliminar</button>
       </div>
     </form>
   </dialog>

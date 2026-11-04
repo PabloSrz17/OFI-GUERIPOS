@@ -204,3 +204,18 @@ test('si devuelven la venta y ya sólo queda el saldo, el robot lo sigue viendo 
   notas.cambiarEstado(nota.id, 'entregado');
   assert.equal(importador.activa('pulpos', nota.folio), true);
 });
+
+test('parcial como Salida con folio nuevo: el viaje lleva el folio nuevo y lo que queda conserva el original', () => {
+  const nota = nueva();
+  const saldo = notas.envioParcial(nota.id, ['4'], { folio: `${nota.folio}-S1`, salida: true });
+  const viaje = notas.obtener(nota.id);
+  assert.equal(viaje.folio, `${nota.folio}-S1`);
+  assert.equal(viaje.etiqueta, 'SALIDA');
+  assert.equal(viaje.cantidad, 4);
+  assert.equal(saldo.folio, nota.folio);
+  assert.equal(saldo.cantidad, 6);
+  assert.equal(saldo.saldo, 1);
+  const otra = nueva();
+  assert.throws(() => notas.envioParcial(otra.id, ['4'], { folio: nota.folio }), /Ya hay una nota/);
+  assert.equal(notas.obtener(otra.id).cantidad, 10);
+});

@@ -25,7 +25,7 @@ const pensando = new Set();   // agentes contestando una pregunta (se muestran "
 const botones = {};
 const objetos = {}; // etiquetas de las pizarras
 
-const OBJETOS = { notas: '📦 Notas Pendientes', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Pizarrón de Octavio', chatito: '💬 Chatito Waspat',
+const OBJETOS = { notas: '🚚 Reparto del Día', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Pizarrón de Octavio', chatito: '💬 Chatito Waspat',
   archivo_sulema: '🗄 Archivero de Sulema', archivo_edgar: '🗄 Archivero de Edgar' };
 const COLOR_NOTA = { pendiente: '#f2994a', cargando: '#d4a106', en_ruta: '#2f7fd1' };
 
@@ -48,13 +48,13 @@ export function montarOficina(contenedor) {
   for (const [id, texto] of Object.entries(OBJETOS)) {
     const div = document.createElement('div');
     div.innerHTML = `
-      <button type="button" class="objeto3d" data-objeto="${id}" aria-label="Abrir ${texto.slice(3)}">
+      <button type="button" class="objeto3d" data-objeto="${id === 'notas' ? 'corcho' : id}" aria-label="Abrir ${texto.slice(3)}">
         <span class="objeto3d__globo" hidden></span>
         <span class="objeto3d__nombre">${texto} <span class="objeto3d__cuenta"></span></span>
       </button>`;
     objetos[id] = div.firstElementChild;
   }
-  montarEscena(contenedor, botones, objetos, abrirPanel, abrirVentana);
+  montarEscena(contenedor, botones, objetos, abrirPanel, (id) => abrirVentana(id === 'notas' ? 'corcho' : id)); // la pantalla de notas abre el Reparto del día
   document.body.addEventListener('click', (e) => {
     const agente = e.target.closest('[data-agente]');
     if (agente && contenedor.contains(agente)) abrirPanel(agente.dataset.agente);
@@ -66,7 +66,7 @@ export function montarOficina(contenedor) {
     if (e.key !== 'Escape' || document.querySelector('dialog:modal')) return;
     document.querySelectorAll('.ventana[open], .panel[open]').forEach((d) => d.close());
   });
-  document.querySelector('.alerta__cerrar').addEventListener('click', () => {
+  document.querySelector('#alerta-lista .alerta__cerrar').addEventListener('click', () => {
     listaDescartada = new Date().toDateString();
     pintarLista();
   });
@@ -79,7 +79,11 @@ function abrirVentana(id) {
   }
   if (panel.open) panel.close();
   document.querySelectorAll('.ventana[open]').forEach((d) => d.close());
-  document.querySelector(`#ventana-${id}`).show();
+  // Corcho, Notas pendientes y Otro día son pestañas de una sola ventana de reparto.
+  const pestana = { corcho: 'corcho', notas: 'notas', futuras: 'futuras', manana: 'manana' }[id];
+  const ventana = document.querySelector(`#ventana-${pestana ? 'notas' : id}`);
+  ventana.show();
+  if (pestana) ventana.dispatchEvent(new CustomEvent('pestana', { detail: pestana }));
 }
 
 // Notas nuevas que Sulema no te ha enseñado (se guarda en este navegador).
@@ -121,8 +125,6 @@ function estadosAgentes(r) {
           : ['disponible', 'Esperando ventas…', null],
     rutas: whatsappCaido
       ? ['espera', '¡WhatsApp sin conexión!', '!']
-      : r.programadas_manana?.length
-      ? ['espera', `¡${r.programadas_manana.length === 1 ? 'Esta nota es' : 'Estas notas son'} para mañana! ${r.programadas_manana.join(', ')}`, r.programadas_manana.length]
       : r.sin_chofer
       ? ['espera', `¡${plural(r.sin_chofer, 'nota', 'notas')} sin chofer o camión!`, r.sin_chofer]
       : r.cargando || r.en_ruta

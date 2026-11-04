@@ -22,6 +22,13 @@ export function montarParcial({ notaPorId, alGuardar, toast }) {
   const filas = dialogo.querySelector('#parcial-renglones');
   const aviso = dialogo.querySelector('#parcial-aviso');
   let nota = null;
+  const esSalida = dialogo.querySelector('#parcial-es-salida');
+  const folio = dialogo.querySelector('#parcial-folio');
+  // Al marcar Salida con el folio sin tocar, se sugiere el sufijo -S1.
+  esSalida.addEventListener('change', () => {
+    if (esSalida.checked && folio.value.trim() === nota.folio) folio.value = `${nota.folio.replace(/-S\d+$/i, '')}-S1`;
+    else if (!esSalida.checked && folio.value.trim() === `${nota.folio.replace(/-S\d+$/i, '')}-S1`) folio.value = nota.folio;
+  });
 
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-accion="parcial"]');
@@ -33,6 +40,8 @@ export function montarParcial({ notaPorId, alGuardar, toast }) {
       dialogo.querySelector('#parcial-resumen').innerHTML = `<div><b>${esc(nota.folio)}</b> · ${esc(nota.cliente)}</div>`;
       filas.innerHTML = renglones.map(fila).join('');
       aviso.textContent = '';
+      esSalida.checked = String(nota.etiqueta ?? '').toUpperCase() === 'SALIDA';
+      folio.value = nota.folio;
       dialogo.showModal();
       filas.querySelector('input')?.select();
     } catch (err) {
@@ -45,9 +54,10 @@ export function montarParcial({ notaPorId, alGuardar, toast }) {
     const enviar = [...filas.querySelectorAll('[data-renglon]')]
       .map((c) => (c.type === 'checkbox' ? (c.checked ? '1' : '0') : c.value));
     try {
-      const { saldo } = await api.post(`/api/notas/${nota.id}/parcial`, { enviar });
+      const { saldo } = await api.post(`/api/notas/${nota.id}/parcial`, { enviar, folio: folio.value.trim(), salida: esSalida.checked });
       dialogo.close();
-      toast(saldo ? `Saldo ${saldo.folio}: quedan ${queda(saldo)}` : `${nota.folio}: el viaje lleva todo, ya no queda saldo`);
+      const viaje = folio.value.trim() && folio.value.trim() !== nota.folio ? `${folio.value.trim()}${esSalida.checked ? ' (Salida)' : ''} va en este viaje · ` : '';
+      toast(viaje + (saldo ? `Saldo ${saldo.folio}: quedan ${queda(saldo)}` : `${nota.folio}: el viaje lleva todo, ya no queda saldo`));
       await alGuardar();
     } catch (err) {
       aviso.textContent = err.message; // sigue abierta para corregir

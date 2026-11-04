@@ -787,7 +787,7 @@ details.plegable[hidden] { display: none; }
 
 /* Corchos de Edgar: programación por unidad y notas para otro día */
 .corcho__ayuda { margin: 0 0 10px; font-size: 13px; color: var(--texto-suave); }
-.corcho { display: grid; grid-template-columns: repeat(5, minmax(190px, 1fr)); gap: 12px; padding: 14px; border-radius: 12px;
+.corcho { display: grid; grid-template-columns: repeat(6, minmax(180px, 1fr)); gap: 12px; padding: 14px; border-radius: 12px;
   background: radial-gradient(circle at 20% 30%, rgb(255 255 255 / 0.06) 0 1px, transparent 2px) 0 0 / 7px 7px,
               radial-gradient(circle at 70% 60%, rgb(0 0 0 / 0.12) 0 1px, transparent 2px) 0 0 / 9px 9px,
               linear-gradient(160deg, #a77a4f, #8c6239);
@@ -830,7 +830,7 @@ details.plegable[hidden] { display: none; }
 .edgar__principal small { display: block; margin-top: 3px; font-size: 12px; opacity: .85; }
 .edgar__icono { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; font-size: 22px; background: rgb(255 255 255 / 0.18); border-radius: 12px; }
 .edgar__flecha { margin-left: auto; font-size: 26px; opacity: .8; }
-.edgar__atajos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.edgar__atajos { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .edgar__atajo { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; font: inherit; font-size: 12px; font-weight: 600; color: var(--texto);
   background: rgb(255 240 220 / 0.04); border: 1px solid rgb(255 240 220 / 0.1); border-radius: 10px; cursor: pointer; transition: background .12s, border-color .12s; }
 .edgar__atajo span { font-size: 18px; }
@@ -855,3 +855,86 @@ details.plegable[hidden] { display: none; }
 .otro-dia__rapido .btn { padding: 6px 10px; font-size: 13px; }
 .corcho__columna--avisa { background: rgb(30 80 160 / 0.25); }
 .otro-dia__avisa { border-color: #6aa0e6; }
+
+/* Ventana de reparto: Corcho, Notas pendientes y Otro día en pestañas, a pantalla completa. */
+.ventana.operacion { inset: 8px; display: none; flex-direction: column; gap: 10px; padding: 12px 16px; }
+.ventana.operacion[open] { display: flex; }
+.operacion__cabeza { align-items: center; }
+.operacion__pestanas { flex: 1; margin: 0; }
+.operacion__pestanas .pestana { flex: 1 1 200px; }
+.operacion__pestanas .pestana[aria-selected="true"] { color: var(--texto); border-color: #f2994a; background: rgb(242 153 74 / 0.18); }
+.operacion__vista { flex: 1; min-height: 0; overflow: auto; }
+.operacion__vista[hidden] { display: none; }
+#vista-notas .kanban { height: 100%; }
+.corcho__avanzar { width: 100%; margin-top: 8px; padding: 6px 8px; font-size: 12px; }
+.corcho__avanzar--pendiente { background: #d4a106; }
+.corcho__avanzar--cargando { background: #2f7fd1; }
+.corcho__avanzar--en_ruta { background: #2f9e5b; }
+/* Entregadas se quedan en su viaje, en verde: registro de lo que ya salió hoy. */
+.corcho__nota--entregado { background: #eef9ef; box-shadow: 0 0 0 2px #2f9e5b, 0 3px 8px rgb(0 0 0 / 0.3); opacity: .92; }
+.corcho__chip--entregado { background: #c8f0d0; color: #11642a; }
+.corcho__viaje--listo { border-color: rgb(47 158 91 / 0.7); background: rgb(47 158 91 / 0.15); }
+.corcho__viaje--listo h4 span { background: #2f9e5b; color: #fff; }
+.corcho__ok { color: #b8f5c6; font-weight: 700; }
+/* Material completo: todos los renglones; si son muchos, se desplaza dentro de la tarjeta. */
+.corcho__material { max-height: 150px; overflow-y: auto; margin: 4px 0; padding-right: 2px; }
+.corcho__material .material { margin: 1px 0; font-size: 12px; font-weight: 600; color: #2b2118; }
+.corcho__material .partidas--aviso { font-size: 11px; color: #9b1c12; }
+.operacion__titulo { margin: 14px 0 8px; font-size: 15px; color: var(--texto); }
+.operacion__titulo:first-of-type { margin-top: 10px; }
+.operacion__titulo small { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--texto-suave); }
+/* Acciones del tablero dentro de las tarjetas del corcho. */
+.corcho__chofer .campo { display: grid; gap: 2px; margin-top: 6px; font-size: 11px; color: #6b5a48; }
+.corcho__chofer select { width: 100%; padding: 4px 6px; font: inherit; font-size: 12px; color: #2b2118; background: #fff; border: 1px solid #cbbba3; border-radius: 6px; }
+.corcho__acciones { flex-wrap: wrap; }
+.corcho__acciones .btn { flex: 1; }
+
+/* Notas con saldo: contorno rojo llamativo (corcho y tablero) */
+.corcho__nota--saldo { box-shadow: 0 0 0 3px #e53935, 0 3px 10px rgb(229 57 53 / 0.45); }
+.corcho__alerta--saldo { background: #b71c1c; }
+.columna[data-estado="saldo"] .tarjeta { outline: 3px solid #e53935; outline-offset: -1px; }
+
+/* Por Confirmar · Otro día: fecha del cliente y "Él avisa" en la tarjeta */
+.corcho__fecha { flex-wrap: wrap; font-size: 12px; }
+.corcho__fecha label { display: flex; align-items: center; gap: 4px; }
+.corcho__avisa { font-weight: 700; cursor: pointer; }
+.octavio__accesos { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.octavio__accesos .btn { margin: 0; }
+
+/* Sulema: nota nueva, ¿para cuándo?, unidad y viaje */
+.ventana.sulema-programar { inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 14px 18px 16px; z-index: 50; }
+.sulema-programar::backdrop { background: rgb(0 0 0 / 0.45); }
+.sp__nota { margin: 10px 0; padding: 10px 12px; background: var(--panel-2); border-left: 4px solid #e8a33d; border-radius: 8px; }
+.sp__pregunta { margin: 12px 0 8px; font-weight: 700; }
+.sp__suave { margin: 8px 0 0; color: var(--texto-suave); font-weight: 700; }
+.sp__opciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.sp__opciones .btn, .sp__atras { margin: 0; }
+.sp__atras { margin-top: 14px; }
+.sp--elegido { outline: 3px solid #2f9e5b; background: #2f9e5b !important; color: #fff !important; }
+.sp__aviso { margin: 10px 0 0; color: #ff8a80; font-weight: 700; min-height: 1em; }
+
+/* Eliminar nota desde el corcho */
+.corcho__nota { position: relative; }
+.corcho__eliminar { position: absolute; top: 4px; right: 4px; z-index: 1; padding: 2px 5px; font-size: 13px; line-height: 1; background: none; border: none; border-radius: 4px; cursor: pointer; opacity: .55; }
+.corcho__eliminar:hover, .corcho__eliminar:focus-visible { opacity: 1; background: #fde2e1; }
+.corcho__nota header { padding-right: 22px; }
+.corcho__nota > .corcho__alerta { margin-right: 22px !important; }
+
+/* Envío parcial: Salida y folio de lo que va */
+.parcial__salida { display: grid; gap: 6px; margin: 12px 0 4px; padding: 10px 12px; border: 1px dashed var(--borde, #888); border-radius: 8px; }
+.parcial__salida small { opacity: .75; }
+
+/* Reparto del día: post-it pintado completo según su estado. Tonos claros con texto casi negro (contraste > 9:1). */
+.corcho__nota[class*='--e-'] { --postit: #fffbe8; --postit-borde: #8a7a60; background: var(--postit); color: #141414; opacity: 1;
+  box-shadow: 0 0 0 2px var(--postit-borde), 0 3px 8px rgb(0 0 0 / 0.35); }
+.corcho__nota.corcho__nota--e-pendiente { --postit: #ffcc80; --postit-borde: #e65100; }
+.corcho__nota.corcho__nota--e-cargando { --postit: #d7a8e3; --postit-borde: #7b1fa2; }
+.corcho__nota.corcho__nota--e-en_ruta { --postit: #90caf9; --postit-borde: #1565c0; }
+.corcho__nota.corcho__nota--e-entregado { --postit: #a5d6a7; --postit-borde: #2e7d32; }
+.corcho__nota.corcho__nota--saldo[class*='--e-'] { --postit: #ef9a9a; --postit-borde: #c62828; }
+.corcho__nota[class*='--e-'] .corcho__suave,
+.corcho__nota[class*='--e-'] .corcho__material .material { color: #141414; }
+.corcho__nota[class*='--e-'] .corcho__suave { opacity: .8; }
+.corcho__nota[class*='--e-'] .corcho__chip { background: rgb(255 255 255 / 0.7); color: #141414; }
+.corcho__nota[class*='--e-'] .corcho__material .partidas--aviso { color: #7f0000; }
+.corcho__nota[class*='--e-'] .corcho__eliminar { opacity: .8; }

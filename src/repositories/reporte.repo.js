@@ -7,6 +7,11 @@ const stmts = {
   ordenes: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra
     WHERE estado <> 'descartada' AND creado_en >= @inicio AND creado_en < @fin`),
   entradas: db.prepare('SELECT COUNT(*) AS n FROM entradas_almacen WHERE creado_en >= @inicio AND creado_en < @fin'),
+  // Detalle para el reporte: quién pidió qué, y qué entró de qué proveedor.
+  listaOrdenes: db.prepare(`SELECT id, solicitante, sucursal, estado, renglones, creado_en FROM ordenes_compra
+    WHERE estado <> 'descartada' AND creado_en >= @inicio AND creado_en < @fin ORDER BY creado_en`),
+  listaEntradas: db.prepare(`SELECT id, sucursal, proveedor, folio, nota, renglones, creado_en FROM entradas_almacen
+    WHERE creado_en >= @inicio AND creado_en < @fin ORDER BY creado_en`),
   // Sólo las hechas en la semana; de ésas, las pagadas antes del cierre. Así no entra un pago
   // de una cotización de otra semana, y el número no cambia si el reporte se saca después.
   cotizaciones: db.prepare(`SELECT COUNT(*) AS creadas,
@@ -26,7 +31,7 @@ const stmts = {
     ORDER BY chofer, unidad, 3`),
   // Archivero de Edgar: cada entrega del día, con la misma regla que los viajes.
   entregas: db.prepare(`SELECT * FROM (
-      SELECT n.folio, c.nombre AS cliente, n.material, n.cantidad, n.unidad, n.direccion, n.total,
+      SELECT n.folio, c.nombre AS cliente, n.material, n.cantidad, n.unidad, n.detalle, n.direccion, n.total,
         COALESCE(ch.nombre, 'Sin chofer') AS chofer, COALESCE(ca.nombre, 'Sin unidad') AS camion,
         (SELECT MAX(h.fecha) FROM historial_estados h WHERE h.nota_id = n.id AND h.estado_nuevo = 'entregado') AS entregada_en,
         (SELECT COUNT(*) FROM evidencias e WHERE e.nota_id = n.id) AS evidencias
@@ -78,15 +83,53 @@ function semana(fecha) {
   return { inicio: `${dia(lunes)} 08:00:00`, fin: `${dia(domingo)} 00:00:00` };
 }
 
+// Combustible de un periodo: totales, por unidad y cada carga.
+function resumenCombustible(periodo) {
+  const cargas = stmts.combustible.all(periodo);
+  const porUnidad = new Map();
+  for (const c of cargas) {
+    const u = porUnidad.get(c.unidad) ?? { unidad: c.unidad, cargas: 0, importe: 0, litros: 0 };
+    u.cargas += 1;
+    u.importe += c.importe;
+    u.litros += c.litros ?? 0;
+    porUnidad.set(c.unidad, u);
+  }
+  const suma = (campo) => cargas.reduce((s, c) => s + (c[campo] ?? 0), 0);
+  return {
+    importe: suma('importe'),
+    litros: suma('litros'),
+    sin_litros: cargas.filter((c) => !c.litros).length,
+    por_unidad: [...porUnidad.values()].sort((a, b) => b.importe - a.importe),
+    cargas,
+  };
+}
+
+// renglones viene como texto JSON: [{cantidad, unidad, material}].
+const conRenglones = (fila) => {
+  let renglones = [];
+  try { renglones = JSON.parse(fila.renglones || '[]'); } catch { /* renglones dañados: se muestran vacíos */ }
+  return { ...fila, renglones };
+};
+
 function generar(fecha) {
   const periodo = semana(fecha);
   const salidas = viajes(periodo);
   const { creadas, pagadas } = stmts.cotizaciones.get(periodo);
   return {
     ...periodo,
-    octavio: { ordenes: stmts.ordenes.get(periodo).n, entradas: stmts.entradas.get(periodo).n },
+    octavio: {
+      ordenes: stmts.ordenes.get(periodo).n,
+      entradas: stmts.entradas.get(periodo).n,
+      lista_ordenes: stmts.listaOrdenes.all(periodo).map(conRenglones),
+      lista_entradas: stmts.listaEntradas.all(periodo).map(conRenglones),
+    },
     chatito: { creadas, pagadas },
-    edgar: { despachados: salidas.reduce((s, v) => s + v.viajes, 0), viajes: salidas },
+    edgar: {
+      despachados: salidas.reduce((s, v) => s + v.viajes, 0),
+      viajes: salidas,
+      entregas: stmts.entregas.all(periodo),
+      combustible: resumenCombustible(periodo),
+    },
   };
 }
 

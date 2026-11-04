@@ -296,9 +296,9 @@ export function montarOctavio({ toast, alCambiar }) {
     const form = e.target;
     try {
       const orden = await api.post('/api/octavio/ordenes', {
-        solicitante: form.elements.solicitante.value, nota: form.elements.nota.value, renglones: leerFilas(filasNueva),
+        solicitante: form.elements.sucursal.value, sucursal: form.elements.sucursal.value, nota: form.elements.nota.value, renglones: leerFilas(filasNueva),
       });
-      toast(`${orden.folio} creada en Órdenes de Compra Almacén`);
+      toast(`${orden.folio} creada en ${esAlmacen(orden) ? 'Órdenes de Compra Almacén' : 'Órdenes de Concordia'}`);
       form.reset();
       filasNueva.innerHTML = filaArticulo();
       await recargar();
@@ -395,6 +395,11 @@ export function montarOctavio({ toast, alCambiar }) {
       document.getElementById(p.getAttribute('aria-controls')).hidden = p !== elegida;
     }
     $('#pizarron-entradas-barra').hidden = elegida.id !== 'pestana-entradas';
+  });
+  // Acceso directo del panel: abre el pizarrón ya en su pestaña (oficina.js abre la ventana).
+  document.addEventListener('click', (e) => {
+    const acceso = e.target.closest('[data-pizarron-pestana]');
+    if (acceso) document.getElementById(acceso.dataset.pizarronPestana).click();
   });
 
   $('#ventana-ordenes').addEventListener('click', async (e) => {

@@ -118,7 +118,6 @@ app.listen(config.port, config.host, () => {
   require('./integraciones/inspector/seguimiento').iniciar();
   require('./integraciones/recordatorio-lista').iniciar();
   require('./integraciones/avisos-celular').iniciar();
-  require('./integraciones/aviso-manana').iniciar();
   whatsapp.iniciar();
   registroSheets.iniciar();
   respaldos.iniciar();

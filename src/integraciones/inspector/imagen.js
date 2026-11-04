@@ -68,7 +68,7 @@ function htmlOrden(o) {
     <tr class="sep"><td colspan="3"></td></tr>
     <tr><th class="n">Cantidad</th><th>Unidad</th><th>Material</th></tr>
     ${filas}
-    <tr class="total"><td colspan="3">APROBADA</td></tr>
+    <tr class="total"><td colspan="3">${esc(o.etiqueta ?? 'APROBADA')}</td></tr>
   </table></div></body></html>`;
 }
 

@@ -38,8 +38,9 @@ const ETIQUETAS = ['SC', 'SALIDA'];
 
 // Clic en la etiqueta de la tarjeta. No toca el resto de la nota, ni la hoja, ni avisa a nadie.
 router.patch('/:id/etiqueta', (req, res) => {
-  if (!ETIQUETAS.includes(req.body?.etiqueta)) throw httpError(400, 'La etiqueta debe ser SC o SALIDA');
-  const nota = notas.ponerEtiqueta(Number(req.params.id), req.body.etiqueta);
+  const etiqueta = req.body?.etiqueta || null;
+  if (etiqueta && !ETIQUETAS.includes(etiqueta)) throw httpError(400, 'La etiqueta debe ser SC o SALIDA');
+  const nota = notas.ponerEtiqueta(Number(req.params.id), etiqueta);
   bus.emit('nota:asignada', nota);
   res.json(nota);
 });
@@ -116,7 +117,7 @@ router.get('/:id/renglones', (req, res) => res.json(notas.renglones(Number(req.p
 // saldo: la tarjeta como quedó; null si el viaje se llevó todo y se cerró.
 router.post('/:id/parcial', (req, res) => {
   const id = Number(req.params.id);
-  const saldo = notas.envioParcial(id, req.body?.enviar);
+  const saldo = notas.envioParcial(id, req.body?.enviar, { folio: req.body?.folio, salida: req.body?.salida === true });
   bus.emit('nota:asignada', notas.obtener(id));
   res.json({ saldo });
 });

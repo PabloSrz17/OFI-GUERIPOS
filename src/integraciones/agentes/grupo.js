@@ -6,6 +6,7 @@ const agentes = require('./agentes');
 const solicitudes = require('../inspector/solicitudes');
 const evidencias = require('../sulema/evidencias');
 const combustible = require('./combustible');
+const octavio = require('../octavio/grupo');
 const bus = require('../../events/bus');
 const { generarTarjetaPNG } = require('../inspector/imagen');
 
@@ -66,6 +67,18 @@ async function procesarMensaje(mensaje) {
   // Foto de nota firmada para Sulema; cada quien del grupo lleva su propia ventana de 5 minutos.
   const clave = `${mensaje.from}|${mensaje.author ?? ''}`;
   if (await evidencias.recibir(mensaje, { clave, texto, esFoto, envio: reporto })) return;
+  // Octavio: "Octavio, mándame este material…" y las respuestas a su "¿Así está bien?" (si no nombran a otro agente).
+  if (!esFoto && (id === 'octavio' || !id) && octavio.leToca(clave, texto)) {
+    let respuesta;
+    try {
+      respuesta = await octavio.atender(mensaje, { clave, texto, reporto });
+    } catch (err) {
+      console.error('[grupo] octavio:', err.message);
+      respuesta = 'No pude armar la orden ahorita; intenta de nuevo en un momento.';
+    }
+    if (respuesta) await contestar(mensaje, respuesta);
+    return;
+  }
   // Foto de una lista con "Chatito" en el pie: contesta al momento y luego lee la foto y arma la tarjeta.
   if (esFoto && id === 'inspector') {
     await contestar(mensaje, FOTO_RECIBIDA);

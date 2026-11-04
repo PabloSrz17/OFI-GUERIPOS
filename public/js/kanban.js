@@ -30,12 +30,23 @@ const ORIGENES = { pulpos: 'PS', sicar: 'SC', whatsapp: 'WA' };
 // Etiqueta de la tarjeta. Las notas capturadas a mano con folio de N001 a N1000 son de SALIDA, no de SICAR.
 export function etiquetaOrigen(nota) {
   const m = /^n0*(\d+)(?:-s\d+)?$/i.exec(String(nota.folio ?? '').trim());
+  if (nota.etiqueta === 'SALIDA') return { texto: 'SALIDA', clase: 'salida' };
   if (nota.origen === 'sicar') {
     // La elegida a mano manda sobre la que toca por folio.
     const salida = nota.etiqueta ? nota.etiqueta === 'SALIDA' : Boolean(m && Number(m[1]) >= 1 && Number(m[1]) <= 1000);
     return salida ? { texto: 'SALIDA', clase: 'salida' } : { texto: 'SC', clase: 'sicar' };
   }
   return ORIGENES[nota.origen] ? { texto: ORIGENES[nota.origen], clase: nota.origen } : null;
+}
+
+// Botón de la etiqueta: un clic la vuelve SALIDA; otro, la regresa a SC (SICAR) o a la de su origen.
+export function botonEtiqueta(nota) {
+  const origen = etiquetaOrigen(nota);
+  if (!origen) return '';
+  const otra = origen.texto === 'SALIDA' ? (nota.origen === 'sicar' ? 'SC' : '') : 'SALIDA';
+  const nombre = otra || ORIGENES[nota.origen];
+  return `<button type="button" class="origen origen--${origen.clase} origen--boton" data-accion="etiqueta" data-id="${nota.id}"
+         data-etiqueta="${otra}" title="Cambiar a ${nombre}">${origen.texto}</button>`;
 }
 
 const esc =(v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -52,7 +63,7 @@ function hora(fecha) {
 }
 
 // campo: 'chofer' | 'camion'. Se eligen por separado: no siempre va el mismo chofer en el mismo camión.
-function selector(nota, campo, opciones) {
+export function selector(nota, campo, opciones) {
   const actual = nota[`${campo}_id`];
   const items = opciones.map((o) =>
     `<option value="${o.id}" ${o.id === actual ? 'selected' : ''}>${esc(o.nombre)}</option>`);
@@ -65,7 +76,7 @@ function selector(nota, campo, opciones) {
 }
 
 // Un producto por renglón: con varios, la lista completa; el aviso de revisar va aparte y resaltado.
-function renglones(nota) {
+export function renglones(nota) {
   const lineas = String(nota.detalle ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
   const avisos = lineas.filter((l) => l.startsWith('⚠️'));
   const productos = lineas.filter((l) => !l.startsWith('⚠️'));
@@ -108,17 +119,13 @@ function tarjeta(nota, { choferes, camiones }) {
     ? `<button type="button" class="tarjeta__editar" data-accion="parcial" data-id="${nota.id}">✂ Envío parcial</button>`
     : '';
 
-  const origen = etiquetaOrigen(nota);
   return `
     <article class="tarjeta" data-id="${nota.id}" ${esSaldo ? '' : 'draggable="true" title="Arrástrala a otra columna o usa los botones"'}>
       <button type="button" class="tarjeta__cancelar" data-accion="cancelar" data-id="${nota.id}"
-        title="Cancelar nota" aria-label="Cancelar nota ${esc(nota.folio)}">✕</button>
+        title="Eliminar nota" aria-label="Eliminar nota ${esc(nota.folio)}">🗑</button>
       <div class="tarjeta__top">
         <span class="folio">${esc(nota.folio)}</span>
-        ${nota.origen === 'sicar'
-    ? `<button type="button" class="origen origen--${origen.clase} origen--boton" data-accion="etiqueta" data-id="${nota.id}"
-         data-etiqueta="${origen.texto === 'SC' ? 'SALIDA' : 'SC'}" title="Cambiar a ${origen.texto === 'SC' ? 'SALIDA' : 'SC'}">${origen.texto}</button>`
-    : origen ? `<span class="origen origen--${origen.clase}">${origen.texto}</span>` : ''}
+        ${botonEtiqueta(nota)}
         <span class="hora" title="Hora de la venta">${hora(nota.creado_en)}</span>
       </div>
       <div class="cliente">${esc(nota.cliente)}</div>
