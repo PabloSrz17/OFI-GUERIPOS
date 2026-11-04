@@ -33,9 +33,19 @@ const SELECT_NOTA = `
 
 const stmts = {
   // El tablero muestra todo lo activo y sólo lo entregado hoy que no se ha archivado con el cierre.
+  // Las notas programadas para otro día esperan en el corcho de Edgar hasta su fecha.
   tablero: db.prepare(`${SELECT_NOTA}
-    WHERE n.estado <> 'entregado' OR (date(n.actualizado_en) = date('now', 'localtime') AND n.archivada_en IS NULL)
+    WHERE (n.estado <> 'entregado' OR (date(n.actualizado_en) = date('now', 'localtime') AND n.archivada_en IS NULL))
+      AND (n.programada_para IS NULL OR n.programada_para <= date('now', 'localtime'))
     ORDER BY n.creado_en, n.id`),
+  programadas: db.prepare(`${SELECT_NOTA}
+    WHERE n.estado <> 'entregado' AND n.programada_para > date('now', 'localtime')
+    ORDER BY n.programada_para, n.creado_en, n.id`),
+  paraManana: db.prepare(`
+    SELECT folio FROM notas
+    WHERE estado <> 'entregado' AND programada_para = date('now', 'localtime', '+1 day') ORDER BY id`),
+  viaje: db.prepare('UPDATE notas SET viaje = ? WHERE id = ?'),
+  programar: db.prepare(`UPDATE notas SET programada_para = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
   // Historial general: todo lo entregado que ya no está en el tablero.
   historial_general: db.prepare(`${SELECT_NOTA}
     WHERE n.estado = 'entregado' AND (n.archivada_en IS NOT NULL OR date(n.actualizado_en) < date('now', 'localtime'))
@@ -89,7 +99,8 @@ const stmts = {
       COALESCE(SUM(estado = 'entregado' AND archivada_en IS NULL AND date(actualizado_en) = date('now', 'localtime')), 0) AS entregado_hoy,
       COALESCE(SUM(estado = 'pendiente' AND saldo = 0 AND (chofer_id IS NULL OR (camion_id IS NULL
         AND chofer_id NOT IN (SELECT id FROM choferes WHERE almacen = 1)))), 0) AS sin_chofer
-    FROM notas`),
+    FROM notas
+    WHERE programada_para IS NULL OR programada_para <= date('now', 'localtime')`),
 };
 
 function obtener(id) {
@@ -252,6 +263,32 @@ const reprogramar = db.transaction((id) => {
   return stmts.porId.get(id);
 });
 
+// Corcho de Edgar: camión y número de viaje (1 a 5) de una vez. Sin camión no hay viaje.
+const VIAJES = 5;
+const ponerViaje = db.transaction((id, camionId, viaje) => {
+  if (camionId && !(Number.isInteger(viaje) && viaje >= 1 && viaje <= VIAJES)) throw httpError(400, `El viaje debe ser del 1 al ${VIAJES}`);
+  const nota = asignar(id, 'camion', camionId || null);
+  stmts.viaje.run(camionId && nota.camion_id ? viaje : null, id);
+  return stmts.porId.get(id);
+});
+
+// Fecha "AAAA-MM-DD" posterior a hoy, o null para regresarla al tablero de hoy.
+// "Él avisa": sin día fijo hasta que el cliente confirme. Se guarda como una fecha que nunca llega,
+// así el tablero y el aviso de mañana la dejan fuera sin reglas aparte.
+const EL_AVISA = '9999-12-31';
+
+function programar(id, fecha) {
+  const nota = obtener(id);
+  if (fecha === 'avisa') fecha = EL_AVISA;
+  if (fecha != null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || Number.isNaN(Date.parse(fecha))) throw httpError(400, 'Fecha inválida');
+    if (fecha <= db.prepare("SELECT date('now', 'localtime') AS hoy").get().hoy) throw httpError(400, 'La fecha debe ser de mañana en adelante');
+    if (nota.estado !== 'pendiente') throw httpError(409, `${nota.folio} ya está ${nota.estado === 'cargando' ? 'cargando' : 'en camino'}: sólo se programa una nota pendiente`);
+  }
+  stmts.programar.run(fecha ?? null, id);
+  return stmts.porId.get(id);
+}
+
 // Cancelar borra la nota con su historial y avisos. integracion_vistos no se toca: así el robot
 // no vuelve a traer de Pulpos una nota cancelada.
 function eliminar(id) {
@@ -276,6 +313,11 @@ module.exports = {
   editar,
   eliminar,
   listarTablero: () => stmts.tablero.all(),
+  listarProgramadas: () => stmts.programadas.all(),
+  foliosParaManana: () => stmts.paraManana.all().map((n) => n.folio),
+  programar,
+  EL_AVISA,
+  ponerViaje,
   obtener,
   obtenerSiExiste: (id) => stmts.porId.get(id),
   crear,

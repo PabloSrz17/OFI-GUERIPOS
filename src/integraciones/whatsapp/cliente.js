@@ -11,6 +11,9 @@ const hora = () => new Date().toLocaleTimeString('es-MX', { hour: '2-digit', min
 const horaLog = () => new Date().toLocaleTimeString('es-MX', { hour12: false });
 const REVISAR_MS = 15_000;
 const SIN_AVANCE_MS = 90_000;
+// Ya en "abriendo chats" al 99–100%: el intento bueno conecta en 3–25 s; el trabado nunca conecta
+// (el 03-nov se esperaron 3–4 min y nada). Pasados 40 s sin conectar, conviene reintentar ya.
+const SIN_AVANCE_AL_FINAL_MS = 40_000;
 const MAX_INTENTO_MS = 10 * 60_000;
 
 let cliente = null;
@@ -20,6 +23,7 @@ let reintento = null;
 let vigia = null;
 let inicioIntento = 0;
 let ultimoAvance = 0;
+let alFinal = false; // sesión aceptada y carga al 99% o más
 const alConectar = [];
 const alMensaje = [];
 
@@ -31,7 +35,7 @@ function vigilar() {
   clearTimeout(vigia);
   vigia = setTimeout(() => {
     if (listo || qrActual) return;
-    const avanza = Date.now() - Math.max(inicioIntento, ultimoAvance) < SIN_AVANCE_MS;
+    const avanza = Date.now() - Math.max(inicioIntento, ultimoAvance) < (alFinal ? SIN_AVANCE_AL_FINAL_MS : SIN_AVANCE_MS);
     if (avanza && Date.now() - inicioIntento < MAX_INTENTO_MS) {
       vigilar();
       return;
@@ -86,6 +90,9 @@ function conectar() {
     // Mismo Chrome que el robot de Pulpos: no se descarga otro.
     puppeteer: { headless: true, executablePath: puppeteer.executablePath() },
   });
+  // Al reintentar se destruye el cliente anterior y su initialize() falla (Target closed): ese error
+  // ya no cuenta. Antes reprogramaba otra reconexión y tumbaba al cliente nuevo ya conectado (04-nov).
+  const este = cliente;
 
   cliente.on('qr', (qr) => {
     qrActual = qr;
@@ -93,7 +100,9 @@ function conectar() {
   });
   // Señales de que sigue cargando: el vigilante no corta un intento que avanza.
   cliente.on('loading_screen', (porcentaje) => {
+    if (este !== cliente) return;
     ultimoAvance = Date.now();
+    if (Number(porcentaje) >= 99) alFinal = true;
     console.log(`[whatsapp] ${horaLog()} cargando ${porcentaje}%`);
   });
   cliente.on('authenticated', () => {
@@ -116,6 +125,7 @@ function conectar() {
     estado.reportar(ORIGEN, false, 'No se pudo vincular: vuelve a escanear el QR');
   });
   cliente.on('disconnected', (motivo) => {
+    if (este !== cliente) return; // aviso del cliente anterior, ya destruido
     listo = false;
     estado.reportar(ORIGEN, false, `Desconectado (${motivo}); reintentando…`);
     console.error('[whatsapp] desconectado:', motivo);
@@ -125,8 +135,10 @@ function conectar() {
   estado.reportar(ORIGEN, false, 'Conectando…');
   inicioIntento = Date.now();
   ultimoAvance = 0;
+  alFinal = false;
   vigilar();
   cliente.initialize().catch((err) => {
+    if (este !== cliente) return;
     estado.reportar(ORIGEN, false, `No pude abrir WhatsApp: ${err.message}`);
     console.error('[whatsapp]', err);
     reconectarEn(60_000);

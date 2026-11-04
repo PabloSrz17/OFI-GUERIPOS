@@ -30,6 +30,15 @@ app.use(seguridad.soloRedLocal);
 app.use(seguridad.encabezados(PUBLICO));
 app.use(express.json({ limit: '100kb' }));
 app.use('/api/pin', pin.router);
+// Apagado ordenado para scripts/detener-oficina.ps1 (Windows no manda Ctrl+C a otro proceso): cerrar
+// bien el Chrome de WhatsApp evita que al arrancar se quede trabado en "abriendo chats".
+// Sólo desde esta PC y con un encabezado propio, que una página web de otro sitio no puede mandar.
+app.post('/api/apagar', (req, res) => {
+  if (!seguridad.esEstaPC(req) || req.get('X-Oficina') !== 'apagar') return res.status(403).end();
+  res.status(202).end();
+  console.log('[oficina] apagado ordenado');
+  setImmediate(apagar);
+});
 app.use(pin.proteger);
 app.use(express.static(PUBLICO));
 app.use('/vendor/three', express.static(path.join(__dirname, '..', 'node_modules', 'three'))); // escena 3D, sin internet
@@ -75,6 +84,7 @@ app.post('/api/agentes/:id/preguntar', async (req, res) =>
 app.get('/api/resumen', (req, res) =>
   res.json({
     ...notas.resumen(),
+    programadas_manana: notas.foliosParaManana(),
     clientes: clientes.contar(),
     cotizaciones_hoy: cotizacionesRepo.hoy(),
     solicitudes_pendientes: solicitudes.pendientes().length,
@@ -108,15 +118,15 @@ app.listen(config.port, config.host, () => {
   require('./integraciones/inspector/seguimiento').iniciar();
   require('./integraciones/recordatorio-lista').iniciar();
   require('./integraciones/avisos-celular').iniciar();
+  require('./integraciones/aviso-manana').iniciar();
   whatsapp.iniciar();
   registroSheets.iniciar();
   respaldos.iniciar();
 });
 
 // Cierra los navegadores (robot y WhatsApp) y la conexión a SICAR al detener el servidor (Ctrl+C).
-for (const senal of ['SIGINT', 'SIGTERM']) {
-  process.on(senal, async () => {
-    await Promise.all([robotPulpos.detener(), conectorSicar.detener(), whatsapp.detener()]);
-    process.exit(0);
-  });
+async function apagar() {
+  await Promise.all([robotPulpos.detener(), conectorSicar.detener(), whatsapp.detener()]);
+  process.exit(0);
 }
+for (const senal of ['SIGINT', 'SIGTERM']) process.on(senal, apagar);

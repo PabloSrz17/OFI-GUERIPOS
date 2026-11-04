@@ -205,7 +205,21 @@ function notaDeOrden(db) {
   if (!columnas.includes('nota')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN nota TEXT');
 }
 
+// Nota programada para otro día (corcho de Edgar): no sale en el tablero hasta su fecha.
+function notaProgramada(db) {
+  const columnas = db.prepare('PRAGMA table_info(notas)').all().map((c) => c.name);
+  if (!columnas.includes('programada_para')) db.exec('ALTER TABLE notas ADD COLUMN programada_para TEXT');
+}
+
+// Número de viaje (1 a 5) de la nota en su camión: filas del corcho de Edgar.
+function viajeDeNota(db) {
+  const columnas = db.prepare('PRAGMA table_info(notas)').all().map((c) => c.name);
+  if (!columnas.includes('viaje')) db.exec('ALTER TABLE notas ADD COLUMN viaje INTEGER');
+}
+
 module.exports = function migrar(db) {
+  viajeDeNota(db);
+  notaProgramada(db);
   notaDeOrden(db);
   entradasConRenglones(db);
   saldosPendientes(db);

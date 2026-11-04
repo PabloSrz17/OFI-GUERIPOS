@@ -146,19 +146,39 @@ function etiquetado(lineas, etiqueta) {
 
 // PDF de SICAR: las etiquetas grises ("Nombre:", "Cel:") no se leen, pero el bloque del cliente siempre
 // va igual justo arriba de la tabla: nombre, RFC y celular, y domicilio con C.P.
+const mayusculas = (l) => (String(l ?? '').match(/[A-ZÁÉÍÓÚÑ0-9][A-ZÁÉÍÓÚÑ0-9 .,&#\/-]{3,}/g) ?? [])
+  .reduce((a, b) => (b.length > a.length ? b : a), '').trim();
+// Teléfono de 10 dígitos en el renglón; nunca el del negocio (981 134 88xx, impreso arriba en los tickets).
+const NEGOCIO = /^98113488/;
+function telefonoEn(linea) {
+  for (const m of String(linea ?? '').matchAll(/(?<!\d)(\d(?:[\s.-]?\d){9})(?![\d])/g)) {
+    const t = m[1].replace(/\D/g, '');
+    if (!NEGOCIO.test(t)) return { telefono: m[1], antes: linea.slice(0, m.index) };
+  }
+  return null;
+}
+// Nombre en el mismo renglón que el celular ("OSCAR BACELIS 9811242123"): palabras de puras letras,
+// sin el RFC ni la basura de etiquetas grises ("ai.", "ce").
+const nombreAntes = (texto) => texto.split(/\s+/).filter((p) => /^[A-ZÁÉÍÓÚÑ&.]{2,}$/.test(p) && /[A-ZÁÉÍÓÚÑ]{2}/.test(p)).join(' ');
+
 function receptorDelPdf(lineas) {
   const tabla = lineas.findIndex((l) => /^CANT\b.*DESCRIP/i.test(l));
   if (tabla < 0) return {};
-  const conCp = lineas.slice(Math.max(0, tabla - 6), tabla).findLastIndex((l) => /C\.?\s*P\.?\s*:?\s*\d{5}/i.test(l));
-  if (conCp < 0) return {};
-  const k = Math.max(0, tabla - 6) + conCp;
-  const mayusculas = (l) => (String(l ?? '').match(/[A-ZÁÉÍÓÚÑ0-9][A-ZÁÉÍÓÚÑ0-9 .,&#\/-]{3,}/g) ?? [])
-    .reduce((a, b) => (b.length > a.length ? b : a), '').trim();
-  return {
-    cliente: mayusculas(lineas[k - 2]),
-    celular: String(lineas[k - 1] ?? '').match(/(\d(?:[\s.-]?\d){9})\s*\S{0,2}$/)?.[1],
-    direccion: mayusculas(lineas[k]).replace(/\s*,?\s*C\.?\s*P\.?.*$/i, ''),
-  };
+  const inicio = Math.max(0, tabla - 8);
+  const arriba = lineas.slice(inicio, tabla);
+  const conCp = arriba.findLastIndex((l) => /C\.?\s*P\.?\s*:?\s*\d{5}/i.test(l));
+  if (conCp >= 0 && conCp >= 2) {
+    const k = inicio + conCp;
+    const celular = String(lineas[k - 1] ?? '').match(/(\d(?:[\s.-]?\d){9})\s*\S{0,2}$/)?.[1];
+    if (celular) return { cliente: mayusculas(lineas[k - 2]), celular, direccion: mayusculas(lineas[k]).replace(/\s*,?\s*C\.?\s*P\.?.*$/i, '') };
+  }
+  // Sin C.P. (o con otro acomodo): el celular es el último teléfono arriba de la tabla y el nombre va
+  // en ese mismo renglón, antes del número, o en el de arriba.
+  const i = arriba.findLastIndex((l) => telefonoEn(l));
+  if (i < 0) return {};
+  const { telefono, antes } = telefonoEn(arriba[i]);
+  const mismo = nombreAntes(antes);
+  return { cliente: mismo.split(' ').length >= 2 ? mismo : mayusculas(arriba[i - 1]), celular: telefono };
 }
 
 const OTRA_ETIQUETA = /^\W*(colon|ciudad|cel|tel|no\.?\s*cliente|comentario|r\.?f\.?c|cp\b|c\.p)/i;
@@ -195,7 +215,11 @@ export function interpretarTicket(texto) {
   if (folio) datos.folio = folio[1].toUpperCase();
 
   const cliente = etiquetado(lineas, /\b(?:cliente|nombre)\b\s*[:.-]*\s*(.*)$/i);
-  if (cliente?.valor) datos.cliente = cliente.valor.replace(/\s+tel\b.*$/i, '').replace(/\s+\S$/, '').toUpperCase();
+  // "Nombre: OSCAR BACELIS Cel: 9811242123 RFC: …": el nombre termina donde empieza otra etiqueta o un número.
+  if (cliente?.valor) {
+    const nombre = cliente.valor.replace(/\s+(?:tel|cel|whats|r\.?f\.?c|no\.?\s*cliente)\b.*$/i, '').replace(/\s+[\d(+].*$/, '').replace(/\s+\S$/, '').toUpperCase();
+    if (/[A-ZÁÉÍÓÚÑ]{2}/.test(nombre)) datos.cliente = nombre;
+  }
 
   const direccion = direccionDe(lineas);
   if (direccion) datos.direccion = direccion;
@@ -203,7 +227,7 @@ export function interpretarTicket(texto) {
   // Sólo con etiqueta: el ticket impreso trae arriba el teléfono del negocio.
   for (const m of todo.matchAll(/\b(?:cel|tel|whats\w*)[^\n\d]*((?:\+?52[\s-]*)?\d(?:[\s.-]?\d){9})(?!\d)/gi)) {
     const telefono = normalizar(m[1]);
-    if (telefono) {
+    if (telefono && !NEGOCIO.test(m[1].replace(/\D/g, '').slice(-10))) {
       datos.telefono = formatear(telefono);
       break;
     }

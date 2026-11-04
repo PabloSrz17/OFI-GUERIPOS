@@ -338,6 +338,21 @@ async function cotizacionDelGrupo(clave, texto) {
   return { cliente: datos.nombre_cliente.toUpperCase(), renglones };
 }
 
+// Foto de una lista mandada al grupo nombrando a Chatito: Tesseract (y si no alcanza, la IA) y tarjeta
+// por autorizar con la foto. grupo.js manda al grupo la imagen de la tarjeta (solicitud:foto).
+async function cotizacionDeFotoGrupo(mensaje, clave, pie) {
+  const { media, legible, leida } = await bajarYLeer(mensaje, clave, pie);
+  const datos = leida ?? { nombre_cliente: '', colonia: '', metodo_pago: '', productos: [] };
+  datos.nombre_cliente ||= 'COTIZACIÓN DEL GRUPO';
+  if (!datos.productos.some((p) => p.producto)) datos.productos = [{ cantidad: '', unidad: '', producto: '' }];
+  const id = guardarSolicitud(clave, {
+    telefono: null, contacto: null, datos, textos: `[Foto del grupo] ${pie}`.trim().slice(-2000),
+    conv: { esperando: 0, solicitud_id: null }, foto: legible ? guardarFoto(media) : null,
+  });
+  bus.emit('solicitud:foto', id);
+  return id;
+}
+
 // Uno a la vez: si llegan dos mensajes seguidos del mismo número, no salen dos bienvenidas.
 function iniciar(whatsapp) {
   let cola = Promise.resolve();
@@ -353,6 +368,7 @@ module.exports = {
   pideCotizacion,
   procesarMensaje,
   cotizacionDelGrupo,
+  cotizacionDeFotoGrupo,
   pendientes: () => stmts.pendientes.all().map((s) => ({ ...s, borrador: JSON.parse(s.borrador) })),
   sigueAbierta: (id) => Boolean(stmts.abierta.get(id)),
   marcar: (id, estado, cotizacionId = null) => {

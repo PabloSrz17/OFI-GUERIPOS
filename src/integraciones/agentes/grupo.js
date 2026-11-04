@@ -10,6 +10,7 @@ const bus = require('../../events/bus');
 const { generarTarjetaPNG } = require('../inspector/imagen');
 
 const PIDE_AUTORIZACION = 'Así quedó la cotización en la Oficina. ¿Me autorizas enviarla?';
+const FOTO_RECIBIDA = 'Claro, te la dejo en la Oficina Virtual.';
 
 const MAX_ATRASO_S = 300; // al reconectar llegan mensajes viejos: a esos no se les contesta
 // No mensaje.reply(): cita con id._serialized, que en 1.34.7 llega vacío. Se manda al grupo sin citar.
@@ -65,6 +66,15 @@ async function procesarMensaje(mensaje) {
   // Foto de nota firmada para Sulema; cada quien del grupo lleva su propia ventana de 5 minutos.
   const clave = `${mensaje.from}|${mensaje.author ?? ''}`;
   if (await evidencias.recibir(mensaje, { clave, texto, esFoto, envio: reporto })) return;
+  // Foto de una lista con "Chatito" en el pie: contesta al momento y luego lee la foto y arma la tarjeta.
+  if (esFoto && id === 'inspector') {
+    await contestar(mensaje, FOTO_RECIBIDA);
+    await solicitudes.cotizacionDeFotoGrupo(mensaje, mensaje.from, texto).catch(async (err) => {
+      console.error('[grupo] foto para Chatito:', err.message);
+      await contestar(mensaje, 'No pude leer la foto; captúrala a mano en la Oficina.');
+    });
+    return;
+  }
   if (!id || esFoto) return;
   let respuesta;
   try {
@@ -96,4 +106,4 @@ function iniciar(whatsapp) {
   });
 }
 
-module.exports = { iniciar, procesarMensaje, agenteDe, avisarTarjeta, PIDE_AUTORIZACION };
+module.exports = { iniciar, procesarMensaje, agenteDe, avisarTarjeta, PIDE_AUTORIZACION, FOTO_RECIBIDA };

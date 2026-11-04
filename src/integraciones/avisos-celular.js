@@ -56,4 +56,4 @@ function iniciar() {
   console.log(`[avisos] al celular:${config.ntfy ? ' WhatsApp caído' : ''}${config.latido ? ' + latido' : ''}`);
 }
 
-module.exports = { iniciar, revisar, config };
+module.exports = { iniciar, revisar, config, notificar };

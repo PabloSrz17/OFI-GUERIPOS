@@ -142,3 +142,29 @@ test('sin datos reconocibles no llena nada', async () => {
   assert.deepEqual(interpretarTicket('e . ! r a Al MN\nNS |\n6\nY - Eo'), {});
   assert.deepEqual(interpretarTicket(''), {});
 });
+
+// Cabecera de la nota: el cliente y su celular en distintos acomodos (OSCAR BACELIS, 9811242123).
+const TABLA = `CANT UNI DESCRIPCIÓN P. UNIT. IMPORTE
+10.0 PZA CEMENTO MAYA 25 KG $ 150.00 $ 1,500.00`;
+test('cabecera: nombre y celular aunque la dirección no traiga C.P.', async () => {
+  const { interpretarTicket } = await cargar();
+  const d = interpretarTicket(`MATERIALES EL GUERO 9811348812
+OSCAR BACELIS
+ai. XAXX010101000 ce 9811242123
+CALLE 10 POR 15 COL. CENTRO
+${TABLA}`);
+  assert.equal(d.cliente, 'OSCAR BACELIS');
+  assert.equal(d.telefono, '981 124 2123');
+});
+test('cabecera: nombre y celular en el mismo renglón, sin etiquetas', async () => {
+  const { interpretarTicket } = await cargar();
+  const d = interpretarTicket(`MATERIALES EL GUERO 9811348812\nOSCAR BACELIS 9811242123\n${TABLA}`);
+  assert.equal(d.cliente, 'OSCAR BACELIS');
+  assert.equal(d.telefono, '981 124 2123');
+});
+test('cabecera con etiquetas en un renglón: Nombre y Cel se separan', async () => {
+  const { interpretarTicket } = await cargar();
+  const d = interpretarTicket(`Tel: 981 134 8812\nNombre: OSCAR BACELIS Cel: 9811242123\n${TABLA}`);
+  assert.equal(d.cliente, 'OSCAR BACELIS');
+  assert.equal(d.telefono, '981 124 2123'); // nunca el del negocio
+});

@@ -15,7 +15,7 @@ class IAFalsa {
     this.messages = {
       create: async (p) => {
         const props = p.output_config?.format?.schema?.properties ?? {};
-        const json = props.es_carga ? carga : props.es_cotizacion ? cotizacion : null;
+        const json = props.es_carga ? carga : props.es_cotizacion || props.es_pedido ? cotizacion : null;
         llamadas.push(props.es_carga ? 'carga' : props.es_cotizacion ? 'cotizacion' : 'pregunta');
         const texto = json ? JSON.stringify(json) : 'Respuesta del agente';
         return { stop_reason: 'end_turn', content: [{ type: 'text', text: texto }] };
@@ -124,4 +124,21 @@ test('si getChat falla (error "r" de la librería), el nombre del grupo se lee e
   m.client.pupPage = { evaluate: async () => 'AGENTES IA CHAT' };
   await grupo.procesarMensaje(m);
   assert.deepEqual(m.respuestas, ['Respuesta del agente']);
+});
+
+test('foto al grupo con "Chatito": contesta al momento y deja la tarjeta por autorizar', async () => {
+  cotizacion = { es_cotizacion: true, es_pedido: true, nombre_cliente: '', colonia: '', metodo_pago: '', productos: [{ cantidad: 3, unidad: 'bulto', producto: 'cemento' }] };
+  const bus = require('../src/events/bus');
+  const avisos = [];
+  const oir = (id) => avisos.push(id);
+  bus.on('solicitud:foto', oir);
+  const m = mensaje('Chatito cotiza esto', { from: '120363000000000004@g.us', extra: { type: 'image', id: { id: 'x' } } });
+  m.client.pupPage = { evaluate: async (fn, arg) => (arg === 'x' ? { mimetype: 'image/jpeg', data: 'AAAA' } : null) };
+  await grupo.procesarMensaje(m);
+  bus.off('solicitud:foto', oir);
+  assert.deepEqual(m.respuestas, [grupo.FOTO_RECIBIDA]);
+  assert.equal(avisos.length, 1);
+  const tarjeta = solicitudes.obtener(avisos[0]);
+  assert.equal(tarjeta.nombre, 'COTIZACIÓN DEL GRUPO');
+  assert.match(tarjeta.borrador, /cemento/i);
 });

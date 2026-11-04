@@ -29,7 +29,7 @@ function filaHtml(p, i) {
   const falta = p.precio === null || p.precio === '';
   return `
     <tr data-i="${i}" class="${p.tipo === 'flete' ? 'fila-flete' : ''}">
-      <td><input data-campo="descripcion" value="${esc(p.descripcion)}" ${p.tipo === 'flete' ? 'readonly' : ''}></td>
+      <td><input data-campo="descripcion" value="${esc(p.descripcion)}"></td>
       <td><input data-campo="cantidad" value="${esc(p.cantidad)}" class="n"></td>
       <td><input data-campo="unidad" value="${esc(p.unidad)}" class="corto"></td>
       <td><input data-campo="precio" type="number" min="0" step="any" value="${falta ? '' : esc(p.precio)}"

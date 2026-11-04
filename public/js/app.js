@@ -11,6 +11,7 @@ import { montarCierre } from './cierre.js';
 import { montarInspector, recargarSolicitudes } from './inspector.js';
 import { montarOctavio, recargarOctavio } from './octavio.js';
 import { montarArchiveros } from './archiveros.js';
+import { montarCorcho, recargarCorcho } from './corcho.js';
 import { normalizar, formatear } from './telefono.js';
 
 const INTERVALO_MS = 60000; // respaldo; los cambios llegan al instante por /api/eventos
@@ -55,6 +56,7 @@ async function refrescar() {
       .forEach((n) => animarSalida(n));
     notasActuales = notas;
     renderKanban(tablero, notas, catalogos);
+    recargarCorcho(notas);
     pintarSinDireccion(notas);
     actualizarOficina(resumen, notas);
     actualizarFlota(resumen.camiones);
@@ -192,6 +194,40 @@ tablero.addEventListener('click', async (e) => {
   }
 });
 
+// 🗓 Otro día: elige la fecha y la nota pasa al corcho «Notas para otro día» (sale de Pendientes).
+const diaLocal = (mas) => {
+  const d = new Date();
+  d.setDate(d.getDate() + mas);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+$('#otro-dia').addEventListener('click', (e) => {
+  const rapido = e.target.closest('[data-dias]');
+  if (rapido) $('#otro-dia-fecha').value = diaLocal(Number(rapido.dataset.dias));
+});
+tablero.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-accion="otro-dia"]');
+  if (!btn) return;
+  const nota = notaPorId(btn.dataset.id);
+  const dialogo = $('#otro-dia');
+  const fecha = $('#otro-dia-fecha');
+  $('#otro-dia-resumen').innerHTML = `<div><b>${esc(nota.folio)}</b> · ${esc(nota.cliente)}</div><div>${esc(nota.cantidad)} ${esc(nota.unidad)} · ${esc(nota.material)}</div>`;
+  fecha.min = diaLocal(1);
+  fecha.value = diaLocal(1);
+  dialogo.returnValue = '';
+  dialogo.showModal();
+  await new Promise((listo) => dialogo.addEventListener('close', listo, { once: true }));
+  const avisa = dialogo.returnValue === 'avisa'; // sin fecha: espera a que el cliente confirme
+  if (!avisa && (dialogo.returnValue !== 'confirmar' || !fecha.value)) return;
+  try {
+    await api.patch(`/api/notas/${nota.id}/programar`, { fecha: avisa ? 'avisa' : fecha.value });
+    const dia = avisa ? '' : new Date(`${fecha.value}T12:00`).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+    toast(avisa ? `${nota.folio} quedó sin día: el cliente avisa` : `${nota.folio} quedó para el ${dia}`);
+  } catch (err) {
+    toast(err.message, true);
+  }
+  refrescar();
+});
+
 // ✕ de cada tarjeta: pide confirmación antes de borrar.
 async function confirmarCancelacion(nota) {
   const dialogo = $('#cancelar-nota');
@@ -306,6 +342,7 @@ async function iniciar() {
   montarInspector({ toast, alAprobar: refrescar });
   montarOctavio({ toast, alCambiar: refrescar });
   montarArchiveros();
+  montarCorcho({ catalogos, toast });
   reloj();
   setInterval(reloj, 30000);
   try {

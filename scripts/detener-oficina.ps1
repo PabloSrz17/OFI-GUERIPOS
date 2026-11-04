@@ -13,7 +13,12 @@ $puerto = 3000
 $linea = Select-String -Path (Join-Path $raiz '.env') -Pattern '^\s*PORT\s*=\s*(\d+)' -ErrorAction SilentlyContinue
 if ($linea) { $puerto = [int]$linea.Matches[0].Groups[1].Value }
 $servidor = (Get-NetTCPConnection -LocalPort $puerto -State Listen -ErrorAction SilentlyContinue).OwningProcess
-if ($servidor) { Stop-Process -Id $servidor -Force }
+if ($servidor) {
+  # Primero pide apagado ordenado (cierra bien WhatsApp); si en 20 s no se apagó, a la fuerza.
+  try { Invoke-WebRequest "http://127.0.0.1:$puerto/api/apagar" -Method Post -Headers @{ 'X-Oficina' = 'apagar' } -UseBasicParsing -TimeoutSec 5 | Out-Null } catch {}
+  for ($i = 0; $i -lt 40 -and (Get-Process -Id $servidor -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
+  if (Get-Process -Id $servidor -ErrorAction SilentlyContinue) { Stop-Process -Id $servidor -Force }
+}
 
 Get-Process chrome -ErrorAction SilentlyContinue |
   Where-Object { $_.Path -like '*\.cache\puppeteer*' } |

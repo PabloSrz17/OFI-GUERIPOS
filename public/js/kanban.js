@@ -134,6 +134,7 @@ function tarjeta(nota, { choferes, camiones }) {
       <div class="tarjeta__enlaces">
         <button type="button" class="tarjeta__editar" data-accion="editar" data-id="${nota.id}">✎ Editar</button>
         ${parcial}
+        ${nota.estado === 'pendiente' ? `<button type="button" class="tarjeta__editar" data-accion="otro-dia" data-id="${nota.id}">🗓 Otro día</button>` : ''}
       </div>
       ${choferHtml}
       ${AVISO_WHATSAPP[nota.whatsapp] ? `<div class="dato dato--whatsapp">${AVISO_WHATSAPP[nota.whatsapp]}</div>` : ''}

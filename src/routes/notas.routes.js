@@ -16,6 +16,16 @@ router.get('/', (req, res) => {
 
 router.get('/historial', (req, res) => res.json(notas.historialGeneral()));
 
+// Corcho de Edgar: notas para otro día (no salen en el tablero hasta su fecha).
+router.get('/programadas', (req, res) => res.json(notas.listarProgramadas()));
+
+// fecha "AAAA-MM-DD" o null para regresarla a hoy. No avisa al cliente ni toca la hoja.
+router.patch('/:id/programar', (req, res) => {
+  const nota = notas.programar(Number(req.params.id), req.body?.fecha || null);
+  bus.emit('nota:asignada', nota);
+  res.json(nota);
+});
+
 // El respaldo va antes de archivar, y si falla el cierre sigue: la pantalla lo avisa.
 router.post('/cierre', async (req, res) => {
   const respaldo = await respaldar().catch(() => null);
@@ -137,6 +147,14 @@ router.patch('/:id/chofer', (req, res) => {
 router.patch('/:id/camion', (req, res) => {
   const camionId = req.body?.camion_id ? Number(req.body.camion_id) : null;
   const nota = notas.asignar(Number(req.params.id), 'camion', camionId);
+  bus.emit('nota:asignada', nota);
+  res.json(nota);
+});
+
+// Corcho de Edgar: soltar la nota en un viaje de un camión (camion_id null = sin unidad).
+router.patch('/:id/viaje', (req, res) => {
+  const camionId = req.body?.camion_id ? Number(req.body.camion_id) : null;
+  const nota = notas.ponerViaje(Number(req.params.id), camionId, Number(req.body?.viaje));
   bus.emit('nota:asignada', nota);
   res.json(nota);
 });

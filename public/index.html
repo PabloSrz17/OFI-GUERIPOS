@@ -162,6 +162,30 @@
     <div id="gasolina-contenido" class="archivo--limpio"></div>
   </dialog>
 
+  <!-- Corcho de Edgar: lo que sale hoy en cada unidad -->
+  <dialog id="ventana-corcho" class="ventana" aria-labelledby="corcho-titulo">
+    <header class="ventana__cabeza">
+      <h2 id="corcho-titulo">📌 Programación del día · <span id="corcho-fecha"></span></h2>
+      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
+    </header>
+    <p class="corcho__ayuda">Arrastra una nota a otro viaje o a otra unidad: se guarda al soltarla.</p>
+    <div id="corcho-contenido" class="corcho"></div>
+  </dialog>
+
+  <!-- Corcho de Edgar: notas para otro día (no salen en el tablero hasta su fecha) -->
+  <dialog id="ventana-futuras" class="ventana ventana--media" aria-labelledby="futuras-titulo">
+    <header class="ventana__cabeza">
+      <h2 id="futuras-titulo">🗓 Notas para otro día</h2>
+      <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
+    </header>
+    <form id="futuras-nueva" class="archivo__filtros">
+      <label class="campo">Nota pendiente <select id="futuras-nota" required></select></label>
+      <label class="campo">Para el <input id="futuras-fecha" type="date" required></label>
+      <button type="submit" class="btn">📌 Programar</button>
+    </form>
+    <div id="futuras-contenido" class="corcho corcho--futuras"></div>
+  </dialog>
+
   <!-- Pizarra de Octavio: órdenes de compra aprobadas y entradas de almacén -->
   <dialog id="ventana-ordenes" class="ventana" aria-labelledby="ordenes-titulo">
     <header class="ventana__cabeza">
@@ -260,9 +284,17 @@
       </section>
     </div>
 
-    <div class="panel__funcion panel__botones" data-funcion="rutas" hidden>
-      <button type="button" class="btn" data-objeto="notas">📦 Abrir Notas Pendientes</button>
-      <button type="button" class="btn" data-objeto="gasolina">⛽ Control de Gasolina</button>
+    <div class="panel__funcion edgar" data-funcion="rutas" hidden>
+      <button type="button" class="edgar__principal" data-objeto="corcho">
+        <span class="edgar__icono" aria-hidden="true">📌</span>
+        <span><b>Corcho por unidad</b><small>Salidas de hoy · Nissan Blanca, Nissan Roja, RAM y Ford F450</small></span>
+        <span class="edgar__flecha" aria-hidden="true">›</span>
+      </button>
+      <div class="edgar__atajos">
+        <button type="button" class="edgar__atajo" data-objeto="notas"><span aria-hidden="true">📦</span>Notas pendientes</button>
+        <button type="button" class="edgar__atajo" data-objeto="futuras"><span aria-hidden="true">🗓</span>Otro día</button>
+        <button type="button" class="edgar__atajo" data-objeto="gasolina"><span aria-hidden="true">⛽</span>Gasolina</button>
+      </div>
     </div>
 
     <div class="panel__funcion" data-funcion="inspector" hidden>
@@ -443,6 +475,25 @@
       <div class="dialogo__botones">
         <button type="button" class="btn btn--regresar" data-cerrar>Cancelar</button>
         <button type="submit" class="btn">Guardar envío parcial</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="otro-dia" class="dialogo" aria-labelledby="otro-dia-titulo">
+    <form method="dialog">
+      <h2 id="otro-dia-titulo">🗓 Programar para otro día</h2>
+      <div id="otro-dia-resumen" class="dialogo__resumen"></div>
+      <div class="otro-dia__rapido" role="group" aria-label="Fechas rápidas">
+        <button type="button" class="btn btn--secundario" data-dias="1">Mañana</button>
+        <button type="button" class="btn btn--secundario" data-dias="2">Pasado mañana</button>
+        <button type="button" class="btn btn--secundario" data-dias="7">En una semana</button>
+        <button value="avisa" class="btn btn--secundario otro-dia__avisa" formnovalidate title="Sin fecha: queda en «Notas sin día programado» hasta que el cliente confirme">📞 Él avisa</button>
+      </div>
+      <label class="campo">Fecha de entrega <input id="otro-dia-fecha" type="date" required></label>
+      <p class="dialogo__aviso">Sale de Pendientes y queda en «Notas para otro día» hasta esa fecha.</p>
+      <div class="dialogo__botones">
+        <button value="no" class="btn btn--secundario" formnovalidate>Cancelar</button>
+        <button value="confirmar" class="btn">📌 Programar</button>
       </div>
     </form>
   </dialog>

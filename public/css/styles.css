@@ -784,3 +784,74 @@ details.plegable[hidden] { display: none; }
 @media (max-width: 640px) { .archivo__tabla { display: block; overflow-x: auto; } }
 .panel__botones:not([hidden]) { display: flex; flex-wrap: wrap; gap: 8px; }
 .archivo__filtros .campo input[type="number"] { width: 110px; }
+
+/* Corchos de Edgar: programación por unidad y notas para otro día */
+.corcho__ayuda { margin: 0 0 10px; font-size: 13px; color: var(--texto-suave); }
+.corcho { display: grid; grid-template-columns: repeat(5, minmax(190px, 1fr)); gap: 12px; padding: 14px; border-radius: 12px;
+  background: radial-gradient(circle at 20% 30%, rgb(255 255 255 / 0.06) 0 1px, transparent 2px) 0 0 / 7px 7px,
+              radial-gradient(circle at 70% 60%, rgb(0 0 0 / 0.12) 0 1px, transparent 2px) 0 0 / 9px 9px,
+              linear-gradient(160deg, #a77a4f, #8c6239);
+  box-shadow: inset 0 0 0 6px #5e3f22, inset 0 0 24px rgb(0 0 0 / 0.35); overflow-x: auto; }
+.corcho--futuras { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.corcho__columna { display: flex; flex-direction: column; gap: 10px; min-height: 160px; padding: 10px; border-radius: 10px; background: rgb(0 0 0 / 0.14); transition: background .15s; }
+.corcho__columna--encima { background: rgb(255 255 255 / 0.18); outline: 2px dashed #fff3; }
+.corcho__columna--manana { background: rgb(180 30 30 / 0.22); }
+.corcho__columna h3 { margin: 0; font-size: 15px; color: #fff8ee; text-shadow: 0 1px 2px rgb(0 0 0 / 0.5); }
+.corcho--futuras h3::first-letter { text-transform: uppercase; }
+.corcho__cuenta { margin: -6px 0 0; font-size: 12px; color: #f5e6d3; }
+.corcho__vacio { margin: 8px 0; font-size: 13px; color: #f5e6d3; opacity: .8; text-align: center; }
+.corcho__nota { position: relative; padding: 14px 12px 10px; color: #2b2118; background: #fffbe8; border-radius: 3px; box-shadow: 0 3px 8px rgb(0 0 0 / 0.35); font-size: 13px; line-height: 1.35; }
+.corcho__nota::before { content: ''; position: absolute; top: -5px; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ff8a80, #c62828 70%); box-shadow: 0 2px 3px rgb(0 0 0 / 0.4); }
+.corcho__nota[draggable="true"] { cursor: grab; }
+.corcho__nota:nth-child(odd) { transform: rotate(-0.6deg); }
+.corcho__nota:nth-child(even) { transform: rotate(0.5deg); }
+.corcho__nota p { margin: 2px 0; }
+.corcho__nota header { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 2px; font-size: 14px; }
+.corcho__cliente { font-weight: 600; }
+.corcho__suave { color: #6b5a48; font-size: 12px; }
+.corcho__chip { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #eadfc8; color: #4a3b2c; }
+.corcho__chip--pendiente { background: #fde3c8; color: #8a4a12; }
+.corcho__chip--cargando { background: #fbefb5; color: #7a5c00; }
+.corcho__chip--en_ruta { background: #d4e6fa; color: #1d5596; }
+.corcho__nota--manana { background: #fff1f0; box-shadow: 0 0 0 2px #d32f2f, 0 3px 8px rgb(0 0 0 / 0.35); }
+.corcho__alerta { margin: 0 0 6px !important; padding: 4px 8px; border-radius: 4px; background: #d32f2f; color: #fff; font-weight: 700; font-size: 12px; text-align: center; }
+.corcho__acciones { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.corcho__acciones input { flex: 1; min-width: 0; padding: 4px 6px; font: inherit; font-size: 12px; border: 1px solid #cbbba3; border-radius: 6px; background: #fff; color: #2b2118; }
+.corcho__acciones .btn { padding: 4px 8px; font-size: 12px; }
+
+/* Panel de Edgar: el corcho es la acción principal; lo demás, atajos discretos. */
+.edgar:not([hidden]) { display: grid; gap: 10px; margin-top: 12px; }
+.edgar__principal { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 18px; text-align: left; font: inherit; color: #fff;
+  background: linear-gradient(135deg, #f26b1d, #c9501a); border: 0; border-radius: 14px; box-shadow: 0 6px 18px rgb(242 107 29 / 0.3); cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.edgar__principal:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgb(242 107 29 / 0.4); }
+.edgar__principal:focus-visible, .edgar__atajo:focus-visible { outline: 2px solid #ffd6b8; outline-offset: 2px; }
+.edgar__principal b { display: block; font-size: 17px; font-weight: 700; }
+.edgar__principal small { display: block; margin-top: 3px; font-size: 12px; opacity: .85; }
+.edgar__icono { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; font-size: 22px; background: rgb(255 255 255 / 0.18); border-radius: 12px; }
+.edgar__flecha { margin-left: auto; font-size: 26px; opacity: .8; }
+.edgar__atajos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.edgar__atajo { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; font: inherit; font-size: 12px; font-weight: 600; color: var(--texto);
+  background: rgb(255 240 220 / 0.04); border: 1px solid rgb(255 240 220 / 0.1); border-radius: 10px; cursor: pointer; transition: background .12s, border-color .12s; }
+.edgar__atajo span { font-size: 18px; }
+.edgar__atajo:hover { background: rgb(255 240 220 / 0.09); border-color: rgb(242 153 74 / 0.5); }
+/* Estado de Edgar: una línea discreta en lugar del recuadro "AHORA". */
+.panel[data-agente='rutas'] .panel__titulo { display: none; }
+.panel[data-agente='rutas'] .panel__ahora { margin-top: 8px; padding: 6px 10px; font-size: 13px; color: var(--texto-suave); background: transparent; border-left: 0; border-radius: 8px; box-shadow: inset 0 0 0 1px rgb(255 240 220 / 0.08); }
+.panel[data-agente='rutas'] .panel__estado { padding: 2px 8px; font-size: 10px; letter-spacing: .5px; border-radius: 999px; }
+/* Con Edgar la conversación va debajo de sus botones, como enlace discreto. */
+.panel[data-agente='rutas'] .panel__irchat, .panel[data-agente='rutas'] .panel__conversacion { order: 1; }
+.panel[data-agente='rutas'] .panel__irchat { margin-top: 4px; padding: 6px; font-size: 12px; color: var(--texto-suave); background: transparent; border: 0; box-shadow: none; }
+.panel[data-agente='rutas'] .panel__irchat:hover { color: var(--texto); }
+/* Corcho por unidad: cada camión dividido en 5 viajes; cada viaje recibe notas al soltar. */
+.corcho__zona { display: flex; flex-direction: column; gap: 8px; border-radius: 8px; transition: background .12s, outline-color .12s; outline: 2px dashed transparent; outline-offset: -2px; }
+.corcho__zona--otras { flex: 1; min-height: 120px; padding: 4px; }
+.corcho__viaje { min-height: 64px; padding: 6px; background: rgb(255 250 240 / 0.07); border: 1px solid rgb(255 255 255 / 0.12); }
+.corcho__viaje h4 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #f5e6d3; }
+.corcho__viaje h4 span { margin-left: 4px; padding: 0 6px; border-radius: 999px; background: rgb(0 0 0 / 0.25); }
+.corcho__zona--encima { background: rgb(255 255 255 / 0.2); outline-color: #fff8; }
+.corcho__viaje .corcho__nota { padding: 10px 10px 8px; font-size: 12px; }
+.otro-dia__rapido { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.otro-dia__rapido .btn { padding: 6px 10px; font-size: 13px; }
+.corcho__columna--avisa { background: rgb(30 80 160 / 0.25); }
+.otro-dia__avisa { border-color: #6aa0e6; }

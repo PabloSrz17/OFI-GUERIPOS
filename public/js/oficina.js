@@ -94,6 +94,16 @@ function marcarNotasVistas() {
   try { localStorage.setItem(CLAVE_VISTAS, notasVistas); } catch { /* sin almacenamiento */ }
 }
 
+// No todo es "sin conexión": el robot también avisa sesión cerrada, devoluciones y ventas por revisar.
+function avisoDeFalla([id, e]) {
+  const nombre = NOMBRES_CONECTOR[id] ?? id;
+  const m = e.mensaje ?? '';
+  if (/sesi[oó]n.*cerrada/i.test(m)) return `¡${nombre}: sesión cerrada, hay que volver a entrar!`;
+  if (/^Devueltas/i.test(m)) return `¡Venta devuelta en ${nombre}! ${m.replace(/^.*?:\s*/, '').replace(/\s*·.*$/, '')}`;
+  if (/^Revisa contra/i.test(m)) return `¡Revisa contra ${nombre}: ${m.replace(/^.*?:\s*/, '').replace(/\s*·.*$/, '')}!`;
+  return `¡${nombre} sin conexión!`;
+}
+
 // Traduce los indicadores del servidor en [estado, mensaje, alarma] para cada agente.
 // alarma: número o "!" encendido sobre su cabeza; null si no tiene nada que decir.
 function estadosAgentes(r) {
@@ -103,7 +113,7 @@ function estadosAgentes(r) {
   const nuevas = ultimasNotas.filter((n) => n.id > notasVistas).length;
   return {
     chasis: falla
-      ? ['espera', `¡${NOMBRES_CONECTOR[falla[0]] ?? falla[0]} sin conexión!`, '!']
+      ? ['espera', avisoDeFalla(falla), '!']
       : nuevas
         ? ['espera', `¡${plural(nuevas, 'nota nueva', 'notas nuevas')}!`, nuevas]
         : r.pendiente
@@ -111,6 +121,8 @@ function estadosAgentes(r) {
           : ['disponible', 'Esperando ventas…', null],
     rutas: whatsappCaido
       ? ['espera', '¡WhatsApp sin conexión!', '!']
+      : r.programadas_manana?.length
+      ? ['espera', `¡${r.programadas_manana.length === 1 ? 'Esta nota es' : 'Estas notas son'} para mañana! ${r.programadas_manana.join(', ')}`, r.programadas_manana.length]
       : r.sin_chofer
       ? ['espera', `¡${plural(r.sin_chofer, 'nota', 'notas')} sin chofer o camión!`, r.sin_chofer]
       : r.cargando || r.en_ruta
