@@ -85,6 +85,7 @@ app.get('/api/resumen', (req, res) =>
   res.json({
     ...notas.resumen(),
     programadas_manana: notas.foliosParaManana(),
+    fechas_manana: notas.conFechaManana(),
     clientes: clientes.contar(),
     cotizaciones_hoy: cotizacionesRepo.hoy(),
     solicitudes_pendientes: solicitudes.pendientes().length,
@@ -118,6 +119,7 @@ app.listen(config.port, config.host, () => {
   require('./integraciones/inspector/seguimiento').iniciar();
   require('./integraciones/recordatorio-lista').iniciar();
   require('./integraciones/avisos-celular').iniciar();
+  require('./integraciones/aviso-fecha').iniciar();
   whatsapp.iniciar();
   registroSheets.iniciar();
   respaldos.iniciar();

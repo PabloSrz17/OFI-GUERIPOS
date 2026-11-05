@@ -80,3 +80,26 @@ test('cierre de jornada: el Reparto de mañana pasa al del día con su camión y
   assert.ok(notas.listarProgramadas().some((x) => x.id === otra.id)); // la de otro día se queda
   notas.programar(otra.id, null);
 });
+
+test('Reprogramar con fecha: sólo ésas avisan un día antes (burbuja y celular, una vez por nota y día)', async () => {
+  const avisoFecha = require('../src/integraciones/aviso-fecha');
+  const { config } = require('../src/integraciones/avisos-celular');
+  const conFecha = nueva();
+  const manana = nueva();
+  const lejos = nueva();
+  notas.programar(conFecha.id, dia(1), true); // fecha del cliente que cae mañana
+  notas.programar(manana.id, dia(1)); // botón "Mañana": no avisa
+  notas.programar(lejos.id, dia(5), true); // todavía falta
+  assert.deepEqual(notas.conFechaManana().map((n) => n.folio), [conFecha.folio]);
+  assert.equal(notas.programar(lejos.id, 'avisa', true).con_fecha, 0); // "Cliente avisa" no lleva fecha
+
+  const enviados = [];
+  config.ntfy = 'https://ntfy.example/prueba';
+  const enviar = async (url, opciones) => { enviados.push(opciones.body); };
+  const ocho = new Date(); ocho.setHours(9, 0, 0, 0);
+  assert.deepEqual(await avisoFecha.revisar(ocho, enviar), [conFecha.folio]);
+  assert.equal(await avisoFecha.revisar(ocho, enviar), null); // ya avisada hoy
+  assert.equal(enviados.length, 1);
+  assert.match(enviados[0], new RegExp(conFecha.folio));
+  config.ntfy = null;
+});

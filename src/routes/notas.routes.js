@@ -21,7 +21,7 @@ router.get('/programadas', (req, res) => res.json(notas.listarProgramadas()));
 
 // fecha "AAAA-MM-DD" o null para regresarla a hoy. No avisa al cliente ni toca la hoja.
 router.patch('/:id/programar', (req, res) => {
-  const nota = notas.programar(Number(req.params.id), req.body?.fecha || null);
+  const nota = notas.programar(Number(req.params.id), req.body?.fecha || null, req.body?.con_fecha === true);
   bus.emit('nota:asignada', nota);
   res.json(nota);
 });

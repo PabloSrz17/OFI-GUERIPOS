@@ -6,8 +6,15 @@
   <title>Reporte semanal</title>
   <link rel="stylesheet" href="/css/styles.css">
   <style>
+    /* styles.css bloquea el scroll del body (es para la oficina 3D): aquí la página sí se desplaza. */
+    html, body.pagina-reporte { height: auto; }
+    body.pagina-reporte { display: block; overflow-y: auto; min-height: 100%; }
+    /* Barra fija arriba: siempre se puede volver, cambiar de semana o imprimir. */
+    .reporte__barra { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; background: #f7e3c6; border-bottom: 2px solid #4a3221; }
+    .reporte__barra h1 { margin: 0 auto 0 0 !important; }
+    .reporte__barra .btn { margin: 0; }
     .reporte { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
-    .reporte h1 { font: 800 21px var(--pixel); color: #4a3221; margin: 0 0 12px; }
+    .reporte h1, .reporte__barra h1 { font: 800 21px var(--pixel); color: #4a3221; margin: 0 0 12px; }
     .reporte__semana label { color: #4a3221; font-weight: 700; }
     .reporte__semana { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; }
     .reporte section { margin-bottom: 16px; padding: 14px 16px; background: var(--panel-2); border: 2px solid #000; box-shadow: var(--sombra); }
@@ -46,19 +53,22 @@
       @page { margin: 12mm; }
       body { background: #fff !important; color: #000; }
       .reporte { max-width: none; padding: 0; }
-      .reporte h1, .reporte h2, .reporte h3 { color: #000; }
+      .reporte__barra h1, .reporte h2, .reporte h3 { color: #000; }
       .reporte section { background: #fff; color: #000; border: 1.5px solid #000; box-shadow: none; }
       .reporte th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .reporte th, .reporte td { border: 1px solid #000; color: #000; }
       .reporte tr { break-inside: avoid; }
       .badge { color: #000; background: none; border: 0; font-weight: 700; }
     }
-    @media print { .reporte__semana label, .reporte__semana button, .volver { display: none; } }
+    @media print { .reporte__semana label, .reporte__semana button, .volver, .reporte__barra .btn { display: none; } .reporte__barra { position: static; border: 0; padding: 0; } }
   </style>
 </head>
-<body>
-  <main class="reporte">
+<body class="pagina-reporte">
+  <header class="reporte__barra">
     <h1>📊 Reporte semanal</h1>
+    <a href="/" class="btn btn--secundario volver">← Volver a la Oficina</a>
+  </header>
+  <main class="reporte">
     <div class="reporte__semana">
       <label>Semana del día <input type="date" id="dia"></label>
       <button type="button" id="imprimir" class="btn btn--secundario">🖨 Imprimir</button>

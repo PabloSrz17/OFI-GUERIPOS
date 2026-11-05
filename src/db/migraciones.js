@@ -211,6 +211,12 @@ function notaProgramada(db) {
   if (!columnas.includes('programada_para')) db.exec('ALTER TABLE notas ADD COLUMN programada_para TEXT');
 }
 
+// Programada con la fecha que dio el cliente (botón "Con fecha"): Edgar avisa un día antes.
+function notaConFecha(db) {
+  const columnas = db.prepare('PRAGMA table_info(notas)').all().map((c) => c.name);
+  if (!columnas.includes('con_fecha')) db.exec('ALTER TABLE notas ADD COLUMN con_fecha INTEGER NOT NULL DEFAULT 0');
+}
+
 // Número de viaje (1 a 5) de la nota en su camión: filas del corcho de Edgar.
 function viajeDeNota(db) {
   const columnas = db.prepare('PRAGMA table_info(notas)').all().map((c) => c.name);
@@ -220,6 +226,7 @@ function viajeDeNota(db) {
 module.exports = function migrar(db) {
   viajeDeNota(db);
   notaProgramada(db);
+  notaConFecha(db);
   notaDeOrden(db);
   entradasConRenglones(db);
   saldosPendientes(db);

@@ -1,5 +1,7 @@
 // Aviso automático al cliente: "tu pedido va en camino" al pasar a En Ruta. Es el único: el usuario
 // no quiere avisos al cargar. Se registra en whatsapp_envios y nunca se manda dos veces para una nota.
+// Varias notas del mismo número en la misma unidad y viaje salen en UN solo mensaje: al pasar a En Ruta
+// se espera un momento (config.esperaMs) por si se mandan las demás; cada nota nueva reinicia la espera.
 const db = require('../../db/connection');
 const bus = require('../../events/bus');
 const notas = require('../../repositories/notas.repo');
@@ -23,26 +25,57 @@ const stmts = {
 };
 
 const enCurso = new Set(); // evita dos envíos simultáneos de la misma nota
+const config = { esperaMs: 60_000, maximoMs: 5 * 60_000 };
+const grupos = new Map(); // "telefono|camion|viaje" -> { ids, timer, desde }
+
+const claveDe = (n) => `${n.cliente_telefono}|${n.camion_id ?? ''}|${n.viaje ?? 1}`;
 
 function registrar(nota, estado, detalle = null) {
   stmts.guardar.run({ nota_id: nota.id, tipo: TIPO, telefono: nota.cliente_telefono ?? null, estado, detalle });
 }
 
-async function avisarEnRuta(nota) {
-  if (enCurso.has(nota.id) || stmts.previo.get(nota.id, TIPO)?.estado === 'enviado') return;
+const yaEnviada = (id) => stmts.previo.get(id, TIPO)?.estado === 'enviado';
+
+function avisarEnRuta(nota) {
+  if (enCurso.has(nota.id) || yaEnviada(nota.id)) return;
   if (!nota.cliente_telefono) return registrar(nota, 'sin_telefono');
   if (!whatsapp.estaListo()) return registrar(nota, 'pendiente', 'WhatsApp desconectado; se enviará al reconectar');
 
-  enCurso.add(nota.id);
+  // A la espera de las demás notas del mismo cliente en ese viaje.
+  const clave = claveDe(nota);
+  const grupo = grupos.get(clave) ?? { ids: new Set(), timer: null, desde: Date.now() };
+  grupo.ids.add(nota.id);
+  clearTimeout(grupo.timer);
+  const espera = Math.max(0, Math.min(config.esperaMs, grupo.desde + config.maximoMs - Date.now()));
+  grupo.timer = setTimeout(() => enviarGrupo(clave), espera);
+  grupo.timer.unref?.();
+  grupos.set(clave, grupo);
+}
+
+async function enviarGrupo(clave) {
+  const grupo = grupos.get(clave);
+  grupos.delete(clave);
+  // Sólo las que siguen En Ruta y no se han avisado (alguna pudo regresar o borrarse en la espera).
+  const lista = [...(grupo?.ids ?? [])]
+    .map((id) => notas.obtenerSiExiste(id))
+    .filter((n) => n && n.estado === 'en_ruta' && !yaEnviada(n.id) && !enCurso.has(n.id));
+  if (!lista.length) return;
+  const folios = lista.map((n) => n.folio).join(', ');
+  lista.forEach((n) => enCurso.add(n.id));
   try {
-    const entregado = await whatsapp.enviar(nota.cliente_telefono, mensajes.enRuta(nota));
-    registrar(nota, entregado ? 'enviado' : 'no_whatsapp', entregado ? null : 'Ese número no tiene WhatsApp');
-    console.log(`[whatsapp] ${nota.folio}: ${entregado ? 'aviso enviado' : 'el número no tiene WhatsApp'}`);
+    if (!whatsapp.estaListo()) {
+      lista.forEach((n) => registrar(n, 'pendiente', 'WhatsApp desconectado; se enviará al reconectar'));
+      return;
+    }
+    const texto = lista.length === 1 ? mensajes.enRuta(lista[0]) : mensajes.enRutaVarias(lista);
+    const entregado = await whatsapp.enviar(lista[0].cliente_telefono, texto);
+    lista.forEach((n) => registrar(n, entregado ? 'enviado' : 'no_whatsapp', entregado ? null : 'Ese número no tiene WhatsApp'));
+    console.log(`[whatsapp] ${folios}: ${entregado ? (lista.length > 1 ? 'un solo aviso enviado' : 'aviso enviado') : 'el número no tiene WhatsApp'}`);
   } catch (err) {
-    registrar(nota, 'error', err.message);
-    console.error(`[whatsapp] ${nota.folio}:`, err.message);
+    lista.forEach((n) => registrar(n, 'error', err.message));
+    console.error(`[whatsapp] ${folios}:`, err.message);
   } finally {
-    enCurso.delete(nota.id);
+    lista.forEach((n) => enCurso.delete(n.id));
   }
 }
 
@@ -59,4 +92,4 @@ function iniciar() {
   });
 }
 
-module.exports = { iniciar };
+module.exports = { iniciar, config };

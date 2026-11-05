@@ -951,3 +951,18 @@ details.plegable[hidden] { display: none; }
 .formato-dia__leyenda { font-weight: 700; color: var(--texto-suave, #d8c8b0); }
 .formato-dia__opcion { padding: 6px 14px; border: 2px solid #000; border-radius: 999px; background: var(--panel-2, #4a3829); color: inherit; font-weight: 700; cursor: pointer; }
 .formato-dia__opcion[aria-pressed="true"] { background: #ffd54f; color: #2b2118; box-shadow: 0 0 0 2px #ffd54f55; }
+.formato-dia__historial.btn { margin: 0 0 0 auto; padding: 6px 14px; font-size: 13px; } /* siempre a la derecha, en los dos formatos */
+.corcho__nota .btn--ruta { margin: 4px 0; width: 100%; font-size: 12px; }
+/* Sulema: botones con letra blanca y fondos oscuros para que se lean de un vistazo (contraste ≥ 4.5:1) */
+#sulema-programar .btn { color: #fff; background: #1f6fc5; border-color: #0d3b6e; }
+#sulema-programar .btn.btn--secundario { color: #fff; background: #5a4535; border-color: #2b1e14; }
+#sulema-programar .btn.sp--elegido { color: #fff !important; background: #237a46 !important; outline-color: #7fe0a6; }
+/* ↩ Regresar: botón sólido oscuro con letra blanca; se lee igual sobre el post-it verde, naranja, etc. y en el tablero */
+.btn.btn--regresar { padding: 6px 10px; font-size: 12px; color: #fff; background: #3b2a1e; border-color: #1c120b; }
+.btn.btn--regresar:hover { color: #fff; background: #57402f; }
+
+/* 🔁 Reprogramar: tres opciones grandes */
+.reprogramar__opciones { display: grid; gap: 10px; margin: 12px 0; }
+.reprogramar__opcion { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin: 0; padding: 10px 14px; text-align: left; font-size: 15px; color: #fff; background: #1f6fc5; border-color: #0d3b6e; }
+.reprogramar__opcion small { font: 600 12px system-ui, sans-serif; opacity: .9; }
+.reprogramar__fecha { display: grid; gap: 6px; padding: 10px; border: 2px dashed #8a7a60; border-radius: 8px; }

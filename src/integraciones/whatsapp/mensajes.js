@@ -32,6 +32,28 @@ function enRuta(nota) {
   ].filter((l) => l !== null).join('\n');
 }
 
+// "280, N1002 y N1004"
+const enLista = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}` : xs[0]);
+
+// Varias notas del mismo cliente en el mismo viaje: un solo mensaje con todos los materiales.
+// Si van a direcciones distintas, se dice a dónde va cada una.
+function enRutaVarias(lista) {
+  const [primera] = lista;
+  const direcciones = [...new Set(lista.map((n) => n.direccion))];
+  const unaDireccion = direcciones.length === 1;
+  return [
+    `¡Hola${primerNombre(primera.cliente)}! 👋 Te escribimos de *${whatsapp.negocio}*.`,
+    '',
+    `Tus pedidos *${enLista(lista.map((n) => n.folio))}* ya van en camino 🚚`,
+    ...lista.flatMap((n) => ['', `*${n.folio}*${unaDireccion ? '' : ` · entrega en: ${n.direccion}`}`, ...materiales(n)]),
+    '',
+    primera.chofer ? `• Los lleva: ${primera.chofer}${primera.camion ? ` en la ${primera.camion}` : ''}` : null,
+    unaDireccion ? `• Entrega en: ${primera.direccion}` : null,
+    '',
+    '¡Gracias por tu compra!',
+  ].filter((l) => l !== null).join('\n');
+}
+
 // Según la hora en que sale el mensaje: 00:00–11:59 días, 12:00–18:59 tardes, 19:00–23:59 noches.
 function saludo(fecha = new Date()) {
   const hora = fecha.getHours();
@@ -55,4 +77,4 @@ function bienvenida(fecha = new Date()) {
 // Recordatorio de 24 horas: el saludo se calcula al momento de mandarlo.
 const seguimiento = (fecha = new Date()) => `${conMayuscula(saludo(fecha))}, ¿qué le pareció la cotización? ¿Algo más en lo que podamos ayudarle?`;
 
-module.exports = { enRuta, bienvenida, seguimiento, saludo };
+module.exports = { enRuta, enRutaVarias, bienvenida, seguimiento, saludo };

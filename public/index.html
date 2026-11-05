@@ -67,15 +67,15 @@
         <button type="button" class="pestana" role="tab" id="pestana-manana" data-pestana="manana" aria-controls="vista-manana" aria-selected="false">⏰ Reparto de mañana <span class="contador" id="pestana-manana-n">0</span></button>
         <button type="button" class="pestana" role="tab" id="pestana-futuras" data-pestana="futuras" aria-controls="vista-futuras" aria-selected="false">🗓 Por Confirmar · Otro día <span class="contador" id="pestana-futuras-n">0</span></button>
       </div>
-      <button type="button" class="btn btn--secundario ventana__historial" data-ver-historial hidden>📚 Historial</button>
       <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
     </header>
 
     <!-- Reparto del día en dos formatos: corchos por unidad o bandejas por estado (las mismas notas). -->
     <div class="formato-dia" id="formato-dia" role="group" aria-label="Mismas notas / Otro formato">
       <span class="formato-dia__leyenda">Mismas notas / Otro formato:</span>
-      <button type="button" class="formato-dia__opcion" data-formato="corcho" aria-pressed="true">📌 Corchos por unidad</button>
-      <button type="button" class="formato-dia__opcion" data-formato="notas" aria-pressed="false">📋 Notas pendientes</button>
+      <button type="button" class="formato-dia__opcion" data-formato="corcho" aria-pressed="true">📌 Corcho</button>
+      <button type="button" class="formato-dia__opcion" data-formato="notas" aria-pressed="false">📋 Formato Entregas Pablo</button>
+      <button type="button" class="btn btn--secundario formato-dia__historial" data-ver-historial>📚 Historial</button>
     </div>
 
     <div class="operacion__vista" id="vista-corcho" role="tabpanel" aria-labelledby="pestana-corcho">
@@ -526,19 +526,18 @@
 
   <dialog id="otro-dia" class="dialogo" aria-labelledby="otro-dia-titulo">
     <form method="dialog">
-      <h2 id="otro-dia-titulo">🗓 Programar para otro día</h2>
+      <h2 id="otro-dia-titulo">🔁 Reprogramar</h2>
       <div id="otro-dia-resumen" class="dialogo__resumen"></div>
-      <div class="otro-dia__rapido" role="group" aria-label="Fechas rápidas">
-        <button type="button" class="btn btn--secundario" data-dias="1">Mañana</button>
-        <button type="button" class="btn btn--secundario" data-dias="2">Pasado mañana</button>
-        <button type="button" class="btn btn--secundario" data-dias="7">En una semana</button>
-        <button value="avisa" class="btn btn--secundario otro-dia__avisa" formnovalidate title="Sin fecha: queda en «Notas sin día programado» hasta que el cliente confirme">📞 Él avisa</button>
+      <div class="reprogramar__opciones">
+        <button value="manana" class="btn reprogramar__opcion" formnovalidate>⏰ Mañana<small>Pasa al Reparto de mañana</small></button>
+        <button value="avisa" class="btn reprogramar__opcion" formnovalidate>📞 Cliente avisa<small>A Por Confirmar · Otro día, sin fecha</small></button>
+        <div class="reprogramar__fecha">
+          <label class="campo">📅 Con fecha <input id="otro-dia-fecha" type="date" required></label>
+          <button value="confirmar" class="btn reprogramar__opcion">Programar con fecha<small>A Por Confirmar · Otro día; Edgar avisa un día antes</small></button>
+        </div>
       </div>
-      <label class="campo">Fecha de entrega <input id="otro-dia-fecha" type="date" required></label>
-      <p class="dialogo__aviso">Sale de Pendientes y queda en «Notas para otro día» hasta esa fecha.</p>
       <div class="dialogo__botones">
         <button value="no" class="btn btn--secundario" formnovalidate>Cancelar</button>
-        <button value="confirmar" class="btn">📌 Programar</button>
       </div>
     </form>
   </dialog>

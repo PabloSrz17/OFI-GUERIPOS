@@ -125,6 +125,8 @@ function estadosAgentes(r) {
           : ['disponible', 'Esperando ventas…', null],
     rutas: whatsappCaido
       ? ['espera', '¡WhatsApp sin conexión!', '!']
+      : r.fechas_manana?.length
+      ? ['espera', `📅 Mañana toca entregar: ${r.fechas_manana.map((n) => `${n.folio} · ${n.cliente}`).join(', ')}`, r.fechas_manana.length]
       : r.sin_chofer
       ? ['espera', `¡${plural(r.sin_chofer, 'nota', 'notas')} sin chofer o camión!`, r.sin_chofer]
       : r.cargando || r.en_ruta

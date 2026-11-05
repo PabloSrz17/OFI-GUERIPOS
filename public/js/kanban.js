@@ -4,7 +4,7 @@ const ACCIONES = {
   en_ruta: { siguiente: 'entregado', texto: 'Marcar entregado ✔' },
 };
 // Estado del aviso "va en camino" (tabla whatsapp_envios).
-const AVISO_WHATSAPP = {
+export const AVISO_WHATSAPP = {
   enviado: '💬 WhatsApp enviado',
   pendiente: '⏳ WhatsApp pendiente (sin conexión)',
   sin_telefono: '💬 Sin teléfono: no se avisó',
@@ -18,7 +18,7 @@ const REGISTRO_SHEETS = {
   error: '⚠️ Sheets falló (se reintenta)',
 };
 // Paso al que regresa cada estado con "↩ Regresar".
-const REGRESAR_A = { cargando: 'Pendiente', en_ruta: 'Cargando', entregado: 'En Ruta' };
+export const REGRESAR_A = { cargando: 'Pendiente', en_ruta: 'Cargando', entregado: 'En Ruta' };
 // Antes de salir a ruta todavía se puede elegir o cambiar el chofer.
 const CHOFER_EDITABLE = ['pendiente', 'cargando'];
 
@@ -161,7 +161,7 @@ function tarjeta(nota, { choferes, camiones }) {
       <div class="tarjeta__enlaces">
         <button type="button" class="tarjeta__editar" data-accion="editar" data-id="${nota.id}">✎ Editar</button>
         ${parcial}
-        ${nota.estado === 'pendiente' ? `<button type="button" class="tarjeta__editar" data-accion="otro-dia" data-id="${nota.id}">🗓 Otro día</button>` : ''}
+        ${nota.estado === 'pendiente' ? `<button type="button" class="tarjeta__editar" data-accion="otro-dia" data-id="${nota.id}">🔁 Reprogramar</button>` : ''}
       </div>
       ${choferHtml}
       ${AVISO_WHATSAPP[nota.whatsapp] ? `<div class="dato dato--whatsapp">${AVISO_WHATSAPP[nota.whatsapp]}</div>` : ''}

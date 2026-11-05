@@ -142,6 +142,7 @@ test('el único aviso es al salir a ruta, una sola vez; al cargar y en ALMACÉN 
   const enviados = [];
   whatsapp.estaListo = () => true;
   whatsapp.enviar = async (tel, texto) => { enviados.push([tel, texto]); return true; };
+  avisos.config.esperaMs = 5; // en la Oficina espera un minuto por las demás notas del viaje
   avisos.iniciar();
   const espera = () => new Promise((r) => setTimeout(r, 30));
   const chofer = db.prepare("INSERT INTO choferes (nombre) VALUES ('Prueba')").run().lastInsertRowid;
@@ -188,4 +189,41 @@ test('el único aviso es al salir a ruta, una sola vez; al cargar y en ALMACÉN 
 
 test('el mensaje de ruta lleva un renglón por producto', () => {
   assert.match(mensajes.enRuta({ folio: 'X', cliente: 'A', detalle: '1/2 m³ POLVO\nCAL', material: 'POLVO' }), /• 1\/2 m³ polvo\n• cal/);
+});
+
+test('varias notas del mismo número en el mismo viaje: un solo WhatsApp con todos los folios y materiales', async () => {
+  const enviados = [];
+  whatsapp.estaListo = () => true;
+  whatsapp.enviar = async (tel, texto) => { enviados.push([tel, texto]); return true; };
+  avisos.config.esperaMs = 20;
+  const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+  const chofer = db.prepare("INSERT INTO choferes (nombre) VALUES ('Agrupa')").run().lastInsertRowid;
+  const camion = db.prepare("INSERT INTO camiones (nombre) VALUES ('Ram Agrupa')").run().lastInsertRowid;
+  const nota = (folio, telefono, material) => {
+    const { id } = importador.registrar({
+      cliente: { nombre: `JUAN ${telefono}` },
+      nota: { origen: 'sicar', folio, material, cantidad: 2, unidad: 'm³', direccion: 'Centro', telefono },
+    });
+    notas.asignar(id, 'chofer', chofer);
+    notas.asignar(id, 'camion', camion);
+    notas.cambiarEstado(id, 'cargando');
+    return id;
+  };
+  const aRuta = (id) => bus.emit('nota:estado', { ...notas.cambiarEstado(id, 'en_ruta'), retroceso: false });
+
+  const a = nota('G280', '529811000001', 'GRAVA');
+  const b = nota('GN1002', '529811000001', 'ARENA');
+  const c = nota('GN1004', '529811000001', 'POLVO');
+  const otro = nota('G300', '529811000002', 'CAL'); // otro cliente: su propio mensaje
+  aRuta(a); await espera(5); aRuta(b); aRuta(otro); await espera(5); aRuta(c);
+  await espera(80);
+
+  const delCliente = enviados.filter(([tel]) => tel === '529811000001');
+  assert.equal(delCliente.length, 1);
+  assert.match(delCliente[0][1], /Tus pedidos \*G280, GN1002 y GN1004\* ya van en camino/);
+  assert.match(delCliente[0][1], /grava/);
+  assert.match(delCliente[0][1], /arena/);
+  assert.match(delCliente[0][1], /polvo/);
+  assert.equal(enviados.filter(([tel]) => tel === '529811000002').length, 1);
+  for (const id of [a, b, c]) assert.equal(notas.obtener(id).whatsapp, 'enviado');
 });

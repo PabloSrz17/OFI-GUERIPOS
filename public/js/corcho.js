@@ -1,7 +1,8 @@
 // Corchos de Edgar: (1) programación del día por unidad, (2) notas para otro día.
 // Las notas programadas no salen en el tablero ni en el corcho del día hasta su fecha (lo filtra el servidor).
 import { api } from './api.js';
-import { renglones, selector, botonEtiqueta } from './kanban.js';
+import { renglones, selector, botonEtiqueta, faltaDireccion, AVISO_WHATSAPP, REGRESAR_A } from './kanban.js';
+import { formatear } from './telefono.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -39,6 +40,7 @@ function columnaDe(nota) {
 
 // Mismo paso que en Notas pendientes (y misma confirmación antes de salir a ruta).
 function botonEstatus(n) {
+  if (n.saldo) return ''; // el saldo primero se re-programa en Pendientes
   const texto = n.estado === 'pendiente' ? 'Empezar a cargar ▶'
     : n.estado === 'cargando' ? (n.es_almacen ? 'Marcar entregado ✓' : 'Enviar a ruta ▶')
       : n.estado === 'en_ruta' ? 'Marcar entregado ✓' : '';
@@ -48,14 +50,40 @@ function botonEstatus(n) {
 // Lo mismo que en Notas pendientes: chofer (el camión lo da la columna), envío parcial y otro día.
 // Los manejan app.js y parcial.js por data-accion, igual que en el tablero.
 function herramientas(n) {
-  const editable = !n.saldo && ['pendiente', 'cargando'].includes(n.estado);
-  if (!editable) return n.chofer ? `<p class="corcho__suave">👤 ${esc(n.chofer)}</p>` : '';
+  const editar = `<button type="button" class="btn btn--secundario" data-accion="editar" data-id="${n.id}">✎ Editar</button>`;
+  if (n.saldo) {
+    return `
+    <div class="corcho__acciones">
+      ${editar}
+      <button type="button" class="btn" data-accion="reprogramar" data-id="${n.id}">Re-programar en Pendientes 🚚</button>
+    </div>`;
+  }
+  const regresar = REGRESAR_A[n.estado]
+    ? `<button type="button" class="btn btn--regresar" data-accion="regresar" data-id="${n.id}" title="Deshacer: regresar a ${REGRESAR_A[n.estado]}">↩ Regresar</button>`
+    : '';
+  const editable = ['pendiente', 'cargando'].includes(n.estado);
+  if (!editable) {
+    return `${n.chofer ? `<p class="corcho__suave">👤 ${esc(n.chofer)}</p>` : ''}
+    <div class="corcho__acciones">${editar}${regresar}</div>`;
+  }
   return `
     <div class="corcho__chofer">${selector(n, 'chofer', ctx.catalogos.choferes)}</div>
     <div class="corcho__acciones">
+      ${editar}
       <button type="button" class="btn btn--secundario" data-accion="parcial" data-id="${n.id}">✂ Parcial</button>
-      ${n.estado === 'pendiente' ? '<button type="button" class="btn btn--secundario" data-reprogramar>🔁 Reprogramar</button>' : ''}
+      ${n.estado === 'pendiente' ? `<button type="button" class="btn btn--secundario" data-accion="otro-dia" data-id="${n.id}">🔁 Reprogramar</button>` : ''}
+      ${regresar}
     </div>`;
+}
+
+// Teléfono, aviso de WhatsApp y evidencia, como en Formato Entregas Pablo.
+function datosExtra(n) {
+  const lineas = [
+    n.cliente_telefono ? `📱 ${formatear(n.cliente_telefono)}` : '',
+    AVISO_WHATSAPP[n.whatsapp] ?? '',
+    n.evidencias ? `📸 ${n.estado === 'entregado' ? 'Entregada con evidencia' : 'Con foto de evidencia'}` : '',
+  ].filter(Boolean);
+  return lineas.map((l) => `<p class="corcho__suave">${esc(l)}</p>`).join('');
 }
 
 // Todo el material de la nota (todos los renglones); si es muy larga, se desplaza dentro de la tarjeta.
@@ -70,12 +98,15 @@ function tarjeta(n, { manana = false, futura = false } = {}) {
       <header><b>${esc(n.folio)}</b>${botonEtiqueta(n)}${futura ? (n.camion && !manana ? `<span class="corcho__chip">${esc(n.camion)}</span>` : '') : `<span class="corcho__chip corcho__chip--${n.estado}">${NOMBRE_ESTADO[n.estado] ?? esc(n.estado)}</span>`}</header>
       <p class="corcho__cliente">${esc(n.cliente)}</p>
       <div class="corcho__material">${renglones(n)}</div>
-      <p class="corcho__suave">📍 ${esc(n.zona || n.direccion)}</p>
+      ${!futura && faltaDireccion(n)
+    ? `<button type="button" class="btn btn--ruta" data-accion="editar" data-foco="direccion" data-id="${n.id}">📍 Completar dirección</button>`
+    : `<p class="corcho__suave">📍 ${esc(n.zona || n.direccion)}</p>`}
+      ${futura ? '' : datosExtra(n)}
       ${futura ? '' : herramientas(n)}
       ${futura ? '' : botonEstatus(n)}
       ${futura && manana ? `
         <div class="corcho__acciones">
-          <button type="button" class="btn btn--secundario" data-reprogramar>🔁 Reprogramar</button>
+          <button type="button" class="btn btn--secundario" data-accion="otro-dia" data-id="${n.id}">🔁 Reprogramar</button>
           <button type="button" class="btn btn--secundario" data-hoy>↩ A hoy</button>
         </div>` : ''}
       ${futura && !manana ? `
@@ -157,9 +188,9 @@ async function cargarFuturas(pintar = true) {
   }
 }
 
-async function programar(id, fecha) {
+async function programar(id, fecha, conFecha = false) {
   try {
-    const nota = await api.patch(`/api/notas/${id}/programar`, { fecha });
+    const nota = await api.patch(`/api/notas/${id}/programar`, { fecha, con_fecha: conFecha });
     ctx.toast(fecha === 'avisa' ? `${nota.folio} pasó a Por Confirmar · Otro día (él avisa)` : fecha ? `${nota.folio} quedó para el ${fechaLarga(fecha)}` : `${nota.folio} regresó a hoy`);
   } catch (err) {
     ctx.toast(err.message, true);
@@ -196,7 +227,6 @@ function mostrar(pestana) {
   $('#formato-dia').hidden = !delDia;
   document.querySelectorAll('#formato-dia [data-formato]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.formato === pestana)));
   document.querySelectorAll('#ventana-notas .operacion__vista').forEach((v) => { v.hidden = v.id !== `vista-${pestana}`; });
-  $('#ventana-notas [data-ver-historial]').hidden = pestana !== 'notas';
   if (pestana === 'corcho') pintarDia();
   if (['manana', 'futuras'].includes(pestana)) cargarFuturas();
 }
@@ -255,13 +285,14 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
     const fecha = $('#futuras-fecha').value;
     if (!id || !fecha) return toast('Elige la nota y la fecha', true);
     $('#futuras-nueva').reset();
-    programar(id, fecha);
+    programar(id, fecha, true);
   });
+  document.addEventListener('notas-programadas', () => cargarFuturas());
   // Reprogramar, fecha del cliente, "Él avisa" y regresar a hoy o a mañana: en cualquier pestaña.
   const ventana2 = $('#ventana-notas');
   const idDe = (el) => el.closest('[data-id]').dataset.id;
   ventana2.addEventListener('change', (e) => {
-    if (e.target.matches('[data-fecha]') && e.target.value) programar(idDe(e.target), e.target.value);
+    if (e.target.matches('[data-fecha]') && e.target.value) programar(idDe(e.target), e.target.value, true);
     if (e.target.matches('[data-avisa]')) {
       if (e.target.checked) programar(idDe(e.target), 'avisa');
       else {
@@ -274,7 +305,6 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
   ventana2.addEventListener('click', (e) => {
     if (e.target.closest('[data-hoy]')) programar(idDe(e.target), null);
     if (e.target.closest('[data-a-manana]')) programar(idDe(e.target), dia(1));
-    if (e.target.closest('[data-reprogramar]')) programar(idDe(e.target), 'avisa');
   });
 }
 

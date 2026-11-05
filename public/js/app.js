@@ -159,7 +159,7 @@ async function mover(nota, destino) {
 
 const notaPorId = (id) => notasActuales.find((n) => String(n.id) === String(id));
 
-tablero.addEventListener('click', async (e) => {
+$('#ventana-notas').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-accion="avanzar"], button[data-accion="regresar"]');
   if (!btn) return;
   const nota = notaPorId(btn.dataset.id);
@@ -182,8 +182,8 @@ $('#ventana-notas').addEventListener('click', async (e) => {
   }
 });
 
-// Saldos Pendientes: la nota regresa a Pendiente para asignarle chofer y camión.
-tablero.addEventListener('click', async (e) => {
+// Saldos Pendientes: la nota regresa a Pendiente para asignarle chofer y camión (tablero o corcho).
+$('#ventana-notas').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-accion="reprogramar"]');
   if (!btn) return;
   btn.disabled = true;
@@ -203,33 +203,37 @@ const diaLocal = (mas) => {
   d.setDate(d.getDate() + mas);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-$('#otro-dia').addEventListener('click', (e) => {
-  const rapido = e.target.closest('[data-dias]');
-  if (rapido) $('#otro-dia-fecha').value = diaLocal(Number(rapido.dataset.dias));
-});
-// Tarjetas del tablero y del corcho.
+// 🔁 Reprogramar (tablero y corcho, también las de mañana): Mañana, Cliente avisa o Con fecha.
 $('#ventana-notas').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-accion="otro-dia"]');
   if (!btn) return;
-  const nota = notaPorId(btn.dataset.id);
+  const nota = notaPorId(btn.dataset.id)
+    ?? (await api.get('/api/notas/programadas').catch(() => [])).find((n) => String(n.id) === btn.dataset.id);
+  if (!nota) return;
   const dialogo = $('#otro-dia');
   const fecha = $('#otro-dia-fecha');
   $('#otro-dia-resumen').innerHTML = `<div><b>${esc(nota.folio)}</b> · ${esc(nota.cliente)}</div><div>${esc(nota.cantidad)} ${esc(nota.unidad)} · ${esc(nota.material)}</div>`;
-  fecha.min = diaLocal(1);
-  fecha.value = diaLocal(1);
+  fecha.min = diaLocal(2); // mañana tiene su propio botón
+  fecha.value = '';
   dialogo.returnValue = '';
   dialogo.showModal();
   await new Promise((listo) => dialogo.addEventListener('close', listo, { once: true }));
-  const avisa = dialogo.returnValue === 'avisa'; // sin fecha: espera a que el cliente confirme
-  if (!avisa && (dialogo.returnValue !== 'confirmar' || !fecha.value)) return;
+  const opcion = dialogo.returnValue;
+  if (!['manana', 'avisa', 'confirmar'].includes(opcion) || (opcion === 'confirmar' && !fecha.value)) return;
   try {
-    await api.patch(`/api/notas/${nota.id}/programar`, { fecha: avisa ? 'avisa' : fecha.value });
-    const dia = avisa ? '' : new Date(`${fecha.value}T12:00`).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
-    toast(avisa ? `${nota.folio} quedó sin día: el cliente avisa` : `${nota.folio} quedó para el ${dia}`);
+    const cuerpo = opcion === 'manana' ? { fecha: diaLocal(1) }
+      : opcion === 'avisa' ? { fecha: 'avisa' }
+        : { fecha: fecha.value, con_fecha: true };
+    await api.patch(`/api/notas/${nota.id}/programar`, cuerpo);
+    const dia = opcion === 'confirmar' ? new Date(`${fecha.value}T12:00`).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
+    toast(opcion === 'manana' ? `${nota.folio} → Reparto de mañana`
+      : opcion === 'avisa' ? `${nota.folio} → Por Confirmar · Otro día (cliente avisa)`
+        : `${nota.folio} quedó para el ${dia}: Edgar avisa un día antes`);
   } catch (err) {
     toast(err.message, true);
   }
   refrescar();
+  document.dispatchEvent(new Event('notas-programadas')); // el corcho recarga Mañana y Por Confirmar
 });
 
 // ✕ de cada tarjeta: pide confirmación antes de borrar.

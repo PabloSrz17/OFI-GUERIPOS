@@ -45,8 +45,11 @@ const stmts = {
     SELECT folio FROM notas
     WHERE estado <> 'entregado' AND programada_para = date('now', 'localtime', '+1 day') ORDER BY id`),
   viaje: db.prepare('UPDATE notas SET viaje = ? WHERE id = ?'),
-  mananaAHoy: db.prepare(`UPDATE notas SET programada_para = NULL WHERE estado <> 'entregado' AND programada_para = date('now', 'localtime', '+1 day')`),
-  programar: db.prepare(`UPDATE notas SET programada_para = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
+  mananaAHoy: db.prepare(`UPDATE notas SET programada_para = NULL, con_fecha = 0 WHERE estado <> 'entregado' AND programada_para = date('now', 'localtime', '+1 day')`),
+  programar: db.prepare(`UPDATE notas SET programada_para = ?, con_fecha = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
+  // Las que se programaron con fecha del cliente y llegan mañana: Edgar avisa.
+  conFechaManana: db.prepare(`SELECT n.id, n.folio, c.nombre AS cliente FROM notas n JOIN clientes c ON c.id = n.cliente_id
+    WHERE n.estado <> 'entregado' AND n.con_fecha = 1 AND n.programada_para = date('now', 'localtime', '+1 day') ORDER BY n.id`),
   // Historial general: todo lo entregado que ya no está en el tablero.
   historial_general: db.prepare(`${SELECT_NOTA}
     WHERE n.estado = 'entregado' AND (n.archivada_en IS NOT NULL OR date(n.actualizado_en) < date('now', 'localtime'))
@@ -306,7 +309,8 @@ const ponerViaje = db.transaction((id, camionId, viaje) => {
 // así el tablero y el aviso de mañana la dejan fuera sin reglas aparte.
 const EL_AVISA = '9999-12-31';
 
-function programar(id, fecha) {
+// conFecha: la eligió el cliente (botón "Con fecha"); Edgar avisa un día antes. Mañana o Él avisa no.
+function programar(id, fecha, conFecha = false) {
   const nota = obtener(id);
   if (fecha === 'avisa') fecha = EL_AVISA;
   if (fecha != null) {
@@ -314,7 +318,7 @@ function programar(id, fecha) {
     if (fecha <= db.prepare("SELECT date('now', 'localtime') AS hoy").get().hoy) throw httpError(400, 'La fecha debe ser de mañana en adelante');
     if (nota.estado !== 'pendiente') throw httpError(409, `${nota.folio} ya está ${nota.estado === 'cargando' ? 'cargando' : 'en camino'}: sólo se programa una nota pendiente`);
   }
-  stmts.programar.run(fecha ?? null, id);
+  stmts.programar.run(fecha ?? null, fecha && fecha !== EL_AVISA && conFecha ? 1 : 0, id);
   return stmts.porId.get(id);
 }
 
@@ -343,6 +347,7 @@ module.exports = {
   eliminar,
   listarTablero: () => stmts.tablero.all(),
   listarProgramadas: () => stmts.programadas.all(),
+  conFechaManana: () => stmts.conFechaManana.all(),
   foliosParaManana: () => stmts.paraManana.all().map((n) => n.folio),
   programar,
   EL_AVISA,
