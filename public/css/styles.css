@@ -97,7 +97,7 @@ body { display: flex; flex-direction: column; overflow: hidden; background: #f7e
 /* Aviso emergente: hora de pasar lista */
 .alerta { position: fixed; bottom: 20px; left: 50%; z-index: 30; display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-weight: 700; color: #1c1300; background: #ffc53d; border: 2px solid #000; border-radius: 10px; box-shadow: 0 0 22px 4px rgb(255 197 61 / 0.5); transform: translateX(-50%); }
 .alerta[hidden] { display: none; }
-/* Octavio: orden por aprobar, flota sobre la oficina, los paneles y las pizarras */
+/* Max: orden por aprobar, flota sobre la oficina, los paneles y las pizarras */
 .alerta-orden { position: fixed; right: 16px; bottom: 16px; z-index: 40; width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 88px); padding: 12px 16px; overflow-y: auto; color: var(--texto); background: var(--panel); border: 3px solid #8e5bc7; border-radius: 12px; box-shadow: 0 12px 40px rgb(0 0 0 / 0.6); }
 .alerta-orden[hidden] { display: none; }
 .alerta-orden__cabeza { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -118,7 +118,7 @@ body { display: flex; flex-direction: column; overflow: hidden; background: #f7e
 .entrada__materiales { margin: 2px 0; padding-left: 18px; }
 #entradas-lista .entrada__materiales li { padding: 1px 0; border: 0; list-style: disc; }
 .entrada__pie { font-size: 12px; color: var(--texto-suave); overflow-wrap: anywhere; }
-/* Pizarrón de Octavio: órdenes en azul, entradas en naranja */
+/* Pizarrón de Max: órdenes en azul, entradas en naranja */
 .pestanas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .pestana { flex: 1 1 260px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px; font: inherit; font-weight: 700; color: var(--texto-suave); background: var(--panel-2); border: 2px solid transparent; border-radius: 8px; cursor: pointer; }
 .pestana--ordenes[aria-selected="true"] { color: var(--texto); border-color: #60a5fa; background: rgb(59 130 246 / 0.2); }
@@ -255,7 +255,7 @@ body { display: flex; flex-direction: column; overflow: hidden; background: #f7e
   box-shadow: var(--sombra);
 }
 .captura h2 { margin: 0 0 10px; font: 800 15px var(--pixel); color: var(--color); line-height: 1.6; }
-/* Secciones plegables del panel de Octavio: cerradas al abrir el panel, un clic las abre. */
+/* Secciones plegables del panel de Max: cerradas al abrir el panel, un clic las abre. */
 details.plegable > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
 details.plegable > summary::-webkit-details-marker { display: none; }
 details.plegable > summary::after { content: '▾'; margin-left: auto; color: var(--texto-suave); transition: transform .2s; }
@@ -315,6 +315,7 @@ details.plegable[hidden] { display: none; }
 .asistencia:disabled { opacity: 0.25; cursor: not-allowed; }
 .asistencia[data-estado='asistio'] { background: #2f9e57; border-color: #9be3a8; }
 .asistencia[data-estado='falta'] { background: #c9413a; border-color: #ffb3ad; }
+.asistencia[data-estado='retardo'] { background: #fb8c00; border-color: #ffd08a; font-size: 16px; }
 
 /* ---------- Pizarrón de la Oficina (chalkboard) ---------- */
 .pizarron {

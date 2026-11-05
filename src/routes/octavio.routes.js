@@ -1,4 +1,4 @@
-// Octavio: órdenes de compra por aprobar y en su pizarrón, y entradas de almacén.
+// Max: órdenes de compra por aprobar y en su pizarrón, y entradas de almacén.
 const express = require('express');
 const ordenes = require('../integraciones/octavio/ordenes');
 const whatsapp = require('../integraciones/whatsapp/cliente');

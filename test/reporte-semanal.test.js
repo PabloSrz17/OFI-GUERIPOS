@@ -49,7 +49,7 @@ test('Chatito: cotizaciones de la semana y, de ésas, las pagadas antes del cier
   assert.deepEqual(reporte.generar('2026-10-28').chatito, { creadas: 3, pagadas: 1 });
 });
 
-test('Octavio: órdenes sin las descartadas y entradas de la semana', () => {
+test('Max: órdenes sin las descartadas y entradas de la semana', () => {
   const orden = db.prepare("INSERT INTO ordenes_compra (clave, solicitante, estado, creado_en) VALUES ('1', 'CONCORDIA', ?, ?)");
   orden.run('aprobada', '2026-10-27 09:00:00');
   orden.run('cancelada', '2026-10-30 09:00:00');

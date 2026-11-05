@@ -16,7 +16,7 @@ const C = {
 const MUEBLE = {
   chasis: { mesa: 0xa8703c, alfombra: 0x2f7f78, borde: 0x8fd0c0, placa: 'Sulema' },
   inspector: { mesa: 0x3b4a6b, alfombra: 0x3d6f8f, borde: 0xa9cdf2, placa: 'Chatito' },
-  octavio: { mesa: 0xd9773a, alfombra: 0xd9813c, borde: 0xf8c58f, placa: 'Octavio' },
+  octavio: { mesa: 0xd9773a, alfombra: 0xd9813c, borde: 0xf8c58f, placa: 'Max' },
   rutas: { mesa: 0xc9b89a, alfombra: 0xcfc7b8, borde: 0x8f8778, placa: 'Logística' },
 };
 // Pantallas del Tablero Central: fondo, tinta y el brillo que dejan en el muro.

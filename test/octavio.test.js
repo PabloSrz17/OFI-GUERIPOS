@@ -24,13 +24,13 @@ const mensaje = (tel, body, extra = {}) => ({
   body,
   timestamp: Math.floor(Date.now() / 1000),
   getContact: async () => ({ id: { user: tel }, pushname: 'Concordia' }),
-  client: { sendMessage: async () => { throw new Error('Octavio no contesta sin aprobación'); } },
+  client: { sendMessage: async () => { throw new Error('Max no contesta sin aprobación'); } },
   ...extra,
 });
 const deTel = (tel) => ordenes.listar().filter((o) => o.clave === `52${tel.slice(-10)}`);
 const ultimaDe = (tel) => deTel(tel).sort((a, b) => b.id - a.id)[0];
 
-const AVISO = 'Octavio te mando esta orden de compra';
+const AVISO = 'Max te mando esta orden de compra';
 const salidas = [];
 whatsapp.estaListo = () => true;
 whatsapp.enviar = async (t, texto) => { salidas.push({ t, texto }); return true; };
@@ -39,15 +39,16 @@ imagen.generarOrdenPNG = async () => Buffer.from('png');
 
 test('el aviso se reconoce con o sin acentos; otros mensajes no', () => {
   assert.ok(ordenes.esOrden(AVISO));
-  assert.ok(ordenes.esOrden('OCTAVIO te mando esta ÓRDEN DE COMPRA'));
+  assert.ok(ordenes.esOrden('MAX te mando esta ÓRDEN DE COMPRA'));
   assert.ok(!ordenes.esOrden('Te mando esta orden de compra'));
-  assert.ok(!ordenes.esOrden('Hola Octavio'));
-  for (const t of ['Octavio, orden', 'octavio una compra', 'OCTAVIO te mandó esto', 'Octavio: órdenes']) assert.ok(ordenes.esOrden(t), t);
-  for (const t of ['Octavio comando', 'Octavio desorden', 'Octavio quiero comprar', 'mando la orden de compra']) assert.ok(!ordenes.esOrden(t), t);
+  assert.ok(!ordenes.esOrden('Hola Max'));
+  assert.ok(!ordenes.esOrden('te mando la orden, máx el lunes'));
+  for (const t of ['Max, orden', 'max una compra', 'MAX te mandó esto', 'Max: órdenes']) assert.ok(ordenes.esOrden(t), t);
+  for (const t of ['Max comando', 'Max desorden', 'Max quiero comprar', 'mando la orden de compra']) assert.ok(!ordenes.esOrden(t), t);
 });
 
 test('el nombre y la palabra se juntan entre mensajes, en cualquier orden, con la lista de antes', async () => {
-  for (const [uno, dos] of [['Octavio', 'te mando esto'], ['es una compra', 'para Octavio']]) {
+  for (const [uno, dos] of [['Max', 'te mando esto'], ['es una compra', 'para Max']]) {
     const tel = persona();
     await solicitudes.procesarMensaje(mensaje(tel, '7 m3 polvo'));
     await solicitudes.procesarMensaje(mensaje(tel, uno));
@@ -62,18 +63,18 @@ test('el nombre y la palabra se juntan entre mensajes, en cualquier orden, con l
 test('la ventana es de 2 minutos y por remitente', async () => {
   const hace = (s) => ({ timestamp: Math.floor(Date.now() / 1000) - s });
   const tarde = persona();
-  await solicitudes.procesarMensaje(mensaje(tarde, 'Octavio', hace(125)));
+  await solicitudes.procesarMensaje(mensaje(tarde, 'Max', hace(125)));
   await solicitudes.procesarMensaje(mensaje(tarde, 'te mando esto'));
   assert.equal(deTel(tarde).length, 0);
 
   const justo = persona();
-  await solicitudes.procesarMensaje(mensaje(justo, 'Octavio', hace(110)));
+  await solicitudes.procesarMensaje(mensaje(justo, 'Max', hace(110)));
   await solicitudes.procesarMensaje(mensaje(justo, 'te mando esto'));
   assert.equal(deTel(justo).length, 1);
 
   const a = persona();
   const b = persona();
-  await solicitudes.procesarMensaje(mensaje(a, 'Octavio'));
+  await solicitudes.procesarMensaje(mensaje(a, 'Max'));
   await solicitudes.procesarMensaje(mensaje(b, 'te mando esto'));
   assert.equal(deTel(a).length + deTel(b).length, 0);
 });
@@ -81,7 +82,7 @@ test('la ventana es de 2 minutos y por remitente', async () => {
 test('con una orden abierta las palabras sueltas se suman: no abren otra alerta', async () => {
   const tel = persona();
   await solicitudes.procesarMensaje(mensaje(tel, `${AVISO}\n1 pz malla`));
-  await solicitudes.procesarMensaje(mensaje(tel, 'gracias Octavio'));
+  await solicitudes.procesarMensaje(mensaje(tel, 'gracias Max'));
   await solicitudes.procesarMensaje(mensaje(tel, 'te mando 2 pz varilla'));
   assert.equal(deTel(tel).length, 1);
   assert.deepEqual(ultimaDe(tel).renglones.map((r) => r.material), ['MALLA', 'VARILLA']);
@@ -95,7 +96,7 @@ test('renglones: cantidad primero o al final, viñetas y fracciones; lo demás n
     { cantidad: '1/2', unidad: 'm³', material: 'GRAVA' },
   ]);
   assert.deepEqual(ordenes.renglonesDeTexto('10 bultos cemento, 5 pz varilla').map((r) => r.material), ['CEMENTO', 'VARILLA']);
-  for (const t of ['Octavio te mando 3 bultos cal', 'Octavio, orden de 3 bultos cal', 'Octavio compra: cal 3 bultos']) {
+  for (const t of ['Max te mando 3 bultos cal', 'Max, orden de 3 bultos cal', 'Max compra: cal 3 bultos']) {
     assert.deepEqual(ordenes.renglonesDeTexto(t), [{ cantidad: '3', unidad: 'bulto', material: 'CAL' }], t);
   }
   assert.deepEqual(ordenes.renglonesDeTexto('3 bultos cal de compra').map((r) => r.cantidad), ['3']);

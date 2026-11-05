@@ -254,7 +254,7 @@ async function procesarMensaje(mensaje) {
     }
   }
 
-  // Octavio primero: su aviso, o lo que siga mandando quien acaba de avisar, no le toca a Chatito.
+  // Max primero: su aviso, o lo que siga mandando quien acaba de avisar, no le toca a Chatito.
   const pideOrden = octavio.detectar(clave, texto, momento(mensaje));
   if (pideOrden || (!pideCotizacion(texto) && octavio.abierta(clave))) {
     const antes = pideOrden ? tomarRecientes(clave, momento(mensaje)) : [];

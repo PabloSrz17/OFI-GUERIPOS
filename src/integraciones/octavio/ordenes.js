@@ -1,4 +1,4 @@
-// Octavio recibe por WhatsApp las órdenes de compra de la sucursal. Nada se guarda como aprobado ni se
+// Max recibe por WhatsApp las órdenes de compra de la sucursal. Nada se guarda como aprobado ni se
 // contesta solo: cada orden sale como alerta editable en la Oficina y un humano la aprueba o la descarta.
 // Sin cambios contesta con la imagen de la orden; con cambios, con la lista de lo autorizado.
 const db = require('../../db/connection');
@@ -46,10 +46,10 @@ const obtener = (id) => conDatos(stmts.porId.get(id));
 
 const limpio = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const dicePalabra = (texto) => /\b(?:orden(?:es)?|compras?|mando)\b/.test(limpio(texto));
-const diceNombre = (texto) => /\boctavio\b/.test(limpio(texto));
+const diceNombre = (texto) => /\bmax\b/i.test(String(texto ?? '')); // con acentos: "máx" (máximo) no es Max
 const esOrden = (texto) => diceNombre(texto) && dicePalabra(texto);
 
-// "Octavio" y la palabra pueden llegar en mensajes separados, hasta 2 minutos aparte. Sólo en memoria,
+// "Max" y la palabra pueden llegar en mensajes separados, hasta 2 minutos aparte. Sólo en memoria,
 // como los recientes de Chatito. Con una orden abierta no se juntan: lo que siga manda se suma a ella.
 const VENTANA_MS = 2 * 60_000;
 const pistas = new Map(); // clave -> { nombre, ms }
@@ -72,8 +72,8 @@ function detectar(clave, texto, ms) {
   return false;
 }
 
-// Lo que dice el aviso antes de la lista: "Octavio te mando esta orden de compra: 10 bultos cemento".
-const INICIO_AVISO = /^\D*(?<![\p{L}\d])(?:octavio|[oó]rden(?:es)?|compras?|m[aá]nd[oó])(?![\p{L}\d])(?:\s+de(?!\p{L}))?[\s:.,-]*/iu;
+// Lo que dice el aviso antes de la lista: "Max te mando esta orden de compra: 10 bultos cemento".
+const INICIO_AVISO = /^\D*(?<![\p{L}\d])(?:max|[oó]rden(?:es)?|compras?|m[aá]nd[oó])(?![\p{L}\d])(?:\s+de(?!\p{L}))?[\s:.,-]*/iu;
 
 // Sólo los renglones con cantidad: "gracias" o "para el lunes" se ven en el mensaje, no en la lista.
 function renglonesDeTexto(texto) {
@@ -91,7 +91,7 @@ function renglonesDeTexto(texto) {
 const deFoto = (leida) => (leida?.productos ?? []).filter((p) => p.producto)
   .map((p) => ({ cantidad: p.cantidad, unidad: p.unidad, material: p.producto.toUpperCase() }));
 
-// Lo llama el lector de WhatsApp si el mensaje es para Octavio. leerFoto y guardarFoto son los de Chatito.
+// Lo llama el lector de WhatsApp si el mensaje es para Max. leerFoto y guardarFoto son los de Chatito.
 async function recibir(mensaje, { clave, telefono, contacto, texto, aviso, antes, leerFoto, guardarFoto }) {
   const previa = stmts.abierta.get(clave);
   const sinNada = previa && !previa.foto && previa.renglones === '[]';
@@ -192,7 +192,7 @@ function eliminar(id) {
   return hecho;
 }
 
-// Orden de compra capturada en el panel de Octavio. Sin folio que escribir: el folio es OC-n.
+// Orden de compra capturada en el panel de Max. Sin folio que escribir: el folio es OC-n.
 function crearManual({ solicitante, sucursal = 'Almacén', nota, renglones }) {
   const quien = String(solicitante ?? '').trim().toUpperCase();
   if (!quien) throw new Error('Falta quién la solicita');

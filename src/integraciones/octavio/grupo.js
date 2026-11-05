@@ -1,4 +1,4 @@
-// Octavio en el grupo del equipo ("AGENTES IA CHAT"): "Octavio, mándame este material: …" arma la orden,
+// Max en el grupo del equipo ("AGENTES IA CHAT"): "Max, mándame este material: …" arma la orden,
 // manda al grupo la imagen con "¿Así está bien?" y la corrige con cada respuesta hasta que le digan que sí.
 // Con el sí contesta "Oki ✅" y la deja Aprobada en su pestaña del pizarrón (Almacén o Concordia).
 // El borrador vive en memoria, por persona del grupo, 30 minutos.
@@ -14,7 +14,7 @@ const OKI = 'Oki ✅';
 const VIGENCIA_MS = 30 * 60_000;
 
 const limpio = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const esPedido = (texto) => /\boctavio\b/.test(limpio(texto)) && /\b(orden de compra|mandame|este material)\b/.test(limpio(texto));
+const esPedido = (texto) => /\bmax\b/i.test(String(texto ?? '')) && /\b(orden de compra|mandame|este material)\b/.test(limpio(texto));
 const sucursalDe = (texto) => (/\bconcordia\b/.test(limpio(texto)) ? 'Concordia' : /\balmacen\b/.test(limpio(texto)) ? 'Almacén' : null);
 const SI = /^(si|sip|simon|ok|oki|va|vale|dale|correcto|perfecto|listo|de acuerdo|claro|asi|esta bien|asi esta bien|asi esta)\b/;
 const esSi = (texto) => {
@@ -85,7 +85,7 @@ async function mandarVistaPrevia(mensaje, b) {
   await mensaje.client.sendMessage(mensaje.from, foto, { caption: PREGUNTA, sendSeen: false });
 }
 
-// ¿Le toca a Octavio? Un pedido nuevo, o cualquier respuesta de quien tiene una orden por confirmar.
+// ¿Le toca a Max? Un pedido nuevo, o cualquier respuesta de quien tiene una orden por confirmar.
 const leToca = (clave, texto) => esPedido(texto) || Boolean(vigente(clave));
 
 // Devuelve el texto a contestar, o null si ya contestó con la imagen.

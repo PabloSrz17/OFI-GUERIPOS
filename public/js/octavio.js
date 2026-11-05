@@ -1,4 +1,4 @@
-// Octavio: alerta flotante con la orden que llegó por WhatsApp, su pizarrón de órdenes de compra
+// Max: alerta flotante con la orden que llegó por WhatsApp, su pizarrón de órdenes de compra
 // y el registro de entradas de almacén. Las cantidades se editan antes de aprobar y después.
 import { api } from './api.js';
 import { formatear } from './telefono.js';
@@ -37,7 +37,7 @@ const leerFilas = (caja) => todasLasFilas(caja).filter((r) => r.material);
 const claveDe = (r) => `${aNumero(r.cantidad)}|${String(r.unidad ?? '').toLowerCase()}|${String(r.material ?? '').toUpperCase()}`;
 const iguales = (a, b) => JSON.stringify(a.map(claveDe)) === JSON.stringify(b.map(claveDe));
 
-// Lo llama app.js cuando el servidor avisa que cambió algo de Octavio.
+// Lo llama app.js cuando el servidor avisa que cambió algo de Max.
 export let recargarOctavio = () => {};
 
 export function montarOctavio({ toast, alCambiar }) {
@@ -268,7 +268,7 @@ export function montarOctavio({ toast, alCambiar }) {
     }
   });
 
-  // ---- Panel de Octavio ----
+  // ---- Panel de Max ----
   espera.addEventListener('click', (e) => {
     const boton = e.target.closest('[data-revisar]');
     if (!boton) return;

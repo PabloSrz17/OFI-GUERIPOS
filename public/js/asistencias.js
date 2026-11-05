@@ -1,11 +1,14 @@
-// Pizarra de asistencias: semana de lunes a sábado. Cada clic cambia la casilla: vacía → ✔ → ✖ → vacía.
+// Pizarra de asistencias: semana de lunes a sábado. Cada clic cambia la casilla: vacía → ✓ → ✕ → ⏰ → vacía.
+// El retardo cuenta como día trabajado (también en "Hoy: N de M").
 import { api } from './api.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const $ = (s) => document.querySelector(s);
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const SIGUIENTE = { '': 'asistio', asistio: 'falta', falta: null };
-const SIMBOLO = { asistio: '✔', falta: '✖' };
+const SIGUIENTE = { '': 'asistio', asistio: 'falta', falta: 'retardo', retardo: null };
+const SIMBOLO = { asistio: '✓', falta: '✕', retardo: '⏰' };
+const TEXTO = { asistio: 'asistió', falta: 'faltó', retardo: 'retardo' };
+const TRABAJO = (estado) => estado === 'asistio' || estado === 'retardo';
 
 const fecha = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function lunesDe(d) {
@@ -28,17 +31,17 @@ export async function recargarAsistencias() {
 
   $('#asistencias-semana').textContent = `${dias[0].slice(8)}/${dias[0].slice(5, 7)} al ${dias[5].slice(8)}/${dias[5].slice(5, 7)}`;
   $('#asistencias-siguiente').disabled = masDias(lunes, 7) > new Date();
-  const llegaron = datos.marcas.filter((m) => m.fecha === hoy && m.estado === 'asistio').length;
+  const llegaron = datos.marcas.filter((m) => m.fecha === hoy && TRABAJO(m.estado)).length;
   $('#asistencias-contador').textContent = dias.includes(hoy) ? `Hoy: ${llegaron} de ${datos.trabajadores.length}` : '';
   $('#asistencias-tabla').innerHTML = `
-    <thead><tr><th>Trabajador</th>${dias.map((f, i) => `<th class="${f === hoy ? 'hoy' : ''}">${DIAS[i]} ${f.slice(8)}</th>`).join('')}<th>✔</th></tr></thead>
+    <thead><tr><th>Trabajador</th>${dias.map((f, i) => `<th class="${f === hoy ? 'hoy' : ''}">${DIAS[i]} ${f.slice(8)}</th>`).join('')}<th>✓</th></tr></thead>
     <tbody>${datos.trabajadores.map((t) => {
       const celdas = dias.map((f) => {
         const estado = marca.get(`${t.id}|${f}`) ?? '';
         return `<td class="${f === hoy ? 'hoy' : ''}"><button type="button" class="asistencia" data-estado="${estado}" data-id="${t.id}" data-fecha="${f}"
-          aria-label="${esc(t.nombre)}, ${f}: ${estado === 'asistio' ? 'asistió' : estado === 'falta' ? 'faltó' : 'sin marcar'}" ${f > hoy ? 'disabled' : ''}>${SIMBOLO[estado] ?? ''}</button></td>`;
+          aria-label="${esc(t.nombre)}, ${f}: ${TEXTO[estado] ?? 'sin marcar'}" ${f > hoy ? 'disabled' : ''}>${SIMBOLO[estado] ?? ''}</button></td>`;
       }).join('');
-      const total = dias.filter((f) => marca.get(`${t.id}|${f}`) === 'asistio').length;
+      const total = dias.filter((f) => TRABAJO(marca.get(`${t.id}|${f}`))).length;
       return `<tr><th scope="row">${esc(t.nombre)}</th>${celdas}<td class="asistencias__total">${total}</td></tr>`;
     }).join('')}</tbody>`;
 }

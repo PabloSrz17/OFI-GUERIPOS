@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS trabajadores (
 CREATE TABLE IF NOT EXISTS asistencias (
   trabajador_id  INTEGER NOT NULL REFERENCES trabajadores(id),
   fecha          TEXT NOT NULL,                       -- AAAA-MM-DD
-  estado         TEXT NOT NULL CHECK (estado IN ('asistio', 'falta')),
+  estado         TEXT NOT NULL CHECK (estado IN ('asistio', 'falta', 'retardo')),
   actualizado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   PRIMARY KEY (trabajador_id, fecha)
 );
@@ -245,7 +245,7 @@ CREATE TABLE IF NOT EXISTS ajustes (
   valor TEXT NOT NULL
 );
 
--- ===== Octavio: órdenes de compra y entradas de almacén =====
+-- ===== Max: órdenes de compra y entradas de almacén =====
 
 -- original: la lista como llegó; renglones: la vigente. Si difieren al aprobar, se contesta con las cantidades.
 CREATE TABLE IF NOT EXISTS ordenes_compra (

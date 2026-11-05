@@ -43,3 +43,10 @@ test('rechaza domingo, días futuros, fechas raras y trabajadores que no existen
   assert.throws(() => asistencias.marcar(999, '2026-10-30', 'asistio', HOY), /no encontrado/);
   assert.throws(() => asistencias.marcar(1, '2026-10-30', 'tarde', HOY), /Estado inválido/);
 });
+
+test('retardo: se guarda, se puede quitar y otro estado lo reemplaza', () => {
+  asistencias.marcar(1, '2026-10-29', 'retardo', HOY);
+  assert.equal(asistencias.semana('2026-10-29', '2026-10-29').marcas.find((m) => m.trabajador_id === 1).estado, 'retardo');
+  asistencias.marcar(1, '2026-10-29', null, HOY);
+  assert.equal(asistencias.semana('2026-10-29', '2026-10-29').marcas.filter((m) => m.trabajador_id === 1).length, 0);
+});

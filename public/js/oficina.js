@@ -5,7 +5,7 @@ const AGENTES = {
   chasis: { nombre: 'Sulema', rol: 'Ventas · SICAR y Pulpos' },
   rutas: { nombre: 'Edgar', rol: 'Logística · patio de fletes y camiones' },
   inspector: { nombre: 'Chatito Waspat', rol: 'Cotizaciones y atención' },
-  octavio: { nombre: 'Octavio', rol: 'Órdenes de compra y almacén · Concordia' },
+  octavio: { nombre: 'Max', rol: 'Órdenes de compra y almacén · Concordia' },
 };
 // disponible: sin pendientes · procesando: trabajando o contestándote · espera: necesita a un humano
 const ESTADOS = { disponible: 'Disponible', procesando: 'Procesando', espera: 'En espera' };
@@ -25,7 +25,7 @@ const pensando = new Set();   // agentes contestando una pregunta (se muestran "
 const botones = {};
 const objetos = {}; // etiquetas de las pizarras
 
-const OBJETOS = { notas: '🚚 Reparto del Día', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Pizarrón de Octavio', chatito: '💬 Chatito Waspat',
+const OBJETOS = { notas: '🚚 Reparto del Día', dia: '📝 Pendientes del Día', asistencias: '🗓 Asistencias', ordenes: '🧾 Pizarrón de Max', chatito: '💬 Chatito Waspat',
   archivo_sulema: '🗄 Archivero de Sulema', archivo_edgar: '🗄 Archivero de Edgar' };
 const COLOR_NOTA = { pendiente: '#f2994a', cargando: '#d4a106', en_ruta: '#2f7fd1' };
 

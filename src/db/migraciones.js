@@ -230,7 +230,26 @@ function combustibleDePulpos(db) {
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS combustible_pulpos_id ON combustible (pulpos_id) WHERE pulpos_id IS NOT NULL');
 }
 
+// Asistencias: estado "retardo" (cuenta como día trabajado). Se reconstruye la tabla por el CHECK.
+function asistenciaRetardo(db) {
+  const { sql } = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'asistencias'").get();
+  if (sql.includes("'retardo'")) return;
+  const anterior = "CHECK (estado IN ('asistio', 'falta'))";
+  if (!sql.includes(anterior)) throw new Error('Migración "retardo": la tabla asistencias tiene un formato inesperado');
+  const nuevaTabla = sql
+    .replace(anterior, "CHECK (estado IN ('asistio', 'falta', 'retardo'))")
+    .replace(/CREATE TABLE (IF NOT EXISTS )?"?asistencias"?/, 'CREATE TABLE asistencias_nueva');
+  db.transaction(() => {
+    db.exec(nuevaTabla);
+    db.exec('INSERT INTO asistencias_nueva SELECT * FROM asistencias');
+    db.exec('DROP TABLE asistencias');
+    db.exec('ALTER TABLE asistencias_nueva RENAME TO asistencias');
+  })();
+  console.log('[bd] Migración aplicada: asistencia "retardo"');
+}
+
 module.exports = function migrar(db) {
+  asistenciaRetardo(db);
   combustibleDePulpos(db);
   viajeDeNota(db);
   notaProgramada(db);

@@ -29,7 +29,7 @@ const AGENTES = {
     tablas: ['cotizaciones', 'cotizacion_partidas', 'precios', 'fletes', 'clientes', 'notas', 'solicitudes_whatsapp'],
   },
   octavio: {
-    nombre: 'Octavio',
+    nombre: 'Max',
     area: `las órdenes de compra de la sucursal Concordia y las entradas de almacén. ordenes_compra.renglones trae la lista vigente en JSON y original la que llegó; folio = "OC-" + id. Estado: por_aprobar espera a un humano, aprobada está por surtirse, surtida terminó y descartada no se tomó en cuenta. Las entradas son lo que se captura a mano: entradas_almacen.folio es la factura o remisión y renglones trae sus materiales en JSON; no hay inventario en el sistema, así que no puedes decir cuánto stock hay`,
     tablas: ['ordenes_compra', 'entradas_almacen'],
   },
@@ -124,7 +124,7 @@ function sistema(id) {
   const a = AGENTES[id];
   const memorias = stmts.memorias.all(id).map((m) => `- ${m.texto}`).join('\n') || '(nada todavía)';
   return `Eres ${a.nombre}, un agente de la Oficina Virtual de una distribuidora de materiales de construcción en México. Tu área: ${a.area}.
-Responde en español, breve y directo, como compañero de trabajo, en texto simple (sin Markdown: nada de asteriscos ni tablas). Usa la herramienta "consultar" para obtener datos reales; nunca inventes cifras ni nombres. Muestra nombres, no ids (une con la tabla que corresponda, p. ej. camiones o choferes). Si la pregunta no es de tu área, dilo y sugiere qué agente la responde (Edgar: reparto; Sulema: ventas que entran; Chatito Waspat: cotizaciones y precios; Octavio: órdenes de compra y entradas de almacén). Las fechas en la base son texto local "AAAA-MM-DD HH:MM:SS". En la tabla notas, saldo = 1 es lo que falta por entregar de un envío parcial (columna Saldos Pendientes, folio con -S1, -S2…): aunque su estado diga pendiente, no cuenta como Pendiente hasta que se re-programe. Hoy es ${new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
+Responde en español, breve y directo, como compañero de trabajo, en texto simple (sin Markdown: nada de asteriscos ni tablas). Usa la herramienta "consultar" para obtener datos reales; nunca inventes cifras ni nombres. Muestra nombres, no ids (une con la tabla que corresponda, p. ej. camiones o choferes). Si la pregunta no es de tu área, dilo y sugiere qué agente la responde (Edgar: reparto; Sulema: ventas que entran; Chatito Waspat: cotizaciones y precios; Max: órdenes de compra y entradas de almacén). Las fechas en la base son texto local "AAAA-MM-DD HH:MM:SS". En la tabla notas, saldo = 1 es lo que falta por entregar de un envío parcial (columna Saldos Pendientes, folio con -S1, -S2…): aunque su estado diga pendiente, no cuenta como Pendiente hasta que se re-programe. Hoy es ${new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 
 Tablas de tu área (SQLite):
 ${esquema(a.tablas)}

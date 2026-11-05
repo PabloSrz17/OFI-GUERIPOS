@@ -17,7 +17,7 @@ const stmts = {
 
 const fechaLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// estado: 'asistio' | 'falta' | null (borra la marca).
+// estado: 'asistio' | 'falta' | 'retardo' | null (borra la marca).
 function marcar(trabajadorId, fecha, estado, hoy = new Date()) {
   const dia = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? new Date(`${fecha}T12:00:00`) : null;
   if (!dia || Number.isNaN(dia.getTime()) || fechaLocal(dia) !== fecha) throw httpError(400, 'Fecha inválida');
@@ -25,7 +25,7 @@ function marcar(trabajadorId, fecha, estado, hoy = new Date()) {
   if (fecha > fechaLocal(hoy)) throw httpError(400, 'No se puede marcar un día que no ha llegado');
   if (!stmts.existe.get(trabajadorId)) throw httpError(404, 'Trabajador no encontrado');
   if (estado === null) stmts.quitar.run(trabajadorId, fecha);
-  else if (['asistio', 'falta'].includes(estado)) stmts.guardar.run(trabajadorId, fecha, estado);
+  else if (['asistio', 'falta', 'retardo'].includes(estado)) stmts.guardar.run(trabajadorId, fecha, estado);
   else throw httpError(400, 'Estado inválido');
 }
 

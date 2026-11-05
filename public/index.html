@@ -155,7 +155,7 @@
         <span id="asistencias-semana"></span>
         <button type="button" id="asistencias-siguiente" class="btn btn--secundario" aria-label="Semana siguiente">▶</button>
         <span id="asistencias-contador" class="pizarron__contador"></span>
-        <span class="asistencias__ayuda">Clic en la casilla: ✔ asistió · ✖ faltó · vacía</span>
+        <span class="asistencias__ayuda">Clic en la casilla: ✓ asistió · ✕ faltó · ⏰ retardo · vacía</span>
       </div>
       <div class="asistencias__tabla"><table id="asistencias-tabla"></table></div>
     </section>
@@ -222,10 +222,10 @@
     <div id="gasolina-contenido" class="archivo--limpio"></div>
   </dialog>
 
-  <!-- Pizarra de Octavio: órdenes de compra aprobadas y entradas de almacén -->
+  <!-- Pizarra de Max: órdenes de compra aprobadas y entradas de almacén -->
   <dialog id="ventana-ordenes" class="ventana" aria-labelledby="ordenes-titulo">
     <header class="ventana__cabeza">
-      <h2 id="ordenes-titulo">Pizarrón de Octavio</h2>
+      <h2 id="ordenes-titulo">Pizarrón de Max</h2>
       <button type="button" class="ventana__cerrar" aria-label="Cerrar">✕</button>
     </header>
     <div class="pestanas" role="tablist" aria-label="Secciones del pizarrón">
@@ -375,7 +375,7 @@
       </details>
       <div class="octavio__accesos">
         <button type="button" class="btn" data-objeto="ordenes" data-pizarron-pestana="pestana-ordenes">🧾 Órdenes de Concordia</button>
-        <button type="button" class="btn btn--secundario" data-objeto="ordenes">Abrir Pizarrón de Octavio</button>
+        <button type="button" class="btn btn--secundario" data-objeto="ordenes">Abrir Pizarrón de Max</button>
       </div>
       <details class="captura captura--campos entradas plegable">
         <summary><h2 id="orden-nueva-titulo">🧾 Órdenes de Compra</h2></summary>
@@ -424,7 +424,7 @@
     </section>
   </dialog>
 
-  <!-- Alerta flotante de Octavio: la orden que llegó, editable antes de aprobar -->
+  <!-- Alerta flotante de Max: la orden que llegó, editable antes de aprobar -->
   <aside id="alerta-orden" class="alerta-orden" role="alert" aria-labelledby="orden-titulo" hidden>
     <header class="alerta-orden__cabeza">
       <h2 id="orden-titulo"></h2>

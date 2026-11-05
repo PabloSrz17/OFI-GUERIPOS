@@ -18,12 +18,13 @@ const MAX_ATRASO_S = 300; // al reconectar llegan mensajes viejos: a esos no se 
 const contestar = (mensaje, texto) => mensaje.client.sendMessage(mensaje.from, texto, { sendSeen: false });
 
 const limpio = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const NOMBRES = [['edgar', 'rutas'], ['chatito', 'inspector'], ['sulema', 'chasis'], ['octavio', 'octavio']];
+const NOMBRES = [['edgar', 'rutas'], ['chatito', 'inspector'], ['sulema', 'chasis'], ['max', 'octavio']]; // Max (antes Octavio): su id interno sigue siendo octavio
 
 // El agente nombrado primero en el mensaje; null si no nombra a ninguno.
 function agenteDe(texto) {
   const t = limpio(texto);
-  const hallados = NOMBRES.map(([nombre, id]) => ({ id, en: t.search(new RegExp(`\\b${nombre}\\b`)) })).filter((h) => h.en >= 0);
+  const crudo = String(texto ?? '').toLowerCase(); // con acentos: "máx" (máximo) no es Max
+  const hallados = NOMBRES.map(([nombre, id]) => ({ id, en: (nombre === 'max' ? crudo : t).search(new RegExp(`\\b${nombre}\\b`)) })).filter((h) => h.en >= 0);
   return hallados.sort((a, b) => a.en - b.en)[0]?.id ?? null;
 }
 
@@ -72,7 +73,7 @@ async function procesarMensaje(mensaje) {
     await contestar(mensaje, await combustible.responder(clave, texto));
     return;
   }
-  // Octavio: "Octavio, mándame este material…" y las respuestas a su "¿Así está bien?" (si no nombran a otro agente).
+  // Max: "Max, mándame este material…" y las respuestas a su "¿Así está bien?" (si no nombran a otro agente).
   if (!esFoto && (id === 'octavio' || !id) && octavio.leToca(clave, texto)) {
     let respuesta;
     try {

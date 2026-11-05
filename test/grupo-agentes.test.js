@@ -57,7 +57,8 @@ test('contesta sólo el agente nombrado primero; sin nombre no contesta nadie', 
   assert.equal(grupo.agenteDe('Edgar, la nissan blanca echó 500 de gas'), 'rutas');
   assert.equal(grupo.agenteDe('oye CHATITO y Edgar'), 'inspector');
   assert.equal(grupo.agenteDe('Sulema, ¿entró la N900?'), 'chasis');
-  assert.equal(grupo.agenteDe('octavio, ¿qué órdenes hay?'), 'octavio');
+  assert.equal(grupo.agenteDe('max, ¿qué órdenes hay?'), 'octavio');
+  assert.equal(grupo.agenteDe('a lo máx 3 días'), null);
   assert.equal(grupo.agenteDe('Edgarito ya llegó'), null);
   assert.equal(grupo.agenteDe('buenos días'), null);
 });
@@ -144,17 +145,17 @@ test('foto al grupo con "Chatito": contesta al momento y deja la tarjeta por aut
   assert.match(tarjeta.borrador, /cemento/i);
 });
 
-test('Octavio en el grupo: imagen con "¿Así está bien?", corrige hasta el sí y la deja en su pestaña', async () => {
+test('Max en el grupo: imagen con "¿Así está bien?", corrige hasta el sí y la deja en su pestaña', async () => {
   const octavio = require('../src/integraciones/octavio/grupo');
   const dibujadas = [];
   octavio.config.dibujar = async (o) => { dibujadas.push(o); return Buffer.from('png'); };
   const ordenes = require('../src/integraciones/octavio/ordenes');
   const antes = ordenes.listar().length;
 
-  assert.ok(!octavio.esPedido('Octavio, ¿qué órdenes hay?'));
-  assert.ok(octavio.esPedido('Octavio mándame este material para almacén'));
+  assert.ok(!octavio.esPedido('Max, ¿qué órdenes hay?'));
+  assert.ok(octavio.esPedido('Max mándame este material para almacén'));
   ordenIA = { sucursal: 'Almacén', renglones: [{ cantidad: '10', unidad: 'bultos', material: 'CEMENTO MAYA' }] };
-  assert.deepEqual(await enviar('Octavio mándame este material para almacén:\n10 bultos cemento maya'), ['[foto] ¿Así está bien?']);
+  assert.deepEqual(await enviar('Max mándame este material para almacén:\n10 bultos cemento maya'), ['[foto] ¿Así está bien?']);
   assert.equal(dibujadas.at(-1).sucursal, 'Almacén');
   assert.equal(dibujadas.at(-1).etiqueta, 'VISTA PREVIA · POR CONFIRMAR');
 
@@ -170,12 +171,12 @@ test('Octavio en el grupo: imagen con "¿Así está bien?", corrige hasta el sí
   assert.equal(o.estado, 'aprobada');
   assert.equal(o.solicitante, 'MOISÉS');
   assert.deepEqual(o.renglones.map((r) => r.cantidad), ['15', '5']);
-  // Ya cerrada: un "sí" suelto no es para Octavio.
+  // Ya cerrada: un "sí" suelto no es para Max.
   assert.deepEqual(await enviar('sí'), []);
 
   // Concordia por "orden de compra"; "cancela" la descarta sin guardar.
   ordenIA = { sucursal: 'Concordia', renglones: [{ cantidad: '2', unidad: 'pzas', material: 'VARILLA' }] };
-  assert.deepEqual(await enviar('Octavio orden de compra para Concordia: 2 varillas'), ['[foto] ¿Así está bien?']);
+  assert.deepEqual(await enviar('Max orden de compra para Concordia: 2 varillas'), ['[foto] ¿Así está bien?']);
   assert.equal(dibujadas.at(-1).sucursal, 'Concordia');
   assert.deepEqual(await enviar('cancela'), ['Va, la descarté.']);
   assert.equal(ordenes.listar().length, antes + 1);
