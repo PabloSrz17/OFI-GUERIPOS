@@ -30,11 +30,11 @@ export function montarParcial({ notaPorId, alGuardar, toast }) {
     else if (!esSalida.checked && folio.value.trim() === `${nota.folio.replace(/-S\d+$/i, '')}-S1`) folio.value = nota.folio;
   });
 
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-accion="parcial"]');
-    if (e.target.closest('#envio-parcial [data-cerrar]')) dialogo.close();
-    if (!btn) return;
-    nota = notaPorId(btn.dataset.id);
+  let alTerminar = null; // quien abrió la ventana desde "En ruta" espera saber si se guardó
+  dialogo.addEventListener('close', () => { alTerminar?.(false); alTerminar = null; });
+
+  async function abrir(n) {
+    nota = n;
     try {
       const renglones = await api.get(`/api/notas/${nota.id}/renglones`);
       dialogo.querySelector('#parcial-resumen').innerHTML = `<div><b>${esc(nota.folio)}</b> · ${esc(nota.cliente)}</div>`;
@@ -44,9 +44,17 @@ export function montarParcial({ notaPorId, alGuardar, toast }) {
       folio.value = nota.folio;
       dialogo.showModal();
       filas.querySelector('input')?.select();
+      return true;
     } catch (err) {
       toast(err.message, true);
+      return false;
     }
+  }
+
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#envio-parcial [data-cerrar]')) dialogo.close();
+    const btn = e.target.closest('button[data-accion="parcial"]');
+    if (btn) abrir(notaPorId(btn.dataset.id));
   });
 
   form.addEventListener('submit', async (e) => {
@@ -55,12 +63,23 @@ export function montarParcial({ notaPorId, alGuardar, toast }) {
       .map((c) => (c.type === 'checkbox' ? (c.checked ? '1' : '0') : c.value));
     try {
       const { saldo } = await api.post(`/api/notas/${nota.id}/parcial`, { enviar, folio: folio.value.trim(), salida: esSalida.checked });
+      const listo = alTerminar;
+      alTerminar = null;
       dialogo.close();
       const viaje = folio.value.trim() && folio.value.trim() !== nota.folio ? `${folio.value.trim()}${esSalida.checked ? ' (Salida)' : ''} va en este viaje · ` : '';
       toast(viaje + (saldo ? `Saldo ${saldo.folio}: quedan ${queda(saldo)}` : `${nota.folio}: el viaje lleva todo, ya no queda saldo`));
       await alGuardar();
+      listo?.(true);
     } catch (err) {
       aviso.textContent = err.message; // sigue abierta para corregir
     }
+  });
+
+  // Abre la ventana y resuelve true si se guardó el envío parcial, false si la cerraron.
+  return (n) => new Promise((listo) => {
+    abrir(n).then((abierta) => {
+      if (abierta) alTerminar = listo;
+      else listo(false);
+    });
   });
 }

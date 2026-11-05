@@ -239,9 +239,15 @@ async function procesarMensaje(mensaje) {
   // Sulema primero: la foto de una nota firmada con "Sulema" y "nota" no es pedido ni orden.
   if (await evidencias.recibir(mensaje, { clave, texto, esFoto, envio: contacto?.pushname || contacto?.name || clave })) return;
 
+  // "sí" / "no" a Edgar: "¿Lo registro como retiro en la Caja de Pulpos?"
+  if (!esFoto && combustible.esperaRespuesta(clave, texto)) {
+    await mensaje.client.sendMessage(mensaje.from, await combustible.responder(clave, texto), { sendSeen: false });
+    return;
+  }
+
   // Edgar: "Edgar, la estaquitas echó 500 de gasolina" también en privado. Si no es carga, sigue normal.
   if (!esFoto && /\bedgar\b/i.test(texto.normalize('NFD').replace(/[̀-ͯ]/g, '')) && combustible.esCombustible(texto)) {
-    const r = await combustible.anotar(texto, contacto?.pushname || contacto?.name || clave);
+    const r = await combustible.anotar(texto, contacto?.pushname || contacto?.name || clave, clave);
     if (r) {
       await mensaje.client.sendMessage(mensaje.from, r, { sendSeen: false });
       return;

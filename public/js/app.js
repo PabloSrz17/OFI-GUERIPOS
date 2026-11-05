@@ -105,6 +105,29 @@ function avisoTelefono() {
 }
 telefonoInput.addEventListener('input', avisoTelefono);
 
+let abrirParcial = async () => false; // se conecta al montar la ventana Parcial
+
+// "¿El material está saliendo completo?" Devuelve la nota lista para salir (la misma o ya dividida) o null.
+async function salidaCompleta(nota) {
+  const dialogo = $('#salida-completa');
+  $('#salida-completa-resumen').innerHTML = `
+    <div><b>${esc(nota.folio)}</b> · ${esc(nota.cliente)}</div>
+    <div>${esc(nota.cantidad)} ${esc(nota.unidad)} · ${esc(nota.material)}</div>`;
+  dialogo.returnValue = '';
+  dialogo.showModal();
+  const respuesta = await new Promise((listo) => {
+    dialogo.addEventListener('close', () => listo(dialogo.returnValue), { once: true });
+  });
+  if (respuesta === 'si') return nota;
+  if (respuesta !== 'no' || !(await abrirParcial(nota))) return null;
+  const dividida = notaPorId(nota.id);
+  if (!dividida || dividida.saldo) {
+    toast(`${nota.folio}: no salió nada, quedó en Saldos pendientes`);
+    return null;
+  }
+  return dividida;
+}
+
 async function confirmarRuta(nota) {
   const dialogo = $('#confirmar-ruta');
   $('#confirmar-resumen').innerHTML = `
@@ -143,6 +166,7 @@ async function mover(nota, destino) {
     return false;
   }
   const aRuta = destino === 'en_ruta' && !regresar;
+  if (aRuta && !(nota = await salidaCompleta(nota))) return false;
   if (aRuta && !(await confirmarRuta(nota))) return false;
   try {
     const actualizada = regresar
@@ -360,7 +384,7 @@ async function iniciar() {
   escucharEventos();
   montarCaptura({ alGuardar: refrescar, toast });
   montarEditarNota({ notaPorId, catalogos, alGuardar: refrescar, toast });
-  montarParcial({ notaPorId, alGuardar: refrescar, toast });
+  abrirParcial = montarParcial({ notaPorId, alGuardar: refrescar, toast });
   montarVisorFoto();
   montarCierre({ notasActuales: () => notasActuales, alCerrar: refrescar, toast });
   montarInspector({ toast, alAprobar: refrescar });

@@ -162,10 +162,20 @@ router.get('/:id', (req, res) => {
   res.json(cotizacion);
 });
 
-// Edición manual desde el historial. body: { partidas, enviar? }. Con enviar, sale la imagen corregida
-// por WhatsApp (un humano lo revisó y apretó el botón).
+// Edición manual desde el historial. body: { partidas, enviar?, cliente?, telefono?, colonia? }. Con enviar,
+// sale la imagen corregida por WhatsApp (un humano lo revisó y apretó el botón). El folio nunca cambia.
 router.put('/:id', async (req, res) => {
   const b = req.body ?? {};
+  let datos = null;
+  if (b.cliente !== undefined) {
+    const cliente = String(b.cliente ?? '').trim().toUpperCase();
+    const colonia = String(b.colonia ?? '').trim();
+    if (!cliente || !colonia) throw httpError(400, 'Falta el cliente o la ubicación');
+    const telefonoTexto = String(b.telefono ?? '').trim();
+    const telefono = telefonoTexto ? normalizar(telefonoTexto) : null;
+    if (telefonoTexto && !telefono) throw httpError(400, 'Teléfono inválido: escribe los 10 dígitos');
+    datos = { cliente, telefono, colonia };
+  }
   if (!Array.isArray(b.partidas) || !b.partidas.some((p) => p.tipo !== 'flete')) throw httpError(400, 'La cotización no tiene productos');
   let calculo;
   try {
@@ -173,7 +183,7 @@ router.put('/:id', async (req, res) => {
   } catch (err) {
     throw httpError(400, err.message);
   }
-  const cotizacion = cotizaciones.editar(Number(req.params.id), calculo);
+  const cotizacion = cotizaciones.editar(Number(req.params.id), calculo, datos);
   if (!cotizacion) throw httpError(404, 'Cotización no encontrada');
   bus.emit('solicitud:nueva');
   const whatsappEstado = b.enviar ? await enviarPorWhatsapp(cotizacion) : null;

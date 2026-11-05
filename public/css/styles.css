@@ -966,3 +966,20 @@ details.plegable[hidden] { display: none; }
 .reprogramar__opcion { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin: 0; padding: 10px 14px; text-align: left; font-size: 15px; color: #fff; background: #1f6fc5; border-color: #0d3b6e; }
 .reprogramar__opcion small { font: 600 12px system-ui, sans-serif; opacity: .9; }
 .reprogramar__fecha { display: grid; gap: 6px; padding: 10px; border: 2px dashed #8a7a60; border-radius: 8px; }
+
+/* Viajes minimizados en el corcho */
+.corcho__plegar { all: unset; cursor: pointer; display: flex; align-items: center; gap: 2px; width: 100%; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; }
+.corcho__plegar:focus-visible { outline: 2px solid #ffd54f; outline-offset: 2px; border-radius: 4px; }
+.corcho__plegar:hover { color: #ffd54f; }
+.corcho__viaje--plegado { min-height: 0; }
+.corcho__plegado { margin: 4px 0 0; font-size: 11px; color: #d8c8b0; }
+/* Viaje entregado completo y minimizado: barra verde sólida con letra blanca */
+.corcho__viaje.corcho__viaje--listo.corcho__viaje--plegado { background: #2e7d32; border: 2px solid #1b5e20; box-shadow: 0 2px 6px rgb(0 0 0 / 0.35); }
+.corcho__viaje--listo.corcho__viaje--plegado h4,
+.corcho__viaje--listo.corcho__viaje--plegado .corcho__plegar,
+.corcho__viaje--listo.corcho__viaje--plegado .corcho__plegado { color: #fff; font-weight: 700; }
+.corcho__viaje--listo.corcho__viaje--plegado h4 span { background: #1b5e20; color: #fff; }
+.corcho__viaje--listo.corcho__viaje--plegado .corcho__plegar:hover { color: #c8e6c9; }
+
+/* Folio fijo al editar una cotización */
+.cot__folio { background: rgb(0 0 0 / 0.25); color: #ffd54f; font-weight: 700; cursor: not-allowed; }

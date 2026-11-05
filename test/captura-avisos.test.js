@@ -216,7 +216,7 @@ test('varias notas del mismo número en el mismo viaje: un solo WhatsApp con tod
   const c = nota('GN1004', '529811000001', 'POLVO');
   const otro = nota('G300', '529811000002', 'CAL'); // otro cliente: su propio mensaje
   aRuta(a); await espera(5); aRuta(b); aRuta(otro); await espera(5); aRuta(c);
-  await espera(80);
+  await espera(400); // margen: con todas las pruebas a la vez la máquina va más lenta
 
   const delCliente = enviados.filter(([tel]) => tel === '529811000001');
   assert.equal(delCliente.length, 1);

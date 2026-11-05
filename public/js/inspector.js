@@ -284,28 +284,36 @@ export function montarInspector({ toast, alAprobar }) {
   buscar.addEventListener('input', pintarRecientes);
 
   // ---- Edición manual de una cotización del historial ----
+  // El folio se ve pero no se puede cambiar; cliente, WhatsApp y ubicación sí.
   function pintarEdicion() {
-    const { cot, partidas } = editando;
-    const tel = cot.cliente_telefono;
+    const { cot } = editando;
+    const folioFijo = `<label class="campo">Folio <input class="cot__folio" value="${esc(cot.folio)}" readonly aria-readonly="true" tabindex="-1" title="El folio no cambia"></label>`;
     caja.innerHTML = `
       <div class="cot">
-        <p class="cot__pregunta">✏️ Editando ${esc(cot.folio)} · ${esc(cot.cliente)} · ${esc(cot.colonia)}</p>
-        ${tablaHtml(partidas, true)}
+        <p class="cot__pregunta">✏️ Editando ${esc(cot.folio)}</p>
+        ${editorHtml(editando, folioFijo, true).replace('>Colonia <', '>Ubicación / colonia <')}
         <div class="captura__botones cot__botones">
-          <button type="button" class="btn" data-accion="aprobar">${tel ? '💬 Actualizar y Reenviar' : '✔ Guardar cambios'}</button>
-          ${tel ? '<button type="button" class="btn btn--secundario" data-accion="guardar">✔ Sólo guardar</button>' : ''}
+          <button type="button" class="btn" data-accion="aprobar"></button>
+          <button type="button" class="btn btn--secundario" data-accion="guardar">✔ Sólo guardar</button>
           <button type="button" class="btn btn--secundario" data-accion="cancelar">✖ Cancelar</button>
         </div>
-        ${tel ? '' : '<p>El cliente no tiene WhatsApp: guárdala y descarga la imagen para mandarla tú.</p>'}
+        <p data-sin-whatsapp>El cliente no tiene WhatsApp: guárdala y descarga la imagen para mandarla tú.</p>
       </div>`;
     caja.hidden = false;
     recalcularEdicion();
   }
 
+  const telefonoEditado = () => caja.querySelector('[data-dato="telefono"]')?.value.trim() ?? '';
+
   function recalcularEdicion() {
     recalcular(caja, editando);
+    const tel = Boolean(telefonoEditado());
+    const aprobar = caja.querySelector('[data-accion="aprobar"]');
+    aprobar.textContent = tel ? '💬 Actualizar y Reenviar' : '✔ Guardar cambios';
     const guardar = caja.querySelector('[data-accion="guardar"]');
-    if (guardar) guardar.disabled = caja.querySelector('[data-accion="aprobar"]').disabled;
+    guardar.hidden = !tel;
+    guardar.disabled = aprobar.disabled;
+    caja.querySelector('[data-sin-whatsapp]').hidden = tel;
   }
 
   async function abrirEdicion(id) {
@@ -313,13 +321,16 @@ export function montarInspector({ toast, alAprobar }) {
     const partidas = cot.partidas.map(({ tipo, descripcion, cantidad, unidad, precio }) => ({ tipo, descripcion, cantidad: String(cantidad), unidad, precio }));
     if (!partidas.some((p) => p.tipo === 'flete')) partidas.push({ tipo: 'flete', descripcion: `Flete a ${cot.colonia ?? ''}`, cantidad: '1', unidad: 'viaje', precio: '' });
     borrador = null;
-    editando = { cot, partidas };
+    editando = { cot, partidas, cliente: cot.cliente, telefono: cot.cliente_telefono, colonia: cot.colonia };
     pintarEdicion();
     caja.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function guardarEdicion(enviar) {
-    const { cotizacion, whatsapp } = await api.put(`/api/cotizaciones/${editando.cot.id}`, { partidas: editando.partidas, enviar });
+    const dato = (campo) => caja.querySelector(`[data-dato="${campo}"]`)?.value ?? '';
+    const { cotizacion, whatsapp } = await api.put(`/api/cotizaciones/${editando.cot.id}`, {
+      partidas: editando.partidas, enviar, cliente: dato('cliente'), telefono: dato('telefono'), colonia: dato('colonia'),
+    });
     editando = null;
     caja.innerHTML = `
       <div class="cot cot--lista">
@@ -419,7 +430,11 @@ export function montarInspector({ toast, alAprobar }) {
     }
   });
 
-  caja.addEventListener('input', (e) => (editando ? recalcularEdicion() : alEscribir(caja, borrador, e)));
+  caja.addEventListener('input', (e) => {
+    if (!editando) return alEscribir(caja, borrador, e);
+    alEscribir(caja, editando, e); // la colonia también cambia el "Flete a …"
+    recalcularEdicion();
+  });
   caja.addEventListener('change', (e) => { if (e.target.id === 'cot-enviar') textoDeAprobar(); });
 
   // ---- Tarjetas por autorizar (panel de El Inspector): cotizaciones que llegaron por WhatsApp ----
@@ -525,7 +540,7 @@ export function montarInspector({ toast, alAprobar }) {
     if (editando && (boton.dataset.accion === 'aprobar' || boton.dataset.accion === 'guardar')) {
       caja.querySelectorAll('[data-accion="aprobar"], [data-accion="guardar"]').forEach((b) => { b.disabled = true; });
       try {
-        await guardarEdicion(boton.dataset.accion === 'aprobar' && Boolean(editando.cot.cliente_telefono));
+        await guardarEdicion(boton.dataset.accion === 'aprobar' && Boolean(telefonoEditado()));
         cargarRecientes();
       } catch (err) {
         toast(err.message, true);

@@ -490,6 +490,19 @@
     </form>
   </dialog>
 
+  <dialog id="salida-completa" class="dialogo" aria-labelledby="salida-completa-titulo">
+    <form method="dialog">
+      <h2 id="salida-completa-titulo">📦 ¿El material está saliendo completo?</h2>
+      <div id="salida-completa-resumen" class="dialogo__resumen"></div>
+      <p class="dialogo__aviso">Si sale sólo una parte, anota lo que sí va; lo que no sale pasa a Saldos pendientes.</p>
+      <div class="dialogo__botones">
+        <button value="cancelar" class="btn btn--regresar">Cancelar</button>
+        <button value="no" class="btn btn--secundario">✂ No, sale una parte</button>
+        <button value="si" class="btn btn--ruta" autofocus>✅ Sí, sale completo</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="confirmar-ruta" class="dialogo" aria-labelledby="confirmar-titulo">
     <form method="dialog">
       <h2 id="confirmar-titulo">🚚 ¿Enviar a ruta?</h2>

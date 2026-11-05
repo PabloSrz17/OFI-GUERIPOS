@@ -16,7 +16,7 @@ export const UNIDADES = [
   { nombre: 'Ford F450', es: /f\s*-?\s*450/i },
   { nombre: 'Torton', es: /torton/i },
 ];
-const OTRAS = 'Sin unidad u otras';
+const OTRAS = 'Saldos pendientes / Notas Pendientes';
 const EL_AVISA = '9999-12-31'; // "Él avisa": sin día fijo (notas.repo.js)
 const VIAJES = ['1er', '2do', '3er', '4to', '5to'];
 // Notas con camión pero sin viaje anotado (asignadas desde el tablero) se ven en el 1er viaje.
@@ -33,6 +33,20 @@ let ctx = null;          // { catalogos, toast }
 let notasDelDia = [];
 let programadas = [];
 let arrastrada = null;
+
+// Viajes minimizados. Los entregados completos se minimizan solos; lo que el usuario abra o cierre
+// a mano se respeta. Se recuerda en este navegador y se reinicia cada día.
+const LLAVE_PLEGADO = 'corcho-plegado';
+let plegado = {};
+const listosVistos = new Set(); // viajes que ya estaban entregados completos en la pintada anterior
+let yaPintado = false;          // la primera pintada con notas no cuenta como "se acaba de completar"
+try {
+  const guardado = JSON.parse(localStorage.getItem(LLAVE_PLEGADO) ?? '{}');
+  if (guardado.dia === dia()) plegado = guardado.viajes ?? {};
+} catch { /* sin almacenamiento: sólo dura mientras esté abierta */ }
+function guardarPlegado() {
+  try { localStorage.setItem(LLAVE_PLEGADO, JSON.stringify({ dia: dia(), viajes: plegado })); } catch { /* nada */ }
+}
 
 function columnaDe(nota) {
   return UNIDADES.find((u) => u.es.test(nota.camion ?? ''))?.nombre ?? OTRAS;
@@ -138,10 +152,22 @@ function rejilla(notas, opciones = {}) {
     : VIAJES.map((v, k) => {
       const delViaje = suyas.filter((n) => viajeDe(n) === k + 1);
       const listo = delViaje.length && delViaje.every((n) => n.estado === 'entregado');
+      const llave = `${opciones.manana ? 'manana' : 'hoy'}|${nombre}|${k + 1}`;
+      // Al entregarse la última nota, el viaje se minimiza aunque antes lo hayan abierto a mano.
+      if (listo && !listosVistos.has(llave)) {
+        if (yaPintado) delete plegado[llave];
+        listosVistos.add(llave);
+      } else if (!listo) listosVistos.delete(llave);
+      const cerrado = delViaje.length > 0 && (plegado[llave] ?? Boolean(listo));
+      const titulo = `${v} viaje${delViaje.length ? ` <span>${listo ? '✓ ' : ''}${delViaje.length}</span>` : ''}`;
       return `
-            <div class="corcho__zona corcho__viaje${listo ? ' corcho__viaje--listo' : ''}" data-zona data-columna="${esc(nombre)}" data-viaje="${k + 1}">
-              <h4>${v} viaje${delViaje.length ? ` <span>${listo ? '✓ ' : ''}${delViaje.length}</span>` : ''}</h4>
-              ${delViaje.map((n) => tarjeta(n, opciones)).join('')}
+            <div class="corcho__zona corcho__viaje${listo ? ' corcho__viaje--listo' : ''}${cerrado ? ' corcho__viaje--plegado' : ''}" data-zona data-columna="${esc(nombre)}" data-viaje="${k + 1}">
+              <h4>${delViaje.length
+    ? `<button type="button" class="corcho__plegar" data-plegar="${esc(llave)}" aria-expanded="${!cerrado}" title="${cerrado ? 'Ver las notas de este viaje' : 'Minimizar este viaje'}">${cerrado ? '▸' : '▾'} ${titulo}</button>`
+    : titulo}</h4>
+              ${cerrado
+    ? `<p class="corcho__plegado">${listo ? 'Entregado completo · ' : ''}${delViaje.length} ${delViaje.length === 1 ? 'nota oculta' : 'notas ocultas'}</p>`
+    : delViaje.map((n) => tarjeta(n, opciones)).join('')}
             </div>`;
     }).join('')}
       </section>`;
@@ -151,6 +177,7 @@ function rejilla(notas, opciones = {}) {
 function pintarDia() {
   $('#corcho-fecha').textContent = fechaLarga(dia());
   $('#corcho-contenido').innerHTML = rejilla(notasDelDia);
+  if (notasDelDia.length) yaPintado = true;
 }
 
 function pintarFuturas() {
@@ -236,6 +263,13 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
   const ventana = $('#ventana-notas');
   ventana.addEventListener('pestana', (e) => mostrar(e.detail));
   ventana.addEventListener('click', (e) => {
+    const plegar = e.target.closest('[data-plegar]');
+    if (plegar) {
+      plegado[plegar.dataset.plegar] = plegar.getAttribute('aria-expanded') === 'true';
+      guardarPlegado();
+      if (plegar.dataset.plegar.startsWith('manana|')) pintarFuturas(); else pintarDia();
+      return;
+    }
     const p = e.target.closest('[data-pestana]');
     if (p) mostrar(p.dataset.pestana);
     const f = e.target.closest('[data-formato]');
@@ -244,6 +278,41 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
       mostrar(formatoDia);
     }
   });
+
+  // Al arrastrar una nota cerca del borde de arriba o de abajo, la vista se desplaza sola (más rápido
+  // mientras más cerca del borde), para poder soltarla en el 3er, 4to o 5to viaje.
+  const BORDE = 90;      // px desde el borde donde empieza a moverse
+  const MAXIMO = 18;     // px cada 16 ms en la orilla
+  let velocidad = 0;
+  let vistaArrastre = null;
+  let cuadro = null;
+  // Un temporizador (no requestAnimationFrame): sigue moviendo aunque la ventana no esté al frente.
+  function avanzarScroll() {
+    if (!velocidad || !vistaArrastre) { pararScroll(); return; }
+    vistaArrastre.scrollTop += velocidad;
+  }
+  function autoScroll(e) {
+    if (!arrastrada) return;
+    const vista = document.querySelector('.operacion__vista:not([hidden]) #corcho-contenido, .operacion__vista:not([hidden]) #manana-contenido')?.closest('.operacion__vista');
+    if (!vista) return;
+    const { top, bottom } = vista.getBoundingClientRect();
+    const y = e.clientY;
+    velocidad = y < top + BORDE ? -Math.ceil(MAXIMO * Math.min(1, (top + BORDE - y) / BORDE))
+      : y > bottom - BORDE ? Math.ceil(MAXIMO * Math.min(1, (y - (bottom - BORDE)) / BORDE))
+        : 0;
+    vistaArrastre = vista;
+    if (velocidad && !cuadro) cuadro = setInterval(avanzarScroll, 16);
+  }
+  function pararScroll() {
+    velocidad = 0;
+    clearInterval(cuadro);
+    cuadro = null;
+  }
+  // En toda la ventana: también sobre la cabecera o fuera de la vista sigue desplazando.
+  ventana.addEventListener('dragover', autoScroll);
+  ventana.addEventListener('drop', pararScroll);
+  ventana.addEventListener('dragend', pararScroll);
+  ventana.addEventListener('dragleave', (e) => { if (!e.relatedTarget) pararScroll(); });
 
   // Arrastrar: en el corcho de hoy y en el de mañana (acomodar con anticipación).
   for (const contenido of [$('#corcho-contenido'), $('#manana-contenido')]) {

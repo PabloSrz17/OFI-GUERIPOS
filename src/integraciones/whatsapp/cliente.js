@@ -26,6 +26,7 @@ let ultimoAvance = 0;
 let alFinal = false; // sesión aceptada y carga al 99% o más
 const alConectar = [];
 const alMensaje = [];
+const alPropio = []; // lo que se escribe desde el WhatsApp de la Oficina (o lo que ella misma manda)
 
 // A veces WhatsApp Web se queda cargando sin error. Cada 15 s se revisa: si no conectó, no pide QR
 // y lleva 90 s sin señal de avance, se reintenta (con avance, hasta 10 min en total). En los registros
@@ -121,6 +122,7 @@ function conectar() {
   });
   // Mensajes entrantes (sólo los que te escriben, no los que mandas tú).
   cliente.on('message', (mensaje) => alMensaje.forEach((fn) => fn(mensaje)));
+  cliente.on('message_create', (mensaje) => { if (mensaje.fromMe) alPropio.forEach((fn) => fn(mensaje)); });
   cliente.on('auth_failure', () => {
     estado.reportar(ORIGEN, false, 'No se pudo vincular: vuelve a escanear el QR');
   });
@@ -203,5 +205,6 @@ module.exports = {
   estaListo: () => listo,
   alConectar: (fn) => alConectar.push(fn),
   alMensaje: (fn) => alMensaje.push(fn),
+  alPropio: (fn) => alPropio.push(fn),
   qrSvg: () => (qrActual ? QRCode.toString(qrActual, { type: 'svg', margin: 1 }) : Promise.resolve(null)),
 };

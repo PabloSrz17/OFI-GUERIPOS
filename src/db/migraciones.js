@@ -223,7 +223,15 @@ function viajeDeNota(db) {
   if (!columnas.includes('viaje')) db.exec('ALTER TABLE notas ADD COLUMN viaje INTEGER');
 }
 
+// Cargas de combustible leídas de la Caja de Pulpos: su id evita anotarlas dos veces.
+function combustibleDePulpos(db) {
+  const columnas = db.prepare('PRAGMA table_info(combustible)').all().map((c) => c.name);
+  if (!columnas.includes('pulpos_id')) db.exec('ALTER TABLE combustible ADD COLUMN pulpos_id TEXT');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS combustible_pulpos_id ON combustible (pulpos_id) WHERE pulpos_id IS NOT NULL');
+}
+
 module.exports = function migrar(db) {
+  combustibleDePulpos(db);
   viajeDeNota(db);
   notaProgramada(db);
   notaConFecha(db);

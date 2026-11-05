@@ -30,6 +30,7 @@ const stmts = {
   whatsapp: db.prepare('UPDATE cotizaciones SET whatsapp = ? WHERE id = ?'),
   borrarPartidas: db.prepare('DELETE FROM cotizacion_partidas WHERE cotizacion_id = ?'),
   cambiarTotal: db.prepare('UPDATE cotizaciones SET total = ? WHERE id = ?'),
+  cambiarDatos: db.prepare('UPDATE cotizaciones SET cliente_id = ?, colonia = ? WHERE id = ?'),
   // Si ya se pagó o se cerró, o si el recordatorio ya salió, no se vuelve a programar.
   programar: db.prepare(`
     UPDATE cotizaciones SET
@@ -98,9 +99,16 @@ const aprobar = db.transaction((cotizacion, actualizarPrecios) => {
   return { cotizacion: obtener(id), aprendido };
 });
 
-// Edición manual desde el historial: cambia renglones y total; folio, cliente y fecha se quedan.
-const editar = db.transaction((id, { partidas, total }) => {
+// Edición manual desde el historial: cambia renglones y total, y si vienen, cliente, teléfono y colonia.
+// El folio (C-0035) sale del id y la fecha no se toca. Cambiar el nombre no renombra al cliente en las
+// demás notas: la cotización pasa al cliente con ese nombre (o a uno nuevo).
+const editar = db.transaction((id, { partidas, total }, datos = null) => {
   if (!stmts.porId.get(id)) return null;
+  if (datos) {
+    const clienteId = clientes.obtenerOCrear({ nombre: datos.cliente, telefono: datos.telefono });
+    if (datos.telefono) clientes.actualizarTelefono(clienteId, datos.telefono);
+    stmts.cambiarDatos.run(clienteId, datos.colonia, id);
+  }
   stmts.borrarPartidas.run(id);
   partidas.forEach((p, i) => stmts.partida.run(id, i + 1, p.tipo === 'flete' ? 'flete' : 'producto', p.descripcion, p.cantidad, String(p.unidad ?? '').trim(), p.precio, p.importe));
   stmts.cambiarTotal.run(total, id);

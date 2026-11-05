@@ -140,3 +140,18 @@ test('editar a mano: cambia renglones y total, agrega partidas y conserva folio 
   assert.deepEqual(editada.partidas.map((p) => [p.descripcion, p.importe]), [['Grava', 1200], ['Cemento Maya', 1500], ['Flete a Fovi', 300]]);
   assert.equal(cotizaciones.editar(999999, calcular([{ descripcion: 'X', cantidad: 1, unidad: 'pz', precio: 1 }])), null);
 });
+
+test('editar a mano el cliente, WhatsApp y ubicación: mismo folio y mismos renglones', () => {
+  const { calcular } = require('../src/integraciones/inspector/cotizador');
+  const id = cotizacionEnviada('529810000010');
+  const antes = cotizaciones.obtener(id);
+  const partidas = antes.partidas.map(({ tipo, descripcion, cantidad, unidad, precio }) => ({ tipo, descripcion, cantidad, unidad, precio }));
+  const editada = cotizaciones.editar(id, calcular(partidas), { cliente: 'MARIA LOPEZ', telefono: '529811234567', colonia: 'Santa Ana' });
+  assert.equal(editada.id, antes.id);
+  assert.equal(editada.folio, antes.folio);
+  assert.equal(editada.creado_en, antes.creado_en);
+  assert.equal(editada.cliente, 'MARIA LOPEZ');
+  assert.equal(editada.cliente_telefono, '529811234567');
+  assert.equal(editada.colonia, 'Santa Ana');
+  assert.equal(editada.total, antes.total);
+});

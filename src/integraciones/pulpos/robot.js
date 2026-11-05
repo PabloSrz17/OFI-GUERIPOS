@@ -8,6 +8,7 @@ const importador = require('../importador');
 const notas = require('../../repositories/notas.repo');
 const estado = require('../estado');
 const auditoria = require('./auditoria');
+const gastos = require('./gastos');
 const { parseFecha, parseDetalle, aVenta, esEnvio } = require('./parser');
 
 const BASE = 'https://app.pulpos.com';
@@ -41,11 +42,12 @@ async function cerrarNavegador() {
 // espera a que aparezca el contenido esperado (listo) o el formulario de contraseña.
 async function ir(page, url, listo) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  // El login de Pulpos ahora pide primero el correo (sin contraseña a la vista): también se reconoce por la dirección.
   await page.waitForFunction(
-    `document.querySelector('input[type="password"]') || (${listo})`,
+    `document.querySelector('input[type="password"]') || location.pathname.startsWith('/login') || (${listo})`,
     { timeout: 45_000, polling: 500 },
   );
-  if (await page.$('input[type="password"]')) throw new SesionCerrada();
+  if (await page.$('input[type="password"]') || new URL(page.url?.() ?? BASE).pathname.startsWith('/login')) throw new SesionCerrada();
 }
 
 // Junta las páginas de ventas hasta llegar a una anterior a "desde".
@@ -129,12 +131,55 @@ async function revisarFilas(filas, desde, leer) {
   return { nuevas, problemas, devueltas, revisar };
 }
 
+// Caja de Pulpos: la página pide sus movimientos (con id y hora) a cashierAudits.cashMovements;
+// se lee esa respuesta y las cargas de combustible pasan a Edgar. Si falla, las ventas no se detienen.
+async function leerMovimientos(page) {
+  const respuesta = page.waitForResponse((r) => r.url().includes('cashierAudits.cashMovements') && r.ok(), { timeout: 45_000 });
+  respuesta.catch(() => {}); // si la sesión está cerrada, ir() avisa primero
+  await ir(page, `${BASE}/cashier-audits/current`, `document.querySelector('main')?.innerText.includes('Caja')`);
+  const movimientos = (await (await respuesta).json())?.result?.data?.json;
+  if (!Array.isArray(movimientos)) throw new Error('la Caja no trajo movimientos');
+  return movimientos;
+}
+
+async function revisarCaja(page) {
+  try {
+    return gastos.anotar(await leerMovimientos(page)).length;
+  } catch (err) {
+    if (err instanceof SesionCerrada) throw err;
+    console.error('[pulpos] caja:', err.message);
+    return null;
+  }
+}
+
+// Escribe un retiro de efectivo en la Caja de Pulpos. Sólo lo pide Edgar cuando alguien le contestó "sí".
+// Después lee la Caja otra vez para confirmar que quedó; así también se liga con la carga de WhatsApp.
+const BOTON = (texto, dentro = 'document') => `[...${dentro}.querySelectorAll('button')].find((b) => b.innerText.trim() === '${texto}' && b.offsetParent)`;
+async function registrarRetiroEn(page, { importe, motivo }) {
+  if (!(Number(importe) > 0) || !motivo) throw new Error('falta el importe o el motivo');
+  await ir(page, `${BASE}/cashier-audits/current`, BOTON('Retirar Efectivo'));
+  await page.evaluate(`${BOTON('Retirar Efectivo')}.click()`);
+  await page.waitForFunction(`document.querySelector('[role="dialog"]')?.innerText.includes('Retirar Efectivo') && document.querySelector('[role="dialog"] input[name="amount"]')`, { timeout: 15_000 });
+  await page.type('[role="dialog"] input[name="amount"]', String(importe));
+  await page.type('[role="dialog"] input[name="details"]', motivo);
+  await page.evaluate(`${BOTON('Confirmar', "document.querySelector('[role=\"dialog\"]')")}.click()`);
+  await page.waitForFunction(`!document.querySelector('[role="dialog"]')`, { timeout: 20_000 });
+  const movimientos = await leerMovimientos(page);
+  const quedo = movimientos.find((m) => !m.deletedAt && String(m.details ?? '').trim() === motivo
+    && Number(m.amount) === -Number(importe) && Date.now() - new Date(m.createdAt).getTime() < 10 * 60_000);
+  if (!quedo) throw new Error('no lo veo en la Caja, revisa en Pulpos');
+  gastos.anotar(movimientos);
+  return quedo.id;
+}
+const registrarRetiro = (retiro) => conPagina((page) => registrarRetiroEn(page, retiro));
+
 async function revisar() {
   const desde = importador.importarDesde(ORIGEN);
   const page = await (await abrirNavegador()).newPage();
   try {
     const filas = await leerLista(page, desde);
     const { nuevas, problemas, devueltas, revisar: porRevisar } = await revisarFilas(filas, desde, (href) => leerDetalle(page, href));
+    await revisarCaja(page);
     const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     if (problemas.length) estado.reportar(ORIGEN, false, `No pude leer ${problemas.join(', ')} · reintento · ${hora}`);
     else if (devueltas.length) estado.reportar(ORIGEN, false, `Devueltas en Pulpos, revisa en el tablero: ${devueltas.join(', ')} · ${hora}`);
@@ -264,4 +309,4 @@ async function detener() {
   await cerrarNavegador();
 }
 
-module.exports = { iniciar, detener, revisarFilas, buscarFuera, rescatar, buscarFueraEn, rescatarEn };
+module.exports = { iniciar, detener, revisarFilas, revisarCaja, registrarRetiro, registrarRetiroEn, buscarFuera, rescatar, buscarFueraEn, rescatarEn };

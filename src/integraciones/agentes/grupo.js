@@ -27,9 +27,9 @@ function agenteDe(texto) {
   return hallados.sort((a, b) => a.en - b.en)[0]?.id ?? null;
 }
 
-async function atender(id, texto, { clave, reporto }) {
+async function atender(id, texto, { clave, persona, reporto }) {
   if (id === 'rutas' && combustible.esCombustible(texto)) {
-    const anotado = await combustible.anotar(texto, reporto);
+    const anotado = await combustible.anotar(texto, reporto, persona);
     if (anotado) return anotado;
   }
   if (id === 'inspector' && solicitudes.pideCotizacion(texto)) {
@@ -67,6 +67,11 @@ async function procesarMensaje(mensaje) {
   // Foto de nota firmada para Sulema; cada quien del grupo lleva su propia ventana de 5 minutos.
   const clave = `${mensaje.from}|${mensaje.author ?? ''}`;
   if (await evidencias.recibir(mensaje, { clave, texto, esFoto, envio: reporto })) return;
+  // "sí" / "no" a Edgar: "¿Lo registro como retiro en la Caja de Pulpos?"
+  if (!esFoto && combustible.esperaRespuesta(clave, texto)) {
+    await contestar(mensaje, await combustible.responder(clave, texto));
+    return;
+  }
   // Octavio: "Octavio, mándame este material…" y las respuestas a su "¿Así está bien?" (si no nombran a otro agente).
   if (!esFoto && (id === 'octavio' || !id) && octavio.leToca(clave, texto)) {
     let respuesta;
@@ -91,12 +96,36 @@ async function procesarMensaje(mensaje) {
   if (!id || esFoto) return;
   let respuesta;
   try {
-    respuesta = await atender(id, texto, { clave: mensaje.from, reporto });
+    respuesta = await atender(id, texto, { clave: mensaje.from, persona: clave, reporto });
   } catch (err) {
     console.error(`[grupo] ${id}:`, err.message);
     respuesta = 'No pude atender eso ahorita; intenta de nuevo en un momento.';
   }
   await contestar(mensaje, respuesta);
+}
+
+// Escrito desde el WhatsApp de la Oficina ("Mat Güero"): sólo Edgar con combustible, y el sí/no a su pregunta.
+// Tiene que EMPEZAR con "Edgar": así nunca se contesta a sí mismo (sus respuestas no empiezan así).
+async function procesarPropio(mensaje) {
+  if (!mensaje.fromMe || mensaje.type !== 'chat') return;
+  if (mensaje.timestamp && Date.now() / 1000 - mensaje.timestamp > MAX_ATRASO_S) return;
+  const chat = mensaje.to;
+  if (!chat || chat.endsWith('@broadcast') || chat.endsWith('@newsletter')) return;
+  const texto = String(mensaje.body ?? '').trim();
+  const clave = `propio|${chat}`;
+  const enviar = (t) => mensaje.client.sendMessage(chat, t, { sendSeen: false });
+  const respuesta = combustible.esperaRespuesta(clave, texto);
+  const esCarga = !respuesta && /^edgar\b/.test(limpio(texto)) && combustible.esCombustible(texto);
+  if (!respuesta && !esCarga) return;
+  if (chat.endsWith('@g.us') && !(await esElGrupo({ from: chat, getChat: () => mensaje.getChat(), client: mensaje.client }))) return;
+  if (respuesta) return enviar(await combustible.responder(clave, texto));
+  try {
+    const r = await combustible.anotar(texto, 'Oficina (WhatsApp)', clave);
+    if (r) await enviar(r);
+  } catch (err) {
+    console.error('[grupo] edgar (Oficina):', err.message);
+    await enviar('No pude anotar la carga ahorita; intenta de nuevo en un momento.');
+  }
 }
 
 // Uno a la vez, como los mensajes de clientes.
@@ -117,6 +146,9 @@ function iniciar(whatsapp) {
   whatsapp.alMensaje((m) => {
     cola = cola.then(() => procesarMensaje(m)).catch((err) => console.error('[grupo] WhatsApp:', err.message));
   });
+  whatsapp.alPropio?.((m) => {
+    cola = cola.then(() => procesarPropio(m)).catch((err) => console.error('[grupo] WhatsApp (Oficina):', err.message));
+  });
 }
 
-module.exports = { iniciar, procesarMensaje, agenteDe, avisarTarjeta, PIDE_AUTORIZACION, FOTO_RECIBIDA };
+module.exports = { iniciar, procesarMensaje, procesarPropio, agenteDe, avisarTarjeta, PIDE_AUTORIZACION, FOTO_RECIBIDA };

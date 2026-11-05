@@ -1,12 +1,29 @@
 // Cargas de combustible que el equipo le reporta a Edgar por WhatsApp, en el grupo o en chat privado
 // ("Edgar, la estaquitas echó 500 de gasolina"). La IA saca la unidad y el monto; se guarda en la
-// tabla combustible y Edgar contesta sólo "Enterado ✅".
+// tabla combustible y Edgar contesta "Enterado ✅". Con el robot de Pulpos encendido, además pregunta
+// si lo registra como retiro en la Caja de Pulpos; sólo lo hace si esa misma persona contesta "sí".
 const AnthropicSDK = require('@anthropic-ai/sdk');
 const db = require('../../db/connection');
+const gastos = require('../pulpos/gastos');
 
 const Anthropic = AnthropicSDK.default ?? AnthropicSDK;
 const MODELO = 'claude-haiku-5-5';
 const ENTERADO = 'Enterado ✅';
+const ESPERA_RESPUESTA_MS = 10 * 60_000;
+const SI = /^(si|simon|claro|dale|ok|va|okey|sale|registralo|hazlo)\b/;
+const NO = /^(no|nel|nop|todavia no|aun no)\b/;
+
+// Quién tiene pendiente contestar "¿Lo registro en Pulpos?": clave de la persona -> carga.
+const pendientes = new Map();
+// Se puede cambiar en las pruebas: aquí no se abre ningún navegador.
+const pulpos = {
+  activo: () => require('../../config').pulpos.activo,
+  registrar: (retiro) => require('../pulpos/robot').registrarRetiro(retiro),
+};
+
+// "gas nissan blanca (Edgar)": como lo escribe la cajera, así el robot lo reconoce al leer la Caja.
+const motivoDe = (c) => `${c.concepto === 'diesel' ? 'diesel' : 'gas'} ${c.unidad.toLowerCase()} (Edgar)`;
+const pesos = (n) => `$${Number(n).toLocaleString('es-MX')}`;
 
 const limpio = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const esCombustible = (texto) => /\b(gas|gasolina|diesel|disel|combustible|magna|premium)\b/.test(limpio(texto));
@@ -46,15 +63,48 @@ async function leerCarga(texto) {
 }
 
 // Devuelve lo que contesta Edgar; null si no es una carga sino una pregunta.
-async function anotar(texto, reporto) {
+async function anotar(texto, reporto, clave = null) {
   if (!process.env.ANTHROPIC_API_KEY) return 'No puedo leer la carga: falta la clave de la IA en la Oficina.';
   const c = await leerCarga(texto);
   if (c && !c.es_carga) return null;
   const unidad = String(c?.unidad ?? '').trim().toUpperCase();
   if (!unidad || !(c.importe > 0)) return 'No entendí la unidad o el importe. Escríbelo así: Edgar, la estaquitas echó 500 de gasolina';
-  stmts.anotar.run({ unidad, importe: c.importe, concepto: c.concepto, litros: c.litros > 0 ? c.litros : null, reporto, mensaje: texto });
+  const carga = { unidad, importe: c.importe, concepto: c.concepto, litros: c.litros > 0 ? c.litros : null, reporto, mensaje: texto };
+  if (gastos.emparejarReporte(carga)) {
+    console.log(`[edgar] combustible: ${unidad} $${c.importe} ya estaba en la Caja de Pulpos`);
+    return ENTERADO;
+  }
+  stmts.anotar.run(carga);
   console.log(`[edgar] combustible: ${unidad} $${c.importe} de ${c.concepto}`);
-  return ENTERADO;
+  if (!clave || !pulpos.activo()) return ENTERADO;
+  pendientes.set(clave, { ...carga, hasta: Date.now() + ESPERA_RESPUESTA_MS });
+  return `${ENTERADO}\n¿Lo registro como retiro en la Caja de PS? (${pesos(carga.importe)} · ${motivoDe(carga)})\nContesta "sí" o "no".`;
 }
 
-module.exports = { anotar, esCombustible, ENTERADO };
+// ¿Este mensaje es la respuesta a "¿Lo registro en Pulpos?"?
+function esperaRespuesta(clave, texto) {
+  const p = pendientes.get(clave);
+  if (p && p.hasta < Date.now()) pendientes.delete(clave);
+  if (!pendientes.has(clave)) return false;
+  const t = limpio(texto).replace(/^edgar[\s,:]*/, '').trim();
+  return SI.test(t) || NO.test(t);
+}
+
+async function responder(clave, texto) {
+  const carga = pendientes.get(clave);
+  pendientes.delete(clave); // una sola vez, aunque contesten "sí" dos veces
+  if (!carga) return null;
+  const t = limpio(texto).replace(/^edgar[\s,:]*/, '').trim();
+  if (NO.test(t)) return 'Ok, no lo registro en PS.';
+  const motivo = motivoDe(carga);
+  try {
+    await pulpos.registrar({ importe: carga.importe, motivo });
+    console.log(`[edgar] retiro registrado en Pulpos: ${pesos(carga.importe)} · ${motivo}`);
+    return `Listo ✅ quedó el retiro en la Caja de PS: ${pesos(carga.importe)} · ${motivo}`;
+  } catch (err) {
+    console.error('[edgar] retiro en Pulpos:', err.message);
+    return `No pude registrarlo en PS (${err.message}). Regístralo a mano en la Caja: ${pesos(carga.importe)} · ${motivo}`;
+  }
+}
+
+module.exports = { anotar, esCombustible, esperaRespuesta, responder, pulpos, ENTERADO };

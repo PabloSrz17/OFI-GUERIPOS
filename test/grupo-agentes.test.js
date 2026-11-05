@@ -180,3 +180,65 @@ test('Octavio en el grupo: imagen con "¿Así está bien?", corrige hasta el sí
   assert.deepEqual(await enviar('cancela'), ['Va, la descarté.']);
   assert.equal(ordenes.listar().length, antes + 1);
 });
+
+test('Edgar pregunta si registra el retiro en la Caja de Pulpos y sólo lo hace con "sí"', async () => {
+  const combustible = require('../src/integraciones/agentes/combustible');
+  const registrados = [];
+  const original = { ...combustible.pulpos };
+  combustible.pulpos.activo = () => true;
+  combustible.pulpos.registrar = async (retiro) => { registrados.push(retiro); return 'id-falso'; };
+  try {
+    carga = { es_carga: true, unidad: 'Nissan roja', importe: 300, concepto: 'gasolina', litros: 0 };
+    const [pregunta] = await enviar('Edgar, la nissan roja echó 300 de gas');
+    assert.match(pregunta, /^Enterado ✅\n¿Lo registro como retiro en la Caja de PS\? \(\$300 · gas nissan roja \(Edgar\)\)/);
+    assert.deepEqual(registrados, []); // sin "sí" no se toca Pulpos
+
+    assert.deepEqual(await enviar('Sí'), ['Listo ✅ quedó el retiro en la Caja de PS: $300 · gas nissan roja (Edgar)']);
+    assert.deepEqual(registrados, [{ importe: 300, motivo: 'gas nissan roja (Edgar)' }]);
+    assert.deepEqual(await enviar('sí'), []); // un segundo "sí" no registra otro
+
+    carga = { es_carga: true, unidad: 'Torton', importe: 1000, concepto: 'diesel', litros: 0 };
+    await enviar('Edgar, el torton echó 1000 de diesel');
+    assert.deepEqual(await enviar('no'), ['Ok, no lo registro en PS.']);
+    assert.equal(registrados.length, 1);
+
+    // Si Pulpos falla, lo dice y pide registrarlo a mano.
+    combustible.pulpos.registrar = async () => { throw new Error('la sesión de Pulpos está cerrada'); };
+    carga = { es_carga: true, unidad: 'RAM', importe: 450, concepto: 'diesel', litros: 0 };
+    await enviar('Edgar, la ram echó 450 de diesel');
+    const [fallo] = await enviar('si');
+    assert.match(fallo, /^No pude registrarlo en PS \(la sesión de Pulpos está cerrada\)\. Regístralo a mano/);
+  } finally {
+    Object.assign(combustible.pulpos, original);
+  }
+});
+
+test('escrito desde el WhatsApp de la Oficina: Edgar contesta igual y nunca se contesta a sí mismo', async () => {
+  const combustible = require('../src/integraciones/agentes/combustible');
+  const registrados = [];
+  const original = { ...combustible.pulpos };
+  combustible.pulpos.activo = () => true;
+  combustible.pulpos.registrar = async (retiro) => { registrados.push(retiro); };
+  const CHAT = '5219811111111@c.us';
+  const propio = async (body) => {
+    const m = mensaje(body, { extra: { fromMe: true, to: CHAT } });
+    await grupo.procesarPropio(m);
+    return m.respuestas;
+  };
+  try {
+    carga = { es_carga: true, unidad: 'Nissan roja', importe: 500, concepto: 'gasolina', litros: 0 };
+    const [pregunta] = await propio('edgar se echó $500 gasolina nissan roja');
+    assert.match(pregunta, /^Enterado ✅\n¿Lo registro como retiro en la Caja de PS\?/);
+    assert.equal(cargas().at(-1).reporto, 'Oficina (WhatsApp)');
+    // Lo que manda Edgar también llega como "propio": no se contesta.
+    assert.deepEqual(await propio(pregunta), []);
+    assert.deepEqual(await propio('Sí'), ['Listo ✅ quedó el retiro en la Caja de PS: $500 · gas nissan roja (Edgar)']);
+    assert.deepEqual(await propio('Listo ✅ quedó el retiro en la Caja de PS: $500 · gas nissan roja (Edgar)'), []);
+    assert.deepEqual(await propio('ok gracias'), []); // ya no hay pregunta pendiente
+    assert.equal(registrados.length, 1);
+    // Mensajes normales desde la Oficina no los toca.
+    assert.deepEqual(await propio('Buenas tardes, su pedido va en camino'), []);
+  } finally {
+    Object.assign(combustible.pulpos, original);
+  }
+});

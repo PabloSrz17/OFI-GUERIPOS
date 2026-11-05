@@ -1,6 +1,7 @@
 // Reporte semanal de los tres agentes. La semana va del lunes 08:00 al cierre del sábado
 // (antes del domingo 00:00). Todo se cuenta por fecha local, como se guarda en la base.
 const db = require('../db/connection');
+const gastos = require('../integraciones/pulpos/gastos');
 
 const stmts = {
   // Las descartadas son avisos que no eran orden: no cuentan como solicitadas.
@@ -88,11 +89,12 @@ function resumenCombustible(periodo) {
   const cargas = stmts.combustible.all(periodo);
   const porUnidad = new Map();
   for (const c of cargas) {
-    const u = porUnidad.get(c.unidad) ?? { unidad: c.unidad, cargas: 0, importe: 0, litros: 0 };
+    const nombre = gastos.unidadCanonica(c.unidad);
+    const u = porUnidad.get(nombre) ?? { unidad: nombre, cargas: 0, importe: 0, litros: 0 };
     u.cargas += 1;
     u.importe += c.importe;
     u.litros += c.litros ?? 0;
-    porUnidad.set(c.unidad, u);
+    porUnidad.set(nombre, u);
   }
   const suma = (campo) => cargas.reduce((s, c) => s + (c[campo] ?? 0), 0);
   return {
@@ -167,6 +169,7 @@ function bitacoraCombustible({ desde, hasta, unidad, min, max } = {}) {
 
 // Carga anotada a mano en el Control de Gasolina.
 function anotarCombustible(carga) {
+  if (gastos.emparejarReporte({ ...carga, reporto: 'Oficina (a mano)' })) return { emparejada: true, ...carga };
   const { lastInsertRowid } = stmts.anotar.run(carga);
   return { id: Number(lastInsertRowid), ...carga };
 }
