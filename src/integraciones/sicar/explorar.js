@@ -3,7 +3,9 @@
 const mysql = require('mysql2/promise');
 const { sicar } = require('../../config');
 
-const INTERES = /venta|nota|ticket|detalle|cliente|articulo|producto|envio|entrega|domicilio/i;
+// Sólo tablas de ventas; las de inventario, existencias, compras o almacén ni se muestran.
+const INTERES = /venta|nota|ticket|detalle|cliente|envio|entrega|domicilio/i;
+const PROHIBIDA = /inventario|existencia|stock|almacen|kardex|compra|entrada|salida|traspaso|ajuste|lote/i;
 
 (async () => {
   if (!sicar.user) throw new Error('Falta SICAR_DB_USER en .env');
@@ -13,14 +15,13 @@ const INTERES = /venta|nota|ticket|detalle|cliente|articulo|producto|envio|entre
     `SELECT table_name AS t, table_rows AS filas FROM information_schema.tables
      WHERE table_schema = ? ORDER BY table_name`, [sicar.database]);
   console.log(`Base "${sicar.database}": ${tablas.length} tablas\n`);
-  for (const { t, filas } of tablas.filter(({ t }) => INTERES.test(t))) {
+  for (const { t, filas } of tablas.filter(({ t }) => INTERES.test(t) && !PROHIBIDA.test(t))) {
     const [cols] = await db.query(
       `SELECT column_name AS c, column_type AS tipo FROM information_schema.columns
        WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position`, [sicar.database, t]);
     console.log(`${t} (~${filas} filas)`);
     console.log(`  ${cols.map(({ c, tipo }) => `${c}:${tipo}`).join(', ')}\n`);
   }
-  console.log('Otras tablas:', tablas.filter(({ t }) => !INTERES.test(t)).map(({ t }) => t).join(', '));
   await db.end();
 })().catch((err) => {
   console.error('Error:', err.code ?? '', err.message);

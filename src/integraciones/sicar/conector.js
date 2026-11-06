@@ -1,5 +1,5 @@
 // Conector de SICAR: lee (sólo lectura) la base MySQL de SICAR en la PC "MOSTRADOR"
-// y da de alta en el tablero las ventas nuevas.
+// y da de alta en el tablero las ventas nuevas. Sólo ventas: nada de inventario ni compras.
 const mysql = require('mysql2/promise');
 const { sicar: config } = require('../../config');
 const importador = require('../importador');
@@ -21,6 +21,8 @@ function conexion() {
     connectTimeout: 10_000,
     dateStrings: true,
   });
+  // Además del candado de consultas.js: la sesión de MySQL no puede escribir nada.
+  pool.pool.on('connection', (c) => c.query('SET SESSION TRANSACTION READ ONLY'));
   return pool;
 }
 

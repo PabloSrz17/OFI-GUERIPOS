@@ -555,6 +555,25 @@
     </form>
   </dialog>
 
+  <dialog id="devolver-nota" class="dialogo" aria-labelledby="devolver-titulo">
+    <form method="dialog">
+      <h2 id="devolver-titulo">↩ No se entregó</h2>
+      <div id="devolver-resumen" class="dialogo__resumen"></div>
+      <p class="dialogo__aviso">Regresa a Pendientes sin chofer ni camión, para asignarle un viaje nuevo. Su renglón se quita de la hoja de reparto. No se le avisa al cliente.</p>
+      <div class="reprogramar__opciones">
+        <button value="hoy" class="btn reprogramar__opcion" formnovalidate>📦 Hoy<small>A Pendientes del día</small></button>
+        <button value="manana" class="btn reprogramar__opcion" formnovalidate>⏰ Mañana<small>Pasa al Reparto de mañana</small></button>
+        <div class="reprogramar__fecha">
+          <label class="campo">📅 Otro día <input id="devolver-fecha" type="date" required></label>
+          <button value="otro" class="btn reprogramar__opcion">Programar ese día<small>A Por Confirmar · Otro día</small></button>
+        </div>
+      </div>
+      <div class="dialogo__botones">
+        <button value="no" class="btn btn--secundario" formnovalidate>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="cancelar-nota" class="dialogo" aria-labelledby="cancelar-titulo">
     <form method="dialog">
       <h2 id="cancelar-titulo">🗑 Eliminar nota</h2>
@@ -614,7 +633,7 @@
     <p class="dialogo__aviso">Las últimas 200.</p>
     <div class="historial__tabla">
       <table>
-        <thead><tr><th>Entregada</th><th>Folio</th><th>Cliente</th><th>Productos</th><th>Chofer · Camión</th></tr></thead>
+        <thead><tr><th>Entregada</th><th>Folio</th><th>Cliente</th><th>Productos</th><th>Chofer · Camión</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

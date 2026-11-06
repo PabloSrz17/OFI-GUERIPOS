@@ -103,3 +103,30 @@ test('Reprogramar con fecha: sólo ésas avisan un día antes (burbuja y celular
   assert.match(enviados[0], new RegExp(conFecha.folio));
   config.ntfy = null;
 });
+
+test('"No se entregó" desde el historial: regresa a Pendientes hoy o programada, sin chofer, camión ni viaje', () => {
+  const db = require('../src/db/connection');
+  const entregada = () => {
+    const { id } = nueva();
+    db.prepare(`UPDATE notas SET estado = 'entregado', viaje = 2, archivada_en = datetime('now', 'localtime', '-1 day'),
+      actualizado_en = datetime('now', 'localtime', '-1 day') WHERE id = ?`).run(id);
+    return id;
+  };
+  const hoy = entregada();
+  assert.ok(notas.historialGeneral().some((n) => n.id === hoy));
+  assert.throws(() => notas.devolver(hoy, dia(0)), /mañana en adelante/);
+  const { nota, anterior } = notas.devolver(hoy, null);
+  assert.equal(anterior, 'entregado');
+  assert.equal(nota.estado, 'pendiente');
+  assert.equal(nota.viaje, null);
+  assert.equal(nota.chofer_id, null);
+  assert.equal(nota.archivada_en, null);
+  assert.ok(notas.listarTablero().some((n) => n.id === hoy));
+  assert.ok(!notas.historialGeneral().some((n) => n.id === hoy));
+  assert.throws(() => notas.devolver(hoy, null), /no está entregada/);
+
+  const otroDia = entregada();
+  notas.devolver(otroDia, dia(3));
+  assert.ok(!notas.listarTablero().some((n) => n.id === otroDia));
+  assert.equal(notas.listarProgramadas().find((n) => n.id === otroDia).programada_para, dia(3));
+});

@@ -111,6 +111,14 @@ router.patch('/:id/regresar', (req, res) => {
   res.json(nota);
 });
 
+// "No se entregó" desde el Historial. body: { fecha: null (hoy) | "AAAA-MM-DD" }.
+// retroceso: no avisa al cliente; la hoja de reparto borra su renglón.
+router.post('/:id/devolver', (req, res) => {
+  const { nota, anterior } = notas.devolver(Number(req.params.id), req.body?.fecha || null);
+  bus.emit('nota:estado', { nota, anterior, retroceso: true });
+  res.json(nota);
+});
+
 router.get('/:id/renglones', (req, res) => res.json(notas.renglones(Number(req.params.id))));
 
 // Envío parcial: lo que no va en este viaje queda en Saldos Pendientes. Ni avisa al cliente ni toca la hoja.

@@ -263,6 +263,7 @@ Al marcar una nota como **Entregado** se anota un renglón en el archivo de Goog
 
 **Automático (pendiente):** SICAR guarda sus ventas en MySQL en la PC **MOSTRADOR** (`192.168.1.67:3306`). Para leerlas hace falta un usuario de **solo lectura**. Soporte de SICAR pide INE y una carta responsiva, así que la alternativa es crearlo al cierre del día con `init-file` de MySQL (sin la contraseña de root). Ya está preparado:
 
+- **Sólo ventas:** toda consulta pasa por `leer()` de `consultas.js`, que rechaza lo que no sea un `SELECT` sobre tablas de ventas, renglones o cliente, o que mencione inventario, existencias, compras o almacén. Además la sesión de MySQL se abre en modo sólo lectura.
 - `src/integraciones/sicar/conector.js`: conexión y revisión periódica.
 - `npm run sicar:explorar`: muestra tablas y columnas (no datos de clientes) para mapear las ventas.
 - `src/integraciones/sicar/consultas.js`: **falta** escribir la consulta, después de explorar. Mientras devuelva `null`, la oficina muestra "falta mapear tablas".

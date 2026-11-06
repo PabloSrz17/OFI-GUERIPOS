@@ -93,6 +93,9 @@ const stmts = {
   sumarTotal: db.prepare('UPDATE notas SET total = COALESCE(total, 0) + ? WHERE id = ?'),
   esAlmacen: db.prepare('SELECT 1 FROM choferes WHERE id = ? AND almacen = 1'),
   eliminar: db.prepare('DELETE FROM notas WHERE id = ?'),
+  devolver: db.prepare(`
+    UPDATE notas SET estado = 'pendiente', archivada_en = NULL, chofer_id = NULL, camion_id = NULL, viaje = NULL,
+      programada_para = ?, con_fecha = 0, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
   historial: db.prepare(`
     INSERT INTO historial_estados (nota_id, estado_anterior, estado_nuevo) VALUES (?, ?, ?)`),
   resumen: db.prepare(`
@@ -322,6 +325,20 @@ function programar(id, fecha, conFecha = false) {
   return stmts.porId.get(id);
 }
 
+// "No se entregó" desde el Historial: la nota entregada (o archivada) vuelve a Pendiente sin chofer,
+// camión ni viaje, para hoy (fecha null) o para el día elegido (mañana en adelante). No avisa al cliente.
+const devolver = db.transaction((id, fecha) => {
+  const nota = obtener(id);
+  if (nota.estado !== 'entregado') throw httpError(409, `${nota.folio} no está entregada`);
+  if (fecha != null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || Number.isNaN(Date.parse(fecha))) throw httpError(400, 'Fecha inválida');
+    if (fecha <= db.prepare("SELECT date('now', 'localtime') AS hoy").get().hoy) throw httpError(400, 'La fecha debe ser de mañana en adelante');
+  }
+  stmts.devolver.run(fecha ?? null, id);
+  stmts.historial.run(id, 'entregado', 'pendiente');
+  return { nota: stmts.porId.get(id), anterior: nota.estado };
+});
+
 // Cancelar borra la nota con su historial y avisos. integracion_vistos no se toca: así el robot
 // no vuelve a traer de Pulpos una nota cancelada.
 function eliminar(id) {
@@ -332,6 +349,7 @@ function eliminar(id) {
 
 module.exports = {
   ESTADOS,
+  devolver,
   ponerEtiqueta: (id, etiqueta) => { obtener(id); stmts.ponerEtiqueta.run(etiqueta, id); return stmts.porId.get(id); },
   ponerTelefono: (id, telefono) => { obtener(id); stmts.ponerTelefono.run(telefono, id); return stmts.porId.get(id); },
   sinDireccion,
