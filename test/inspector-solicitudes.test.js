@@ -138,3 +138,16 @@ test('la etiqueta SALIDA sólo en notas a mano de N001 a N1000', async () => {
   assert.equal(et('whatsapp', 'WA-5'), 'WA');
   assert.equal(et('manual', 'N500'), null);
 });
+
+test('la bienvenida sólo pregunta lo que el cliente no dijo', () => {
+  const { bienvenida } = require('../src/integraciones/whatsapp/mensajes');
+  const completa = bienvenida(new Date());
+  assert.match(completa, /material/);
+  assert.match(completa, /colonia/);
+  assert.match(completa, /pagar/);
+  const soloColonia = bienvenida(new Date(), { material: false, colonia: true, pago: false });
+  assert.match(soloColonia, /este dato\?/);
+  assert.match(soloColonia, /colonia/);
+  assert.doesNotMatch(soloColonia, /material|pagar/);
+  assert.doesNotMatch(soloColonia, /\$/); // nunca precios
+});

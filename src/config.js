@@ -36,7 +36,7 @@ module.exports = {
 
   sicar: {
     activo: process.env.SICAR_ACTIVO === 'true',
-    intervaloMs: minutos(process.env.SICAR_INTERVALO_MIN, 2),
+    intervaloMs: minutos(process.env.SICAR_INTERVALO_MIN, 1),
     host: process.env.SICAR_DB_HOST || '192.168.1.67', // PC "MOSTRADOR"
     port: Number(process.env.SICAR_DB_PORT) || 3306,
     user: process.env.SICAR_DB_USER || '',

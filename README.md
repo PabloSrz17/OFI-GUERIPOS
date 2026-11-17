@@ -266,7 +266,9 @@ Al marcar una nota como **Entregado** se anota un renglón en el archivo de Goog
 - **Sólo ventas:** toda consulta pasa por `leer()` de `consultas.js`, que rechaza lo que no sea un `SELECT` sobre tablas de ventas, renglones o cliente, o que mencione inventario, existencias, compras o almacén. Además la sesión de MySQL se abre en modo sólo lectura.
 - `src/integraciones/sicar/conector.js`: conexión y revisión periódica.
 - `npm run sicar:explorar`: muestra tablas y columnas (no datos de clientes) para mapear las ventas.
-- `src/integraciones/sicar/consultas.js`: **falta** escribir la consulta, después de explorar. Mientras devuelva `null`, la oficina muestra "falta mapear tablas".
+- `src/integraciones/sicar/consultas.js`: lee las notas (`venta` + `nota` + `cliente` + `detallev`). Folio = número de nota; dirección y celular del cliente en SICAR. Entra la nota con cliente registrado (no PÚBLICO EN GENERAL), dirección y celular; Sulema pregunta si es envío (y luego hoy, mañana u otro día) o la cargan en Almacén. El renglón de envío no se anota en la tarjeta. Las canceladas en SICAR que ya están en el tablero se avisan en el indicador.
+- **Compras → Max:** cada compra vigente de SICAR (se captura al pedirle al proveedor) entra a *Órdenes de Compra Almacén* como Aprobada, con proveedor y productos; si se cancela en SICAR y sigue en Aprobadas, pasa a Canceladas. En la tarjeta: **✅ Entregada** / **📦 Entregada parcialmente**, ambas piden el folio de entrada y crean la entrada ligada a la orden (`entradas_almacen.orden_id`); lo que falta se calcula de esas entradas.
+- Usuario `oficina` de sólo lectura creado en MOSTRADOR el 2026-11-06 (`scripts/sicar-usuario.sql`, con `init-file`).
 - Las notas capturadas a mano no se duplican cuando el conector se active: el importador revisa si el folio ya está en el tablero.
 
 Probado y descartado: manejar la pantalla de SICAR con un robot. SICAR ignora clics y teclas que no vienen del mouse o teclado físicos.
@@ -284,7 +286,7 @@ Probado y descartado: manejar la pantalla de SICAR con un robot. SICAR ignora cl
 | `WHATSAPP_NEGOCIO` | `Materiales El Güero` | Nombre que aparece en el mensaje |
 | `SHEETS_URL` / `SHEETS_TOKEN` | — | URL de la aplicación web de "FORMATO DE REPARTO" y su contraseña |
 | `SICAR_ACTIVO` | `false` | `true` para el conector automático |
-| `SICAR_INTERVALO_MIN` | `2` | Cada cuántos minutos revisa SICAR |
+| `SICAR_INTERVALO_MIN` | `1` | Cada cuántos minutos revisa SICAR |
 | `SICAR_DB_HOST` / `_PORT` / `_NAME` | `192.168.1.67` / `3306` / `sicar` | Servidor MySQL de SICAR |
 | `SICAR_DB_USER` / `_PASSWORD` | — | Usuario de solo lectura (lo escribe el dueño, nunca se comparte) |
 

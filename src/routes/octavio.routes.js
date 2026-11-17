@@ -84,6 +84,16 @@ router.patch('/ordenes/:id/estado', (req, res) => {
   res.json(ordenes.obtener(id));
 });
 
+// "Entregada" (cantidades: null) o "Entregada parcialmente" (cantidades por renglón). body: { folio, cantidades }.
+router.post('/ordenes/:id/recibir', (req, res) => {
+  const id = ordenDe(req).id;
+  try {
+    res.json(ordenes.recibirOrden(id, { folio: req.body?.folio, cantidades: req.body?.cantidades ?? null }));
+  } catch (err) {
+    throw httpError(400, err.message);
+  }
+});
+
 router.post('/ordenes/:id/enviar', async (req, res) => {
   const orden = ordenDe(req);
   if (orden.estado !== 'aprobada') throw httpError(409, 'Sólo se reenvían órdenes aprobadas');

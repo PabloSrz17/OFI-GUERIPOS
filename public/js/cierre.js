@@ -2,6 +2,7 @@
 // También el historial general de notas ya entregadas.
 import { api } from './api.js';
 import { etiquetaOrigen } from './kanban.js';
+import { siguiente } from './corcho.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const plural = (n, una, varias) => `${n} ${n === 1 ? una : varias}`;
@@ -58,9 +59,17 @@ export function montarCierre({ notasActuales, alCerrar, toast }) {
   });
 
   let vistas = new Map(); // id -> nota del historial que se ve
+  const buscar = document.querySelector('#historial-buscar');
+  let pedido = 0; // sólo se pinta la respuesta de la última búsqueda
   const verHistorial = async () => {
+    const q = buscar.value.trim();
+    const este = ++pedido;
     try {
-      const notas = await api.get('/api/notas/historial');
+      const notas = await api.get(`/api/notas/historial${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+      if (este !== pedido) return;
+      document.querySelector('#historial-aviso').textContent = q
+        ? `${notas.length === 200 ? 'Las primeras 200' : notas.length} ${notas.length === 1 ? 'nota' : 'notas'} con «${q}».`
+        : 'Las últimas 200.';
       historial.querySelector('tbody').innerHTML = notas.length
         ? notas.map((n) => `
           <tr>
@@ -71,7 +80,7 @@ export function montarCierre({ notasActuales, alCerrar, toast }) {
             <td>${esc(n.chofer)}${n.camion ? ` · ${esc(n.camion)}` : ''}</td>
             <td><button type="button" class="btn btn--secundario historial__devolver" data-devolver="${n.id}">↩ No se entregó</button></td>
           </tr>`).join('')
-        : '<tr><td colspan="6">Todavía no hay notas en el historial.</td></tr>';
+        : `<tr><td colspan="6">${q ? 'Ninguna nota entregada con ese folio o cliente.' : 'Todavía no hay notas en el historial.'}</td></tr>`;
       vistas = new Map(notas.map((n) => [String(n.id), n]));
       dialogo.close();
       if (!historial.open) historial.showModal();
@@ -79,7 +88,17 @@ export function montarCierre({ notasActuales, alCerrar, toast }) {
       toast(err.message, true);
     }
   };
-  document.addEventListener('click', (e) => { if (e.target.closest('[data-ver-historial]')) verHistorial(); });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-ver-historial]')) return;
+    buscar.value = ''; // cada vez que se abre, empieza sin filtro
+    verHistorial().then(() => buscar.focus());
+  });
+  // Filtra mientras se escribe (espera a que dejen de teclear un momento).
+  let espera = null;
+  buscar.addEventListener('input', () => {
+    clearTimeout(espera);
+    espera = setTimeout(verHistorial, 250);
+  });
 
   // "No se entregó": la nota regresa a Pendientes hoy, mañana u otro día, lista para un viaje nuevo.
   const devolver = document.querySelector('#devolver-nota');
@@ -101,7 +120,7 @@ export function montarCierre({ notasActuales, alCerrar, toast }) {
     await new Promise((listo) => devolver.addEventListener('close', listo, { once: true }));
     const opcion = devolver.returnValue;
     if (!['hoy', 'manana', 'otro'].includes(opcion) || (opcion === 'otro' && !fechaDevolver.value)) return;
-    const fecha = opcion === 'hoy' ? null : opcion === 'manana' ? diaLocal(1) : fechaDevolver.value;
+    const fecha = opcion === 'hoy' ? null : opcion === 'manana' ? siguiente() : fechaDevolver.value;
     btn.disabled = true;
     try {
       await api.post(`/api/notas/${nota.id}/devolver`, { fecha });

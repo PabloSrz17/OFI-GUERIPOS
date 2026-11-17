@@ -213,3 +213,40 @@ test('un script viejo no duplica: los cambios no llevan "fila" y se quedan esper
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sheets_cambios').get().n, 1);
   db.prepare('DELETE FROM sheets_cambios').run();
 });
+
+test('si la nota cambia de día mientras se escribe, el renglón termina en el día correcto', async () => {
+  const { hoja, post } = scriptDeGoogle({ cualquierMes: true });
+  global.fetch = async (_url, { body }) => {
+    await new Promise((r) => setTimeout(r, 30)); // la hoja tarda
+    return { ok: true, status: 200, text: async () => JSON.stringify(post(JSON.parse(body))) };
+  };
+  const db = require('../src/db/connection');
+  const bus = require('../src/events/bus');
+  const notas = require('../src/repositories/notas.repo');
+  const importador = require('../src/integraciones/importador');
+  const chofer = db.prepare("INSERT INTO choferes (nombre) VALUES ('Dia Chofer')").run().lastInsertRowid;
+  const camion = db.prepare("INSERT INTO camiones (nombre) VALUES ('Dia Camion')").run().lastInsertRowid;
+  const { id } = importador.registrar({ cliente: { nombre: 'ANA' }, nota: { origen: 'sicar', folio: 'D1', material: 'GRAVA', cantidad: 1, unidad: 'm³', direccion: 'Centro' } });
+  notas.asignar(id, 'chofer', chofer);
+  notas.asignar(id, 'camion', camion);
+  notas.cambiarEstado(id, 'cargando');
+  notas.cambiarEstado(id, 'en_ruta');
+  const hecho = notas.cambiarEstado(id, 'entregado');
+  const entregar = (dia) => {
+    db.prepare('UPDATE notas SET actualizado_en = ? WHERE id = ?').run(`${dia} 12:00:00`, id);
+    bus.emit('nota:estado', { ...hecho, nota: notas.obtener(id), retroceso: false });
+  };
+  entregar('2026-10-29'); // se empieza a escribir en el 29…
+  await new Promise((r) => setTimeout(r, 5));
+  entregar('2026-10-30'); // …y mientras, la corrigen al 30
+  await new Promise((r) => setTimeout(r, 400));
+  let dia = null;
+  const dias = {};
+  for (const f of hoja.filas) {
+    if (/^\d+\/\d+\/\d+$/.test(f[0])) dia = f[0];
+    else if (f[1]) dias[f[1]] = dia;
+  }
+  assert.equal(dias.D1, '30/10/26');
+  assert.equal(renglones(hoja).filter((r) => r.split('|')[1] === 'D1').length, 1);
+  assert.equal(notas.obtener(id).sheets_fecha, '2026-10-30');
+});

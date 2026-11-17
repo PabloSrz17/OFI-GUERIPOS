@@ -14,7 +14,7 @@ router.get('/', (req, res) => {
   res.json(notas.listarTablero());
 });
 
-router.get('/historial', (req, res) => res.json(notas.historialGeneral()));
+router.get('/historial', (req, res) => res.json(notas.historialGeneral(String(req.query.q ?? '').slice(0, 60))));
 
 // Corcho de Edgar: notas para otro día (no salen en el tablero hasta su fecha).
 router.get('/programadas', (req, res) => res.json(notas.listarProgramadas()));
@@ -45,8 +45,8 @@ router.patch('/:id/etiqueta', (req, res) => {
   res.json(nota);
 });
 
-// Orígenes que se pueden capturar a mano (las de Pulpos las trae el robot).
-const ORIGENES_MANUALES = ['manual', 'sicar'];
+// Orígenes que se pueden capturar a mano. Una de Pulpos capturada a mano ya no la repite el robot (mismo origen y folio).
+const ORIGENES_MANUALES = ['manual', 'sicar', 'pulpos'];
 
 // "HH:MM" de hoy -> "AAAA-MM-DD HH:MM:00" (hora de la venta); null = ahora.
 function horaDeHoy(valor) {
@@ -100,7 +100,8 @@ router.patch('/:id/estado', (req, res) => {
     throw httpError(428, 'Confirma la salida a ruta antes de enviarla');
   }
   const { nota, anterior } = notas.cambiarEstado(Number(req.params.id), req.body?.estado);
-  bus.emit('nota:estado', { nota, anterior, retroceso: false });
+  // avisar: false -> quien la mandó a ruta pidió no avisarle al cliente esta vez.
+  bus.emit('nota:estado', { nota, anterior, retroceso: false, sinAviso: req.body?.avisar === false });
   res.json(nota);
 });
 
@@ -120,6 +121,7 @@ router.post('/:id/devolver', (req, res) => {
 });
 
 router.get('/:id/renglones', (req, res) => res.json(notas.renglones(Number(req.params.id))));
+router.get('/:id/salidas', (req, res) => res.json(notas.salidas(Number(req.params.id))));
 
 // Envío parcial: lo que no va en este viaje queda en Saldos Pendientes. Ni avisa al cliente ni toca la hoja.
 // saldo: la tarjeta como quedó; null si el viaje se llevó todo y se cerró.
@@ -130,6 +132,13 @@ router.post('/:id/parcial', (req, res) => {
   res.json({ saldo });
 });
 
+// 📅 Entrega pasada: sin WhatsApp al cliente (ya la recibió). La hoja la anota en la franja de ese día.
+router.post('/:id/entrega-pasada', (req, res) => {
+  const { nota, anterior } = notas.entregarAntes(Number(req.params.id), req.body ?? {});
+  bus.emit('nota:estado', { nota, anterior, retroceso: false, sinAviso: true });
+  res.json(nota);
+});
+
 router.post('/:id/reprogramar', (req, res) => {
   const nota = notas.reprogramar(Number(req.params.id));
   bus.emit('nota:asignada', nota);
@@ -137,6 +146,15 @@ router.post('/:id/reprogramar', (req, res) => {
 });
 
 // Desde la confirmación de salida a ruta: vale para esta nota y queda guardado en el cliente.
+// Mini post-it del corcho: observación interna. Vacío lo borra. No avisa a nadie ni toca la hoja.
+router.patch('/:id/postit', (req, res) => {
+  const postit = String(req.body?.postit ?? '').trim();
+  if (postit.length > 300) throw httpError(400, 'El post-it es muy largo (máximo 300 letras)');
+  const nota = notas.ponerPostit(Number(req.params.id), postit);
+  bus.emit('nota:asignada', nota);
+  res.json(nota);
+});
+
 router.patch('/:id/telefono', (req, res) => {
   const textoTel = texto(req.body?.telefono);
   const telefono = textoTel ? normalizar(textoTel) : null;
@@ -203,7 +221,7 @@ router.patch('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  bus.emit('nota:eliminada', notas.eliminar(Number(req.params.id)));
+  bus.emit('nota:eliminada', notas.eliminarViaje(Number(req.params.id)));
   res.status(204).end();
 });
 

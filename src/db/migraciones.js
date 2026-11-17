@@ -176,6 +176,26 @@ function saldosPendientes(db) {
   if (!columnas.includes('saldo')) db.exec('ALTER TABLE notas ADD COLUMN saldo INTEGER NOT NULL DEFAULT 0');
 }
 
+// Salidas parciales: cada viaje y cada saldo guardan el folio de la nota original (N990), aunque
+// el viaje cambie de folio. Las viejas se ligan por su sufijo -S1, -S2…
+function salidasParciales(db) {
+  const columnas = db.prepare('PRAGMA table_info(notas)').all().map((c) => c.name);
+  if (columnas.includes('folio_principal')) return;
+  db.transaction(() => {
+    db.exec('ALTER TABLE notas ADD COLUMN folio_principal TEXT');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_notas_principal ON notas (origen, folio_principal)');
+    db.exec(`UPDATE notas SET folio_principal = substr(folio, 1, instr(folio, '-S') - 1) WHERE folio GLOB '*-S[0-9]*'`);
+    db.exec(`UPDATE notas SET folio_principal = folio WHERE folio_principal IS NULL
+      AND EXISTS (SELECT 1 FROM notas s WHERE s.origen = notas.origen AND s.folio_principal = notas.folio)`);
+  })();
+}
+
+// Mini post-it: observación interna de la nota (no la ve el cliente ni va a la hoja).
+function postitDeNota(db) {
+  const columnas = db.prepare('PRAGMA table_info(notas)').all().map((c) => c.name);
+  if (!columnas.includes('postit')) db.exec('ALTER TABLE notas ADD COLUMN postit TEXT');
+}
+
 // Entradas de almacén con folio y varios artículos: cada entrada vieja queda con su único renglón.
 function entradasConRenglones(db) {
   const columnas = db.prepare('PRAGMA table_info(entradas_almacen)').all().map((c) => c.name);
@@ -205,6 +225,22 @@ function notaDeOrden(db) {
   if (!columnas.includes('nota')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN nota TEXT');
 }
 
+// Órdenes que vienen de las compras de SICAR (externo = com_id, con su proveedor) y entradas
+// que surten una orden (orden_id): de ahí sale cuánto llegó y cuánto falta.
+function ordenesDeSicar(db) {
+  const ordenes = db.prepare('PRAGMA table_info(ordenes_compra)').all().map((c) => c.name);
+  if (!ordenes.includes('externo')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN externo TEXT');
+  if (!ordenes.includes('proveedor')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN proveedor TEXT');
+  const entradas = db.prepare('PRAGMA table_info(entradas_almacen)').all().map((c) => c.name);
+  if (!entradas.includes('orden_id')) db.exec('ALTER TABLE entradas_almacen ADD COLUMN orden_id INTEGER');
+  // El folio de la orden es el de la compra en SICAR (no OC-n). Las que ya entraron lo traían en el solicitante.
+  if (!ordenes.includes('folio_externo')) {
+    db.exec('ALTER TABLE ordenes_compra ADD COLUMN folio_externo TEXT');
+    db.exec(`UPDATE ordenes_compra SET folio_externo = substr(solicitante, 16), solicitante = 'SICAR'
+      WHERE externo IS NOT NULL AND solicitante LIKE 'SICAR · COMPRA %'`);
+  }
+}
+
 // Nota programada para otro día (corcho de Edgar): no sale en el tablero hasta su fecha.
 function notaProgramada(db) {
   const columnas = db.prepare('PRAGMA table_info(notas)').all().map((c) => c.name);
@@ -217,7 +253,7 @@ function notaConFecha(db) {
   if (!columnas.includes('con_fecha')) db.exec('ALTER TABLE notas ADD COLUMN con_fecha INTEGER NOT NULL DEFAULT 0');
 }
 
-// Número de viaje (1 a 5) de la nota en su camión: filas del corcho de Edgar.
+// Número de viaje (1 a 7) de la nota en su camión: filas del corcho de Edgar.
 function viajeDeNota(db) {
   const columnas = db.prepare('PRAGMA table_info(notas)').all().map((c) => c.name);
   if (!columnas.includes('viaje')) db.exec('ALTER TABLE notas ADD COLUMN viaje INTEGER');
@@ -256,7 +292,10 @@ module.exports = function migrar(db) {
   notaConFecha(db);
   notaDeOrden(db);
   entradasConRenglones(db);
+  ordenesDeSicar(db);
   saldosPendientes(db);
+  salidasParciales(db);
+  postitDeNota(db);
   telefonoDeNota(db);
   renglonEnHoja(db);
   clienteSinAsignar(db);

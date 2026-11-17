@@ -80,8 +80,11 @@ async function enviarGrupo(clave) {
 }
 
 function iniciar() {
-  bus.on('nota:estado', ({ nota, retroceso }) => {
-    if (!retroceso && nota.estado === 'en_ruta') avisarEnRuta(nota);
+  bus.on('nota:estado', ({ nota, retroceso, sinAviso }) => {
+    if (retroceso || nota.estado !== 'en_ruta') return;
+    // "No avisar al cliente": queda anotado y no se manda, ni al reconectar.
+    if (sinAviso) registrar(nota, 'sin_aviso', 'Se pidió no avisar al cliente');
+    else avisarEnRuta(nota);
   });
   // Al reconectar, manda lo que quedó pendiente si la nota sigue En Ruta.
   whatsapp.alConectar(() => {

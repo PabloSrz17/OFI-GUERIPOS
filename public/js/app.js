@@ -6,12 +6,13 @@ import { renderKanban, faltaDireccion } from './kanban.js';
 import { montarCaptura } from './captura.js';
 import { montarEditarNota } from './editar-nota.js';
 import { montarParcial } from './parcial.js';
+import { montarEntregaPasada } from './entrega-pasada.js';
 import { montarVisorFoto } from './visor-foto.js';
 import { montarCierre } from './cierre.js';
 import { montarInspector, recargarSolicitudes } from './inspector.js';
 import { montarOctavio, recargarOctavio } from './octavio.js';
 import { montarArchiveros } from './archiveros.js';
-import { montarCorcho, recargarCorcho } from './corcho.js';
+import { montarCorcho, recargarCorcho, siguiente } from './corcho.js';
 import { montarProgramarNueva, revisarNuevas } from './programar-nueva.js';
 import { normalizar, formatear } from './telefono.js';
 
@@ -89,7 +90,14 @@ function pintarSinDireccion(notas) {
 const telefonoInput = $('#confirmar-telefono');
 const botonConfirmar = $('#confirmar-ruta button[value="confirmar"]');
 
+const noAvisar = $('#confirmar-no-avisar');
 function avisoTelefono() {
+  if (noAvisar.checked) {
+    $('#confirmar-whatsapp').textContent = '🔕 No se le mandará WhatsApp al cliente.';
+    $('#confirmar-whatsapp').classList.remove('dialogo__aviso--error');
+    botonConfirmar.disabled = false;
+    return;
+  }
   const texto = telefonoInput.value.trim();
   const telefono = normalizar(texto);
   const valido = !texto || telefono;
@@ -104,6 +112,7 @@ function avisoTelefono() {
   botonConfirmar.disabled = !valido;
 }
 telefonoInput.addEventListener('input', avisoTelefono);
+noAvisar.addEventListener('change', avisoTelefono);
 
 let abrirParcial = async () => false; // se conecta al montar la ventana Parcial
 
@@ -136,6 +145,7 @@ async function confirmarRuta(nota) {
     <div>📍 ${esc(nota.direccion)}</div>
     <div>🚚 ${esc(nota.chofer)} · ${esc(nota.camion)}</div>`;
   telefonoInput.value = formatear(nota.cliente_telefono);
+  noAvisar.checked = false; // cada salida pregunta de nuevo: por omisión sí se avisa
   avisoTelefono();
   dialogo.returnValue = '';
   dialogo.showModal();
@@ -143,6 +153,7 @@ async function confirmarRuta(nota) {
     dialogo.addEventListener('close', () => listo(dialogo.returnValue === 'confirmar'), { once: true });
   });
   if (!confirmado) return false;
+  if (noAvisar.checked) return { avisar: false };
 
   const telefono = normalizar(telefonoInput.value);
   if ((telefono ?? null) !== (nota.cliente_telefono || null)) {
@@ -153,7 +164,7 @@ async function confirmarRuta(nota) {
       return false;
     }
   }
-  return true;
+  return { avisar: true };
 }
 
 // Mueve una nota a la columna destino (un paso adelante o atrás). Botones y arrastre usan
@@ -167,11 +178,12 @@ async function mover(nota, destino) {
   }
   const aRuta = destino === 'en_ruta' && !regresar;
   if (aRuta && !(nota = await salidaCompleta(nota))) return false;
-  if (aRuta && !(await confirmarRuta(nota))) return false;
+  const ruta = aRuta ? await confirmarRuta(nota) : null;
+  if (aRuta && !ruta) return false;
   try {
     const actualizada = regresar
       ? await api.patch(`/api/notas/${nota.id}/regresar`)
-      : await api.patch(`/api/notas/${nota.id}/estado`, { estado: destino, confirmado: aRuta || undefined });
+      : await api.patch(`/api/notas/${nota.id}/estado`, { estado: destino, confirmado: aRuta || undefined, avisar: ruta?.avisar });
     toast(`${actualizada.folio} ${regresar ? '↩ regresó a' : '→'} ${NOMBRE_ESTADO[actualizada.estado]}`);
     await refrescar();
     return true;
@@ -245,7 +257,7 @@ $('#ventana-notas').addEventListener('click', async (e) => {
   const opcion = dialogo.returnValue;
   if (!['manana', 'avisa', 'confirmar'].includes(opcion) || (opcion === 'confirmar' && !fecha.value)) return;
   try {
-    const cuerpo = opcion === 'manana' ? { fecha: diaLocal(1) }
+    const cuerpo = opcion === 'manana' ? { fecha: siguiente() }
       : opcion === 'avisa' ? { fecha: 'avisa' }
         : { fecha: fecha.value, con_fecha: true };
     await api.patch(`/api/notas/${nota.id}/programar`, cuerpo);
@@ -385,13 +397,14 @@ async function iniciar() {
   montarCaptura({ alGuardar: refrescar, toast });
   montarEditarNota({ notaPorId, catalogos, alGuardar: refrescar, toast });
   abrirParcial = montarParcial({ notaPorId, alGuardar: refrescar, toast });
+  montarEntregaPasada({ notaPorId, catalogos, alGuardar: refrescar, toast });
   montarVisorFoto();
   montarCierre({ notasActuales: () => notasActuales, alCerrar: refrescar, toast });
   montarInspector({ toast, alAprobar: refrescar });
   montarOctavio({ toast, alCambiar: refrescar });
   montarArchiveros();
   montarProgramarNueva({ catalogos, toast });
-  montarCorcho({ catalogos, toast, avanzar: (id) => { const n = notaPorId(id); return n ? mover(n, siguienteDe(n)) : false; } });
+  montarCorcho({ catalogos, toast, parcial: (n) => abrirParcial(n), avanzar: (id) => { const n = notaPorId(id); return n ? mover(n, siguienteDe(n)) : false; } });
   reloj();
   setInterval(reloj, 30000);
   try {

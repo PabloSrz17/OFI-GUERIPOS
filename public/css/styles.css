@@ -147,11 +147,31 @@ body { display: flex; flex-direction: column; overflow: hidden; background: #f7e
 .tarjeta-entrada ul { margin: 0 0 8px; padding: 8px 0 0 18px; border-top: 1px dashed #f97316; }
 .tarjeta-entrada__pie { margin: 0 0 8px; font-size: 12px; color: var(--texto-suave); overflow-wrap: anywhere; }
 .orden__de { margin: 4px 0; font-size: 12px; color: var(--texto-suave); }
+/* Cabeza de la tarjeta: clic para minimizar o abrir. Minimizada sólo queda esta barra. */
+.orden__cabeza { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; width: 100%; margin: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; background: none; border: 0; }
+.orden__cabeza:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; border-radius: 4px; }
+.orden__folio { font-size: 15px; }
+.orden__quien { font-weight: 700; overflow-wrap: anywhere; }
+.orden__fecha { font-size: 12px; opacity: 0.85; }
+.orden__cabeza .orden__estado { margin-left: auto; }
+.orden__flecha { font-size: 14px; }
+.orden__cuerpo { margin-top: 6px; }
+.orden--plegada { padding: 6px 10px; }
+/* Surtida: verde sólido con letra blanca, como el viaje entregado del corcho */
+.orden.orden--surtida { color: #fff; background: #2e7d32; border: 2px solid #1b5e20; box-shadow: 0 2px 6px rgb(0 0 0 / 0.35); }
+.orden--surtida .orden__estado { background: #1b5e20; }
+.orden--surtida .orden__de, .orden--surtida .orden__llego, .orden--surtida .orden__fecha { color: #fff; opacity: 1; }
 .orden ul { margin: 6px 0; padding-left: 18px; }
 .orden__whatsapp { margin: 6px 0; font-size: 12px; }
 .orden__botones { display: flex; flex-wrap: wrap; gap: 6px; }
 .orden__botones .btn { margin: 0; padding: 6px 10px; font-size: 13px; text-decoration: none; }
 .orden__mover { margin-bottom: 6px; }
+.orden__recibir { margin-bottom: 6px; }
+.orden__falta { color: #fbbf24; font-size: 12px; }
+.orden__llego { color: #4ade80; font-size: 12px; }
+.recibir__tabla { width: 100%; margin: 8px 0 12px; border-collapse: collapse; font-size: 14px; }
+.recibir__tabla th, .recibir__tabla td { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--borde, #444); }
+.recibir__tabla input { width: 90px; }
 .orden__nota { margin: 6px 0; font-size: 13px; overflow-wrap: anywhere; }
 .alerta .btn { margin: 0; }
 .alerta__cerrar { padding: 0 4px; font-size: 16px; color: inherit; background: none; border: none; cursor: pointer; }
@@ -985,3 +1005,55 @@ details.plegable[hidden] { display: none; }
 
 /* Folio fijo al editar una cotización */
 .cot__folio { background: rgb(0 0 0 / 0.25); color: #ffd54f; font-weight: 700; cursor: not-allowed; }
+
+/* 📋 Ver salidas en la tarjeta del corcho */
+.corcho__salidas { margin: 4px 0; font-size: 12px; }
+.corcho__salidas summary { cursor: pointer; color: #5a3d1e; font-weight: 600; }
+.corcho__salidas-lista { margin: 4px 0 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
+.corcho__salidas-lista li { padding: 4px 6px; background: rgba(0, 0, 0, .06); border-radius: 4px; line-height: 1.35; }
+
+/* Botones de la tarjeta del corcho: todos del mismo ancho y alto, con el texto centrado (una o dos líneas). */
+.corcho__acciones:not(.corcho__fecha) { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); grid-auto-rows: 1fr; align-items: stretch; }
+.corcho__acciones:not(.corcho__fecha) .btn {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  min-height: 40px; margin: 0; padding: 4px 6px; line-height: 1.2; white-space: normal;
+}
+
+/* Arrastre en el corcho: fantasma ligero, la tarjeta que se mueve se atenúa y nada anima mientras tanto. */
+.corcho__fantasma { position: fixed; top: -100px; left: -100px; padding: 6px 10px; max-width: 220px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font: 600 13px/1.2 system-ui, sans-serif; color: #2b2118; background: #fffbe8; border: 2px solid #8a7a60; border-radius: 6px; }
+.corcho__nota--arrastrada { opacity: .4; }
+.corcho--arrastrando .corcho__zona, .corcho--arrastrando .corcho__columna { transition: none; }
+.corcho--arrastrando .corcho__nota * { pointer-events: none; }
+
+/* Buscador del Historial */
+.historial__cabeza { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.historial__cabeza h2 { margin: 0; }
+.historial__buscar { flex: 0 1 320px; min-width: 200px; padding: 8px 12px; font: inherit; font-size: 14px; color: #fff8ee;
+  background: rgb(0 0 0 / 0.25); border: 1px solid #6b4a30; border-radius: 8px; }
+.historial__buscar::placeholder { color: #c9b29a; }
+.historial__buscar:focus { outline: 2px solid #f26b1d; outline-offset: 1px; border-color: #f26b1d; }
+
+/* Salir a ruta sin avisar al cliente */
+.dialogo__no-avisar { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; font-size: 14px; cursor: pointer; }
+.dialogo__no-avisar input { width: 18px; height: 18px; }
+
+/* Acceso a la hoja de Formato de Reparto (verde de Google Sheets) */
+.btn.btn--sheets { display: inline-flex; align-items: center; justify-content: center; color: #fff; background: #0f9d58; border-color: #0b7a44; text-decoration: none; }
+.btn.btn--sheets:hover, .btn.btn--sheets:focus-visible { background: #0b8a4c; }
+
+/* 📝 Mini post-it en las tarjetas del corcho */
+.corcho__nota header { padding-right: 48px; flex-wrap: wrap; row-gap: 3px; }
+.corcho__postit-boton { position: absolute; top: 4px; right: 28px; z-index: 1; padding: 2px 4px; font-size: 13px; line-height: 1; background: none; border: none; border-radius: 4px; cursor: pointer; opacity: .45; filter: grayscale(1); }
+.corcho__postit-boton:hover, .corcho__postit-boton:focus-visible { opacity: 1; filter: none; }
+.corcho__postit-boton--lleno { opacity: 1; filter: none; background: #ffeb3b; box-shadow: 0 1px 2px rgb(0 0 0 / 0.35); }
+.corcho__postit-vista { margin: 4px 0 !important; padding: 4px 6px; font-size: 12px; line-height: 1.3; color: #3a2e00; background: #fff59d; border-left: 3px solid #fbc02d; border-radius: 2px; cursor: pointer;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.corcho__postit { margin: 4px 0; padding: 6px; background: #fff59d; border-radius: 3px; box-shadow: 0 2px 4px rgb(0 0 0 / 0.3); }
+.corcho__postit textarea { width: 100%; box-sizing: border-box; padding: 4px 6px; font: inherit; font-size: 12px; color: #2b2118; background: #fffde7; border: 1px solid #fbc02d; border-radius: 3px; resize: vertical; }
+.corcho__postit-botones { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+.corcho__postit-botones .btn { padding: 3px 10px; font-size: 12px; }
+
+/* 📅 Entrega pasada */
+.entrega-pasada__campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 8px 0; }
+.entrega-pasada__campos select, .entrega-pasada__campos input { width: 100%; box-sizing: border-box; }

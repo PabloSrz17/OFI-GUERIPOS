@@ -48,7 +48,8 @@ test('corcho: soltar en un viaje guarda camión y número de viaje; sin unidad l
   let n = notas.ponerViaje(id, camion, 2);
   assert.equal(n.camion_id, camion);
   assert.equal(n.viaje, 2);
-  assert.throws(() => notas.ponerViaje(id, camion, 6), /del 1 al 5/);
+  assert.equal(notas.ponerViaje(id, camion, 7).viaje, 7); // hasta el 7mo viaje
+  assert.throws(() => notas.ponerViaje(id, camion, 8), /del 1 al 7/);
   n = notas.ponerViaje(id, null, null);
   assert.equal(n.camion_id, null);
   assert.equal(n.viaje, null);
@@ -129,4 +130,42 @@ test('"No se entregó" desde el historial: regresa a Pendientes hoy o programada
   notas.devolver(otroDia, dia(3));
   assert.ok(!notas.listarTablero().some((n) => n.id === otroDia));
   assert.equal(notas.listarProgramadas().find((n) => n.id === otroDia).programada_para, dia(3));
+});
+
+test('el domingo no hay reparto: una fecha en domingo pasa al lunes', () => {
+  const { id } = nueva();
+  const d = new Date();
+  d.setDate(d.getDate() + 2);
+  while (d.getDay() !== 0) d.setDate(d.getDate() + 1); // el próximo domingo (de pasado mañana en adelante)
+  const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  const domingo = iso(d);
+  d.setDate(d.getDate() + 1);
+  assert.equal(notas.programar(id, domingo).programada_para, iso(d));
+  assert.equal(notas.programar(id, 'avisa').programada_para, notas.EL_AVISA); // "Él avisa" no se toca
+});
+
+test('el post-it se guarda, sigue al mover la nota y vacío se borra', () => {
+  const { id } = nueva();
+  assert.equal(notas.ponerPostit(id, 'Llamar antes de llegar').postit, 'Llamar antes de llegar');
+  notas.programar(id, dia(3));
+  assert.equal(notas.obtener(id).postit, 'Llamar antes de llegar');
+  assert.equal(notas.ponerPostit(id, '').postit, null);
+});
+
+test('entrega pasada: queda entregada con esa fecha, chofer, camión y viaje, y no cuenta como de hoy', () => {
+  const db = require('../src/db/connection');
+  const { id } = nueva();
+  const camion = db.prepare("INSERT INTO camiones (nombre) VALUES ('Nissan Ayer')").run().lastInsertRowid;
+  const chofer = db.prepare("INSERT INTO choferes (nombre) VALUES ('CHOFER AYER')").run().lastInsertRowid;
+  const antes = notas.resumen().entregado_hoy;
+  assert.throws(() => notas.entregarAntes(id, { fecha: dia(0), chofer_id: chofer, camion_id: camion }), /ayer para atrás/);
+  assert.throws(() => notas.entregarAntes(id, { fecha: dia(-1), chofer_id: chofer }), /camión/);
+  const { nota } = notas.entregarAntes(id, { fecha: dia(-1), chofer_id: chofer, camion_id: camion, viaje: 2 });
+  assert.equal(nota.estado, 'entregado');
+  assert.equal(nota.actualizado_en, `${dia(-1)} 10:00:00`);
+  assert.equal(nota.viaje, 2);
+  assert.equal(notas.resumen().entregado_hoy, antes);
+  assert.ok(notas.historialGeneral().some((n) => n.id === id));
+  assert.equal(db.prepare("SELECT fecha FROM historial_estados WHERE nota_id = ? AND estado_nuevo = 'entregado'").get(id).fecha, `${dia(-1)} 10:00:00`);
+  assert.throws(() => notas.entregarAntes(id, { fecha: dia(-1), chofer_id: chofer, camion_id: camion }), /ya está entregada/);
 });

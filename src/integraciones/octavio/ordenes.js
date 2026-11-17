@@ -34,13 +34,49 @@ const stmts = {
   porAprobar: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'por_aprobar'`),
   porSurtir: db.prepare(`SELECT COUNT(*) AS n FROM ordenes_compra WHERE estado = 'aprobada'`),
   entrada: db.prepare('INSERT INTO entradas_almacen (proveedor, folio, nota, renglones) VALUES (@proveedor, @folio, @nota, @renglones)'),
+  // Compras de SICAR: entran como órdenes aprobadas de Almacén (se capturan en SICAR al pedir).
+  porExterno: db.prepare('SELECT id FROM ordenes_compra WHERE externo = ?'),
+  crearDeSicar: db.prepare(`INSERT INTO ordenes_compra (clave, solicitante, sucursal, proveedor, externo, folio_externo, original, renglones, estado, aprobada_en, creado_en)
+    VALUES ('sicar', 'SICAR', 'Almacén', @proveedor, @externo, @folio, @renglones, @renglones, 'aprobada', @fecha, @fecha)`),
+  cancelarDeSicar: db.prepare(`UPDATE ordenes_compra SET estado = 'cancelada', actualizado_en = datetime('now', 'localtime') WHERE externo = ? AND estado = 'aprobada'`),
+  externasAbiertas: db.prepare(`SELECT externo FROM ordenes_compra WHERE externo IS NOT NULL AND estado = 'aprobada'`),
+  // Recepción de una orden: la entrada queda ligada a ella.
+  entradaDeOrden: db.prepare(`INSERT INTO entradas_almacen (sucursal, proveedor, folio, nota, renglones, orden_id)
+    VALUES (@sucursal, @proveedor, @folio, @nota, @renglones, @orden_id)`),
+  surtir: db.prepare(`UPDATE ordenes_compra SET estado = 'surtida', actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
+  tocar: db.prepare(`UPDATE ordenes_compra SET actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
+  recibidas: db.prepare('SELECT orden_id, renglones FROM entradas_almacen WHERE orden_id IS NOT NULL'),
+  recibidasDe: db.prepare('SELECT renglones FROM entradas_almacen WHERE orden_id = ?'),
   editarEntrada: db.prepare('UPDATE entradas_almacen SET proveedor = @proveedor, folio = @folio, nota = @nota, renglones = @renglones WHERE id = @id'),
   entradas: db.prepare('SELECT * FROM entradas_almacen ORDER BY id DESC LIMIT 50'),
   // Para la hoja impresa: de la más vieja a la más nueva, como se anotan en la libreta.
   entradasEntre: db.prepare('SELECT * FROM entradas_almacen WHERE date(creado_en) BETWEEN ? AND ? ORDER BY creado_en, id'),
 };
 
-const conDatos = (o) => o && { ...o, folio: `OC-${o.id}`, original: JSON.parse(o.original), renglones: JSON.parse(o.renglones) };
+// Lo que ya llegó de cada material (por material y unidad), sumando las entradas ligadas a la orden.
+// Se calcula de las entradas, no se guarda en la orden: así editar la orden no lo borra.
+const llave = (r) => `${String(r.material ?? '').trim().toUpperCase()}|${String(r.unidad ?? '').trim().toLowerCase()}`;
+function sumarRecibido(filas) {
+  const suma = new Map();
+  for (const f of filas) for (const r of JSON.parse(f.renglones)) suma.set(llave(r), (suma.get(llave(r)) ?? 0) + (aNumero(r.cantidad) || 0));
+  return suma;
+}
+// Por renglón: { recibido, pendiente } (números). Mismo material dos veces: lo recibido llena el primero.
+function avanceDe(renglones, suma) {
+  const queda = new Map(suma);
+  return renglones.map((r) => {
+    const pedido = aNumero(r.cantidad) || 0;
+    const recibido = Math.min(pedido, queda.get(llave(r)) ?? 0);
+    queda.set(llave(r), (queda.get(llave(r)) ?? 0) - recibido);
+    return { recibido: Number(recibido.toFixed(3)), pendiente: Number((pedido - recibido).toFixed(3)) };
+  });
+}
+function conDatos(o, suma) {
+  if (!o) return o;
+  const recibido = suma ?? sumarRecibido(stmts.recibidasDe.all(o.id));
+  const renglones = JSON.parse(o.renglones);
+  return { ...o, folio: o.folio_externo || `OC-${o.id}`, original: JSON.parse(o.original), renglones, avance: avanceDe(renglones, recibido) };
+}
 const avisar = () => bus.emit('orden:cambio');
 const obtener = (id) => conDatos(stmts.porId.get(id));
 
@@ -236,6 +272,67 @@ function registrarEntrada(campos) {
   avisar();
 }
 
+// "Entregada" (cantidades = null: llega todo lo que falta) o "Entregada parcialmente" (lo que llegó
+// de cada renglón, en el mismo orden). Pide el folio del proveedor y crea la entrada ligada a la orden.
+// Si ya no falta nada, la orden pasa a Surtidas; si falta, se queda en Aprobadas con lo pendiente.
+const recibirOrden = db.transaction((id, { folio, cantidades = null, nota } = {}) => {
+  const orden = obtener(id);
+  if (!orden) throw new Error('Orden no encontrada');
+  if (orden.estado !== 'aprobada') throw new Error(`${orden.folio} no está en Aprobadas`);
+  const folioEntrada = String(folio ?? '').trim().toUpperCase();
+  if (!folioEntrada) throw new Error('Falta el folio de entrada (factura o nota del proveedor)');
+  if (cantidades !== null && (!Array.isArray(cantidades) || cantidades.length !== orden.renglones.length)) throw new Error('Las cantidades no coinciden con la orden');
+  const todos = orden.renglones.map((r, i) => {
+    const { pendiente } = orden.avance[i];
+    const cantidad = cantidades === null ? pendiente : aNumero(String(cantidades[i] ?? '').trim() || '0');
+    if (!(cantidad >= 0)) throw new Error(`Cantidad inválida en ${r.material}`);
+    if (cantidad > pendiente + 1e-9) throw new Error(`De ${r.material} sólo faltan ${pendiente}`);
+    return { cantidad, unidad: r.unidad, material: r.material, falta: pendiente - cantidad > 1e-9 };
+  });
+  const llegan = todos.filter((r) => r.cantidad > 0);
+  if (!llegan.length) throw new Error('Pon cuánto llegó de al menos un material');
+  stmts.entradaDeOrden.run({
+    sucursal: orden.sucursal,
+    proveedor: orden.proveedor ?? null,
+    folio: folioEntrada,
+    nota: String(nota ?? '').trim() || `${orden.folio}${todos.some((r) => r.falta) ? ' · parcial' : ''}`,
+    renglones: JSON.stringify(llegan.map((r) => ({ cantidad: String(Number(r.cantidad.toFixed(3))), unidad: r.unidad, material: r.material }))),
+    orden_id: orden.id,
+  });
+  const despues = obtener(id);
+  const completa = despues.avance.every((a) => a.pendiente <= 1e-9);
+  if (completa) stmts.surtir.run(id);
+  else stmts.tocar.run(id);
+  avisar();
+  return { orden: obtener(id), completa };
+});
+
+// Compras de SICAR -> órdenes aprobadas de Almacén. compras: [{ externo, folio, proveedor, fecha, renglones }].
+function importarDeSicar(compras) {
+  let nuevas = 0;
+  for (const c of compras) {
+    if (stmts.porExterno.get(String(c.externo))) continue;
+    stmts.crearDeSicar.run({
+      folio: String(c.folio),
+      proveedor: c.proveedor || null,
+      externo: String(c.externo),
+      renglones: JSON.stringify(c.renglones),
+      fecha: c.fecha,
+    });
+    nuevas++;
+  }
+  if (nuevas) avisar();
+  return nuevas;
+}
+
+// Compra cancelada en SICAR: si su orden sigue en Aprobadas, pasa a Canceladas.
+function cancelarDeSicar(externos) {
+  let hechas = 0;
+  for (const e of externos) hechas += stmts.cancelarDeSicar.run(String(e)).changes;
+  if (hechas) avisar();
+  return hechas;
+}
+
 function editarEntrada(id, campos) {
   const hecho = stmts.editarEntrada.run({ ...datosDeEntrada(campos), id }).changes > 0;
   if (hecho) avisar();
@@ -261,7 +358,15 @@ module.exports = {
   obtener,
   registrarEntrada,
   editarEntrada,
-  listar: () => stmts.listar.all().map(conDatos),
+  recibirOrden,
+  importarDeSicar,
+  cancelarDeSicar,
+  externasAbiertas: () => stmts.externasAbiertas.all().map((r) => r.externo),
+  listar: () => {
+    const porOrden = new Map();
+    for (const f of stmts.recibidas.all()) porOrden.set(f.orden_id, [...(porOrden.get(f.orden_id) ?? []), f]);
+    return stmts.listar.all().map((o) => conDatos(o, sumarRecibido(porOrden.get(o.id) ?? [])));
+  },
   entradas: () => stmts.entradas.all().map((e) => ({ ...e, renglones: JSON.parse(e.renglones) })),
   entradasEntre: (desde, hasta) => stmts.entradasEntre.all(desde, hasta).map((e) => ({ ...e, renglones: JSON.parse(e.renglones) })),
   porAprobar: () => stmts.porAprobar.get().n,

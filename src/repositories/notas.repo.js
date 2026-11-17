@@ -1,6 +1,6 @@
 const db = require('../db/connection');
 const { httpError } = require('../lib/errors');
-const { renglonesVentana, dividir, armar } = require('../lib/parcial');
+const { renglonesVentana, dividir, armar, saldoAjustado } = require('../lib/parcial');
 
 const ESTADOS = ['pendiente', 'cargando', 'en_ruta', 'entregado'];
 // Nota que entró de Pulpos sin dirección ("Sin dirección (ver en Pulpos)"): no puede salir a ruta.
@@ -14,6 +14,9 @@ const anteriorDe = (nota) => (nota.es_almacen && nota.estado === 'entregado' ? '
 // Estados en los que todavía se puede asignar o cambiar el chofer.
 const CHOFER_EDITABLE = ['pendiente', 'cargando'];
 
+// El domingo no se labora: el "Reparto de mañana" de un sábado es el lunes.
+const MANANA = `date('now', 'localtime', CASE strftime('%w', 'now', 'localtime') WHEN '6' THEN '+2 day' ELSE '+1 day' END)`;
+
 const SELECT_NOTA = `
   SELECT n.*,
          c.nombre   AS cliente,
@@ -25,13 +28,27 @@ const SELECT_NOTA = `
          (SELECT s.estado FROM sheets_registros s WHERE s.nota_id = n.id) AS sheets,
          (SELECT s.folio_hoja FROM sheets_registros s WHERE s.nota_id = n.id) AS sheets_folio,
          (SELECT s.fecha_hoja FROM sheets_registros s WHERE s.nota_id = n.id) AS sheets_fecha,
-         (SELECT COUNT(*) FROM evidencias e WHERE e.nota_id = n.id) AS evidencias
+         (SELECT COUNT(*) FROM evidencias e WHERE e.nota_id = n.id) AS evidencias,
+         (SELECT COUNT(*) FROM notas p WHERE n.folio_principal IS NOT NULL AND p.origen = n.origen
+            AND p.folio_principal = n.folio_principal AND p.saldo = 0 AND p.estado IN ('en_ruta', 'entregado')) AS salidas
   FROM notas n
   JOIN clientes c ON c.id = n.cliente_id
   LEFT JOIN choferes ch ON ch.id = n.chofer_id
   LEFT JOIN camiones ca ON ca.id = n.camion_id`;
 
 const stmts = {
+  ponerPrincipal: db.prepare('UPDATE notas SET folio_principal = ? WHERE id = ?'),
+  saldoDeFamilia: db.prepare('SELECT id FROM notas WHERE origen = ? AND folio_principal = ? AND saldo = 1 AND id <> ? ORDER BY id LIMIT 1'),
+  // Viajes de un pedido que ya salieron, con la hora en que salieron (o se entregaron en Almacén).
+  salidasDe: db.prepare(`
+    SELECT n.id, n.folio, n.estado, n.cantidad, n.unidad, n.material, n.detalle,
+           ch.nombre AS chofer, COALESCE(ca.nombre, ch.unidad) AS camion,
+           (SELECT MIN(h.fecha) FROM historial_estados h WHERE h.nota_id = n.id AND h.estado_nuevo IN ('en_ruta', 'entregado')) AS fecha
+    FROM notas n
+    LEFT JOIN choferes ch ON ch.id = n.chofer_id
+    LEFT JOIN camiones ca ON ca.id = n.camion_id
+    WHERE n.origen = ? AND n.folio_principal = ? AND n.saldo = 0 AND n.estado IN ('en_ruta', 'entregado')
+    ORDER BY fecha, n.id`),
   // El tablero muestra todo lo activo y sólo lo entregado hoy que no se ha archivado con el cierre.
   // Las notas programadas para otro día esperan en el corcho de Edgar hasta su fecha.
   tablero: db.prepare(`${SELECT_NOTA}
@@ -43,16 +60,21 @@ const stmts = {
     ORDER BY n.programada_para, n.creado_en, n.id`),
   paraManana: db.prepare(`
     SELECT folio FROM notas
-    WHERE estado <> 'entregado' AND programada_para = date('now', 'localtime', '+1 day') ORDER BY id`),
+    WHERE estado <> 'entregado' AND programada_para = ${MANANA} ORDER BY id`),
   viaje: db.prepare('UPDATE notas SET viaje = ? WHERE id = ?'),
-  mananaAHoy: db.prepare(`UPDATE notas SET programada_para = NULL, con_fecha = 0 WHERE estado <> 'entregado' AND programada_para = date('now', 'localtime', '+1 day')`),
+  mananaAHoy: db.prepare(`UPDATE notas SET programada_para = NULL, con_fecha = 0 WHERE estado <> 'entregado' AND programada_para = ${MANANA}`),
   programar: db.prepare(`UPDATE notas SET programada_para = ?, con_fecha = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
   // Las que se programaron con fecha del cliente y llegan mañana: Edgar avisa.
   conFechaManana: db.prepare(`SELECT n.id, n.folio, c.nombre AS cliente FROM notas n JOIN clientes c ON c.id = n.cliente_id
-    WHERE n.estado <> 'entregado' AND n.con_fecha = 1 AND n.programada_para = date('now', 'localtime', '+1 day') ORDER BY n.id`),
+    WHERE n.estado <> 'entregado' AND n.con_fecha = 1 AND n.programada_para = ${MANANA} ORDER BY n.id`),
   // Historial general: todo lo entregado que ya no está en el tablero.
   historial_general: db.prepare(`${SELECT_NOTA}
     WHERE n.estado = 'entregado' AND (n.archivada_en IS NOT NULL OR date(n.actualizado_en) < date('now', 'localtime'))
+    ORDER BY n.actualizado_en DESC, n.id DESC LIMIT 200`),
+  // Buscar en el historial por folio o cliente (sin importar mayúsculas).
+  historial_buscar: db.prepare(`${SELECT_NOTA}
+    WHERE n.estado = 'entregado' AND (n.archivada_en IS NOT NULL OR date(n.actualizado_en) < date('now', 'localtime'))
+      AND (n.folio LIKE @q OR c.nombre LIKE @q OR n.folio_principal LIKE @q)
     ORDER BY n.actualizado_en DESC, n.id DESC LIMIT 200`),
   archivar: db.prepare(`
     UPDATE notas SET archivada_en = datetime('now', 'localtime') WHERE estado = 'entregado' AND archivada_en IS NULL`),
@@ -63,6 +85,7 @@ const stmts = {
     VALUES (@origen, @folio, @id_externo, @cliente_id, @material, @cantidad, @unidad, @detalle,
             @total, @direccion, @zona, @chofer_id, @foto, @telefono, @etiqueta, COALESCE(@creado_en, datetime('now', 'localtime')))`),
   ponerEtiqueta: db.prepare('UPDATE notas SET etiqueta = ? WHERE id = ?'),
+  ponerPostit: db.prepare('UPDATE notas SET postit = ? WHERE id = ?'),
   ponerFolio: db.prepare('UPDATE notas SET folio = ? WHERE id = ?'),
   ponerTelefono: db.prepare(`UPDATE notas SET telefono = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
   actualizarEstado: db.prepare(`
@@ -98,6 +121,14 @@ const stmts = {
       programada_para = ?, con_fecha = 0, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
   historial: db.prepare(`
     INSERT INTO historial_estados (nota_id, estado_anterior, estado_nuevo) VALUES (?, ?, ?)`),
+  // Entrega registrada después: todo con la fecha y hora en que de verdad se entregó.
+  historialEn: db.prepare(`
+    INSERT INTO historial_estados (nota_id, estado_anterior, estado_nuevo, fecha) VALUES (?, ?, ?, ?)`),
+  entregarEn: db.prepare(`
+    UPDATE notas SET estado = 'entregado', chofer_id = @chofer_id, camion_id = @camion_id, viaje = @viaje,
+      programada_para = NULL, con_fecha = 0, actualizado_en = @cuando, archivada_en = @cuando WHERE id = @id`),
+  chofer: db.prepare('SELECT id, almacen FROM choferes WHERE id = ?'),
+  camion: db.prepare('SELECT id FROM camiones WHERE id = ?'),
   resumen: db.prepare(`
     SELECT
       COALESCE(SUM(estado = 'pendiente' AND saldo = 0), 0) AS pendiente,
@@ -154,6 +185,29 @@ const regresar = db.transaction((id) => {
   return { nota: stmts.porId.get(id), anterior: nota.estado };
 });
 
+// 📅 Entrega pasada: la nota se entregó otro día (ej. ayer) y no se marcó. Queda entregada con esa
+// fecha, chofer, camión y viaje, así cae en el historial, la hoja y el reporte de ese día y no en los de hoy.
+// La hora es fija por viaje (1er viaje 09:00, 2do 10:00…) para que el reporte cuente los viajes por separado.
+const entregarAntes = db.transaction((id, { fecha, chofer_id, camion_id, viaje }) => {
+  const nota = obtener(id);
+  if (nota.saldo) throw httpError(409, `${nota.folio}: es un saldo; primero re-prográmalo en Pendientes`);
+  if (nota.estado === 'entregado') throw httpError(409, `${nota.folio} ya está entregada`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) throw httpError(400, 'Elige la fecha en que se entregó');
+  const { hoy, limite } = db.prepare("SELECT date('now', 'localtime') AS hoy, date('now', 'localtime', '-60 day') AS limite").get();
+  if (fecha >= hoy) throw httpError(400, 'La fecha debe ser de ayer para atrás (lo de hoy se marca normal)');
+  if (fecha < limite) throw httpError(400, 'Sólo se pueden registrar entregas de los últimos 60 días');
+  const chofer = stmts.chofer.get(Number(chofer_id));
+  if (!chofer) throw httpError(400, 'Elige el chofer que la entregó');
+  const camion = chofer.almacen ? null : stmts.camion.get(Number(camion_id));
+  if (!chofer.almacen && !camion) throw httpError(400, 'Elige el camión que la llevó');
+  const v = Number(viaje) || 1;
+  if (!Number.isInteger(v) || v < 1 || v > VIAJES) throw httpError(400, `El viaje va del 1 al ${VIAJES}`);
+  const cuando = `${fecha} ${String(8 + v).padStart(2, '0')}:00:00`;
+  stmts.entregarEn.run({ id, chofer_id: chofer.id, camion_id: camion?.id ?? null, viaje: v, cuando });
+  stmts.historialEn.run(id, nota.estado, 'entregado', cuando);
+  return { nota: stmts.porId.get(id), anterior: nota.estado };
+});
+
 // campo: 'chofer' | 'camion'. Se elige por separado: no siempre va el mismo chofer en el mismo camión.
 function asignar(id, campo, valorId) {
   const nombre = campo === 'chofer' ? 'El chofer' : 'El camión';
@@ -169,9 +223,32 @@ function asignar(id, campo, valorId) {
   return stmts.porId.get(id);
 }
 
+// Un viaje de un pedido dividido cambió (o se borró, despues = null): su tarjeta de saldo se ajusta.
+// Si el viaje bajó y ya no había saldo, se abre uno nuevo; si el saldo llega a 0, se cierra.
+function sincronizarSaldo(antes, despues, { crear = true } = {}) {
+  if (!antes.folio_principal || antes.saldo) return null;
+  const fila = stmts.saldoDeFamilia.get(antes.origen, antes.folio_principal, antes.id);
+  const saldo = fila ? stmts.porId.get(fila.id) : null;
+  if (!saldo && !crear) return null;
+  const ajuste = saldoAjustado(saldo, antes, despues);
+  if (!ajuste) return null;
+  if (saldo) {
+    if (!ajuste.renglones.length) {
+      stmts.eliminar.run(saldo.id);
+      return null;
+    }
+    stmts.partes.run({ ...armar(ajuste.renglones, ajuste.avisos), id: saldo.id });
+    return stmts.porId.get(saldo.id);
+  }
+  if (!ajuste.renglones.length) return null;
+  const nuevo = crearSaldo(despues ?? antes, ajuste.renglones, ajuste.avisos);
+  stmts.ponerPrincipal.run(antes.folio_principal, nuevo.id);
+  return stmts.porId.get(nuevo.id);
+}
+
 // Corrige cualquier dato de la nota, en cualquier estado. La hoja de reparto no se actualiza:
 // a una entregada ya se le escribió su renglón.
-function editar(id, datos) {
+const editar = db.transaction((id, datos) => {
   const nota = obtener(id);
   const almacen = Boolean(datos.chofer_id && stmts.esAlmacen.get(datos.chofer_id));
   if (nota.estado !== 'pendiente' && (!datos.chofer_id || (!datos.camion_id && !almacen))) {
@@ -183,8 +260,10 @@ function editar(id, datos) {
     if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') throw httpError(409, `Ya hay otra nota con el folio ${datos.folio}`);
     throw err;
   }
-  return stmts.porId.get(id);
-}
+  const editada = stmts.porId.get(id);
+  sincronizarSaldo(nota, editada);
+  return editada;
+});
 
 // Cierre de Jornada: lo entregado pasa al historial. Pendiente, Saldos, Cargando y En Ruta no se tocan.
 const cerrarJornada = db.transaction(() => {
@@ -222,12 +301,13 @@ function cerrarSaldos(lista, destinoId) {
 // suma; si el viaje se lleva todo, la tarjeta se cierra y devuelve null. Sin saldo todavía, se crea
 // uno. Si no sale nada, la nota entera pasa a Saldos. El total se queda en la nota original para no
 // contarlo dos veces.
-function dividirNota(id, enviar) {
+function dividirNota(id, enviar, desdeSaldo = false) {
   const nota = obtener(id);
   if (nota.saldo || !CHOFER_EDITABLE.includes(nota.estado)) throw httpError(409, 'Sólo se divide una nota en Pendiente o Cargando');
   const hermanas = hermanasDe(nota);
   const { va, queda, avisos } = dividir(nota, enviar, hermanas);
-  if (!queda.length && !hermanas.length) throw httpError(400, 'Va la nota completa: no hay saldo. Usa el botón normal para avanzarla');
+  // Desde la tarjeta de saldo, si sale todo lo que quedaba, sólo se re-programa.
+  if (!queda.length && !hermanas.length && !desdeSaldo) throw httpError(400, 'Va la nota completa: no hay saldo. Usa el botón normal para avanzarla');
   if (!va.length) {
     if (hermanas.length) stmts.partes.run({ ...armar(queda, avisos), id });
     cerrarSaldos(hermanas, id);
@@ -246,6 +326,10 @@ function dividirNota(id, enviar) {
     stmts.partes.run({ ...armar(queda, avisos), id: primera.id });
     return stmts.porId.get(primera.id);
   }
+  return crearSaldo(nota, queda, avisos);
+}
+
+function crearSaldo(nota, queda, avisos) {
   const { lastInsertRowid } = stmts.insertar.run({
     ...OPCIONALES,
     ...armar(queda, avisos),
@@ -274,7 +358,17 @@ const envioParcial = db.transaction((id, enviar, { folio, salida } = {}) => {
   const cambiaFolio = nuevoFolio && nuevoFolio !== antes.folio;
   if (cambiaFolio && stmts.folioOcupado.get(antes.origen, nuevoFolio)) throw httpError(409, `Ya hay una nota con el folio ${nuevoFolio}`);
   const sinSaldoAntes = !hermanasDe(antes).length;
-  let saldo = dividirNota(id, enviar);
+  // Salida desde la tarjeta de Saldos: lo que sale vuelve a Pendiente y lo demás sigue en Saldos.
+  if (antes.saldo) {
+    stmts.reprogramar.run(id);
+    stmts.historial.run(id, 'saldo', 'pendiente');
+  }
+  const principal = antes.folio_principal || folioBase(antes.folio);
+  let saldo = dividirNota(id, enviar, Boolean(antes.saldo));
+  stmts.ponerPrincipal.run(principal, id);
+  if (saldo) stmts.ponerPrincipal.run(principal, saldo.id);
+  // De una nota de otro día, lo que queda sigue esperando en Por Confirmar con su misma fecha.
+  if (saldo && antes.programada_para && !saldo.programada_para) stmts.programar.run(antes.programada_para, antes.con_fecha ? 1 : 0, saldo.id);
   if (obtener(id).saldo) return saldo; // no salió nada: la nota entera pasó a Saldos
   if (cambiaFolio) {
     // El saldo recién creado pudo tomar justo el folio nuevo (-S1): se aparta un momento y luego se cruzan.
@@ -287,7 +381,7 @@ const envioParcial = db.transaction((id, enviar, { folio, salida } = {}) => {
     }
   }
   if (salida) stmts.ponerEtiqueta.run('SALIDA', id);
-  return saldo;
+  return saldo && stmts.porId.get(saldo.id);
 });
 
 const reprogramar = db.transaction((id) => {
@@ -298,8 +392,8 @@ const reprogramar = db.transaction((id) => {
   return stmts.porId.get(id);
 });
 
-// Corcho de Edgar: camión y número de viaje (1 a 5) de una vez. Sin camión no hay viaje.
-const VIAJES = 5;
+// Corcho de Edgar: camión y número de viaje (1 a 7) de una vez. Sin camión no hay viaje.
+const VIAJES = 7;
 const ponerViaje = db.transaction((id, camionId, viaje) => {
   if (camionId && !(Number.isInteger(viaje) && viaje >= 1 && viaje <= VIAJES)) throw httpError(400, `El viaje debe ser del 1 al ${VIAJES}`);
   const nota = asignar(id, 'camion', camionId || null);
@@ -312,6 +406,15 @@ const ponerViaje = db.transaction((id, camionId, viaje) => {
 // así el tablero y el aviso de mañana la dejan fuera sin reglas aparte.
 const EL_AVISA = '9999-12-31';
 
+// Una fecha que cae en domingo pasa al lunes: ese día no hay reparto.
+function sinDomingo(fecha) {
+  if (fecha === EL_AVISA) return fecha;
+  const d = new Date(`${fecha}T12:00:00Z`);
+  if (d.getUTCDay() !== 0) return fecha;
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 // conFecha: la eligió el cliente (botón "Con fecha"); Edgar avisa un día antes. Mañana o Él avisa no.
 function programar(id, fecha, conFecha = false) {
   const nota = obtener(id);
@@ -319,6 +422,7 @@ function programar(id, fecha, conFecha = false) {
   if (fecha != null) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || Number.isNaN(Date.parse(fecha))) throw httpError(400, 'Fecha inválida');
     if (fecha <= db.prepare("SELECT date('now', 'localtime') AS hoy").get().hoy) throw httpError(400, 'La fecha debe ser de mañana en adelante');
+    fecha = sinDomingo(fecha);
     if (nota.estado !== 'pendiente') throw httpError(409, `${nota.folio} ya está ${nota.estado === 'cargando' ? 'cargando' : 'en camino'}: sólo se programa una nota pendiente`);
   }
   stmts.programar.run(fecha ?? null, fecha && fecha !== EL_AVISA && conFecha ? 1 : 0, id);
@@ -347,10 +451,20 @@ function eliminar(id) {
   return nota;
 }
 
+// Borrar a mano un viaje de un pedido dividido: lo que llevaba regresa a su tarjeta de saldo, si la hay.
+// (La cancelación desde SICAR usa eliminar: ahí se cancela el pedido entero.)
+const eliminarViaje = db.transaction((id) => {
+  const nota = obtener(id);
+  stmts.eliminar.run(id);
+  sincronizarSaldo(nota, null, { crear: false });
+  return nota;
+});
+
 module.exports = {
   ESTADOS,
   devolver,
   ponerEtiqueta: (id, etiqueta) => { obtener(id); stmts.ponerEtiqueta.run(etiqueta, id); return stmts.porId.get(id); },
+  ponerPostit: (id, texto) => { obtener(id); stmts.ponerPostit.run(texto || null, id); return stmts.porId.get(id); },
   ponerTelefono: (id, telefono) => { obtener(id); stmts.ponerTelefono.run(telefono, id); return stmts.porId.get(id); },
   sinDireccion,
   cerrarJornada,
@@ -360,9 +474,18 @@ module.exports = {
   },
   envioParcial,
   reprogramar,
-  historialGeneral: () => stmts.historial_general.all(),
+  // Historial de salidas del pedido al que pertenece la nota (vacío si nunca se dividió).
+  salidas: (id) => {
+    const nota = obtener(id);
+    return nota.folio_principal ? stmts.salidasDe.all(nota.origen, nota.folio_principal) : [];
+  },
+  historialGeneral: (buscar = '') => {
+    const q = String(buscar).trim().replace(/[%_]/g, '');
+    return q ? stmts.historial_buscar.all({ q: `%${q}%` }) : stmts.historial_general.all();
+  },
   editar,
   eliminar,
+  eliminarViaje,
   listarTablero: () => stmts.tablero.all(),
   listarProgramadas: () => stmts.programadas.all(),
   conFechaManana: () => stmts.conFechaManana.all(),
@@ -374,6 +497,7 @@ module.exports = {
   obtenerSiExiste: (id) => stmts.porId.get(id),
   crear,
   cambiarEstado,
+  entregarAntes,
   regresar,
   asignar,
   resumen: () => stmts.resumen.get(),

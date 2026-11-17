@@ -8,6 +8,7 @@ const stmts = {
   visto: db.prepare('SELECT 1 FROM integracion_vistos WHERE origen = ? AND folio = ?'),
   enTablero: db.prepare('SELECT 1 FROM notas WHERE origen = ? AND folio = ?'),
   activa: db.prepare(`SELECT 1 FROM notas WHERE origen = ? AND (folio = ? OR folio LIKE ?) AND estado <> 'entregado'`),
+  activas: db.prepare(`SELECT id, folio, etiqueta FROM notas WHERE origen = ? AND estado <> 'entregado'`),
   resultado: db.prepare('SELECT resultado FROM integracion_vistos WHERE origen = ? AND folio = ?'),
   estadoNota: db.prepare('SELECT estado FROM notas WHERE origen = ? AND folio = ?'),
   marcar: db.prepare('INSERT OR REPLACE INTO integracion_vistos (origen, folio, resultado) VALUES (?, ?, ?)'),
@@ -52,10 +53,12 @@ function importarDesde(origen) {
 
 // También cuenta su saldo: si devuelven la venta, ese material tampoco se debe repartir.
 const activa = (origen, folio) => Boolean(stmts.activa.get(origen, folio, `${folio}-S%`));
+// Notas aún no entregadas de un origen: [{ id, folio }] (los saldos traen "-S1" en el folio).
+const activas = (origen) => stmts.activas.all(origen);
 // En qué quedó una venta: { resultado, estado } (estado: columna donde está su nota, si tiene).
 const situacion = (origen, folio) => ({
   resultado: stmts.resultado.get(origen, folio)?.resultado ?? null,
   estado: stmts.estadoNota.get(origen, folio)?.estado ?? null,
 });
 
-module.exports = { yaVisto, activa, situacion, omitir, registrar, importarDesde };
+module.exports = { yaVisto, activa, activas, situacion, omitir, registrar, importarDesde };

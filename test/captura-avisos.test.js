@@ -127,6 +127,9 @@ test('el formulario guarda los renglones, el teléfono y rechaza uno inválido',
     assert.equal(nota.cliente_telefono, '529811478351');
     assert.equal(nota.cantidad, '1/2');
     assert.equal((await enviar('', 'POST', { ...cuerpo, folio: 'F2', telefono: '123' })).status, 400);
+    const ps = await (await enviar('', 'POST', { ...cuerpo, origen: 'pulpos', folio: 'P9' })).json();
+    assert.equal(ps.origen, 'pulpos'); // capturada a mano como PS
+    assert.equal(importador.yaVisto('pulpos', 'P9'), true); // el robot de Pulpos ya no la duplica
 
     // Corregirlo antes de salir a ruta vale para la nota y queda en el cliente.
     const cambio = await enviar(`/${nota.id}/telefono`, 'PATCH', { telefono: '981 000 1111' });
@@ -226,4 +229,23 @@ test('varias notas del mismo número en el mismo viaje: un solo WhatsApp con tod
   assert.match(delCliente[0][1], /polvo/);
   assert.equal(enviados.filter(([tel]) => tel === '529811000002').length, 1);
   for (const id of [a, b, c]) assert.equal(notas.obtener(id).whatsapp, 'enviado');
+});
+
+test('"No avisar al cliente": sale a ruta sin WhatsApp y no se manda ni al reconectar', async () => {
+  const enviados = [];
+  whatsapp.estaListo = () => true;
+  whatsapp.enviar = async (tel, texto) => { enviados.push([tel, texto]); return true; };
+  const chofer = db.prepare("INSERT INTO choferes (nombre) VALUES ('Sin aviso')").run().lastInsertRowid;
+  const camion = db.prepare("INSERT INTO camiones (nombre) VALUES ('Sin aviso')").run().lastInsertRowid;
+  const { id } = importador.registrar({
+    cliente: { nombre: 'C SIN AVISO' },
+    nota: { origen: 'sicar', folio: 'SA1', material: 'POLVO', cantidad: 1, unidad: 'm³', direccion: 'Centro', telefono: '529811112299' },
+  });
+  notas.asignar(id, 'chofer', chofer);
+  notas.asignar(id, 'camion', camion);
+  notas.cambiarEstado(id, 'cargando');
+  bus.emit('nota:estado', { ...notas.cambiarEstado(id, 'en_ruta'), retroceso: false, sinAviso: true });
+  await new Promise((r) => setTimeout(r, 30)); // la prueba de arriba dejó la espera del grupo en 5 ms
+  assert.equal(enviados.length, 0);
+  assert.equal(notas.obtener(id).whatsapp, 'sin_aviso');
 });

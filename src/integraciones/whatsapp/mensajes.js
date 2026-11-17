@@ -61,16 +61,21 @@ function saludo(fecha = new Date()) {
 }
 const conMayuscula = (t) => t[0].toUpperCase() + t.slice(1);
 
-// Respuesta automática de El Inspector: nunca lleva precios.
-function bienvenida(fecha = new Date()) {
+// Respuesta automática de El Inspector: nunca lleva precios. Sólo pregunta lo que el cliente no dijo.
+const TODO = { material: true, colonia: true, pago: true };
+function bienvenida(fecha = new Date(), falta = TODO) {
+  const preguntas = [
+    falta.material && '🧱 ¿Qué material necesita?',
+    falta.colonia && '📍 ¿En qué colonia o poblado es la entrega?',
+    falta.pago && '💳 ¿Cómo le gustaría pagar?',
+  ].filter(Boolean);
   return [
     `¡Hola, ${saludo(fecha)}! 😊 Qué gusto saludarle, gracias por escribirnos a *${whatsapp.negocio}*.`,
     '',
-    'Con mucho gusto le ayudamos. Para darle su cotización, ¿nos comparte por favor estos datos?',
-    '',
-    '🧱 ¿Qué material necesita?',
-    '📍 ¿En qué colonia o poblado es la entrega?',
-    '💳 ¿Cómo le gustaría pagar?',
+    preguntas.length
+      ? `Con mucho gusto le ayudamos. Para darle su cotización, ¿nos comparte por favor ${preguntas.length > 1 ? 'estos datos' : 'este dato'}?`
+      : 'Con mucho gusto le ayudamos, en un momento le enviamos su cotización.',
+    ...(preguntas.length ? ['', ...preguntas] : []),
   ].join('\n');
 }
 

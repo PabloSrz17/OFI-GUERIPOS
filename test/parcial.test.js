@@ -219,3 +219,88 @@ test('parcial como Salida con folio nuevo: el viaje lleva el folio nuevo y lo qu
   assert.throws(() => notas.envioParcial(otra.id, ['4'], { folio: nota.folio }), /Ya hay una nota/);
   assert.equal(notas.obtener(otra.id).cantidad, 10);
 });
+
+test('salidas desde la tarjeta de saldo: el historial junta los viajes del pedido y el saldo se cierra al llegar a 0', () => {
+  const nota = nueva({ cantidad: 300, unidad: 'pz', material: 'BOVEDILLA' });
+  const s1 = notas.envioParcial(nota.id, ['100']);
+  listos(nota);
+  notas.cambiarEstado(nota.id, 'cargando');
+  notas.cambiarEstado(nota.id, 'en_ruta');
+  assert.equal(notas.obtener(s1.id).salidas, 1);
+
+  // Sin re-programar: sale de la tarjeta de saldo y lo demás se queda en Saldos.
+  const s2 = notas.envioParcial(s1.id, ['150']);
+  assert.equal(notas.obtener(s1.id).saldo, 0);
+  assert.equal(notas.obtener(s1.id).cantidad, 150);
+  assert.equal(s2.saldo, 1);
+  assert.equal(s2.cantidad, 50);
+  listos(notas.obtener(s1.id));
+  notas.cambiarEstado(s1.id, 'cargando');
+  notas.cambiarEstado(s1.id, 'en_ruta');
+
+  const historial = notas.salidas(s2.id);
+  assert.deepEqual(historial.map((s) => [s.folio, s.cantidad]), [[nota.folio, 100], [`${nota.folio}-S1`, 150]]);
+  assert.equal(historial[0].chofer, 'Chofer');
+  assert.ok(historial[0].fecha);
+
+  // Sale todo lo que quedaba: la tarjeta de saldo vuelve a Pendiente y ya no hay saldo.
+  assert.equal(notas.envioParcial(s2.id, ['50']), null);
+  assert.equal(notas.obtener(s2.id).saldo, 0);
+  assert.equal(notas.obtener(s2.id).cantidad, 50);
+  assert.deepEqual(notas.salidas(nota.id).length, 2); // la tercera cuenta cuando salga a ruta
+});
+
+test('salida parcial de una nota de otro día: lo que queda sigue en Por Confirmar con su fecha', () => {
+  const nota = nueva();
+  notas.programar(nota.id, 'avisa');
+  const saldo = notas.envioParcial(nota.id, ['4']);
+  assert.equal(saldo.programada_para, notas.EL_AVISA);
+  assert.equal(notas.obtener(nota.id).programada_para, notas.EL_AVISA); // el viaje espera a que digan para cuándo
+  assert.equal(notas.programar(nota.id, null).programada_para, null); // "Reparto del día"
+  assert.equal(notas.obtener(saldo.id).programada_para, notas.EL_AVISA);
+});
+
+// Editar el viaje como lo hace ✎ Editar: mismos datos, otros renglones.
+const editarViaje = (nota, cambios) => notas.editar(nota.id, {
+  folio: nota.folio, cliente_id: nota.cliente_id, cantidad: nota.cantidad, unidad: nota.unidad, material: nota.material,
+  detalle: nota.detalle, total: nota.total, direccion: nota.direccion, zona: nota.zona,
+  chofer_id: nota.chofer_id, camion_id: nota.camion_id, telefono: nota.telefono, ...cambios,
+});
+
+test('editar el viaje mueve la diferencia a la nota de saldo; si no alcanza, no deja', () => {
+  const nota = nueva({ cantidad: 300, unidad: 'pz', material: 'BOVEDILLA', detalle: '300 pz BOVEDILLA\n10 m³ POLVO' });
+  const saldo = notas.envioParcial(nota.id, ['100', '10']); // va: 100 bovedillas y 10 de polvo; queda: 200 bovedillas
+  assert.equal(saldo.cantidad, 200);
+
+  // Bajó: salieron 80, no 100 → el saldo sube a 220. Y el polvo se quita del viaje → regresa al saldo.
+  editarViaje(notas.obtener(nota.id), { cantidad: 80, detalle: null });
+  const s = notas.obtener(saldo.id);
+  assert.equal(s.cantidad, 220);
+  assert.match(s.detalle, /10 m³ POLVO/);
+
+  // Subió: 150 → se toman 70 del saldo.
+  editarViaje(notas.obtener(nota.id), { cantidad: 150 });
+  assert.equal(notas.obtener(saldo.id).cantidad, 150);
+
+  // No se puede subir más de lo que queda.
+  assert.throws(() => editarViaje(notas.obtener(nota.id), { cantidad: 400 }), /sólo quedan 150/);
+  assert.equal(notas.obtener(nota.id).cantidad, 150); // no cambió nada
+
+  // Se lleva todo lo de bovedilla y el polvo: la nota de saldo se cierra.
+  editarViaje(notas.obtener(nota.id), { cantidad: 300, detalle: '300 pz BOVEDILLA\n10 m³ POLVO' });
+  assert.equal(notas.obtenerSiExiste(saldo.id), undefined);
+
+  // Vuelve a bajar sin saldo abierto: se abre uno nuevo con lo que falta.
+  editarViaje(notas.obtener(nota.id), { cantidad: 250, detalle: '250 pz BOVEDILLA\n10 m³ POLVO' });
+  const nuevo = db.prepare('SELECT id FROM notas WHERE folio_principal = ? AND saldo = 1').get(nota.folio);
+  assert.equal(notas.obtener(nuevo.id).cantidad, 50);
+});
+
+test('borrar un viaje regresa su material al saldo; borrar una nota normal no toca nada', () => {
+  const nota = nueva({ cantidad: 10 });
+  const saldo = notas.envioParcial(nota.id, ['4']);
+  notas.eliminarViaje(nota.id);
+  assert.equal(notas.obtener(saldo.id).cantidad, 10);
+  const sola = nueva();
+  assert.equal(notas.eliminarViaje(sola.id).folio, sola.folio);
+});

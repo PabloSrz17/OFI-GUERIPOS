@@ -1,12 +1,13 @@
 // Sulema pregunta por cada nota nueva (SICAR, Salidas o Pulpos): ¿Reparto del día, de mañana u Otro día?
+// Las de SICAR antes: ¿envío o la cargan en Almacén? (Almacén: chofer ALMACÉN y ya no pregunta el día).
 // Hoy o mañana: unidad y viaje, y queda acomodada en ese corcho. Otro día: a "Por Confirmar · Otro día".
 // Sólo las que llegan con la Oficina abierta; las de antes no se preguntan. "✕ Ahora no" la deja en Pendiente.
 import { api } from './api.js';
-import { UNIDADES, dia } from './corcho.js';
+import { UNIDADES, dia, siguiente as diaDeReparto } from './corcho.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const VIAJES = ['1er', '2do', '3er', '4to', '5to'];
+const VIAJES = ['1er', '2do', '3er', '4to', '5to', '6to', '7mo'];
 
 let ctx = null;
 let vistoHasta = null; // id más alto ya visto en esta pantalla
@@ -18,6 +19,7 @@ const dialogo = () => $('#sulema-programar');
 const sigueSinAcomodar = (n) => n && n.estado === 'pendiente' && !n.camion_id && !n.es_almacen;
 
 function paso(cual) {
+  $('#sp-paso-tipo').hidden = cual !== 'tipo';
   $('#sp-paso-dia').hidden = cual !== 'dia';
   $('#sp-paso-viaje').hidden = cual !== 'viaje';
   $('#sp-aviso').textContent = '';
@@ -31,7 +33,7 @@ function mostrar(nota) {
     .map((u) => ({ u, camion: ctx.catalogos.camiones.find((c) => u.es.test(c.nombre)) }))
     .filter((x) => x.camion)
     .map((x) => `<button type="button" class="btn btn--secundario" data-sp-camion="${x.camion.id}">🚚 ${esc(x.u.nombre)}</button>`).join('');
-  paso('dia');
+  paso(nota.origen === 'sicar' ? 'tipo' : 'dia'); // las de SICAR: primero ¿envío o Almacén?
   if (!dialogo().open) dialogo().showModal();
 }
 
@@ -48,10 +50,23 @@ async function guardar(viaje) {
   const { nota, cuando, camion } = actual;
   if (!camion) return ($('#sp-aviso').textContent = 'Elige la unidad.');
   try {
-    if (cuando === 'manana') await api.patch(`/api/notas/${nota.id}/programar`, { fecha: dia(1) });
+    if (cuando === 'manana') await api.patch(`/api/notas/${nota.id}/programar`, { fecha: diaDeReparto() });
     await api.patch(`/api/notas/${nota.id}/viaje`, { camion_id: camion, viaje });
     const unidad = ctx.catalogos.camiones.find((c) => c.id === camion)?.nombre ?? '';
     ctx.toast(`${nota.folio} → ${cuando === 'manana' ? 'Reparto de mañana' : 'Reparto del día'} · ${unidad} · ${VIAJES[viaje - 1]} viaje`);
+    siguiente();
+  } catch (err) {
+    $('#sp-aviso').textContent = err.message;
+  }
+}
+
+// La cargan en Almacén: chofer ALMACÉN, sin camión; sale de la hoja de reparto y no avisa al cliente.
+async function almacen() {
+  const chofer = ctx.catalogos.choferes.find((c) => c.almacen);
+  if (!chofer) return ($('#sp-aviso').textContent = 'No hay chofer ALMACÉN en la lista de choferes.');
+  try {
+    await api.patch(`/api/notas/${actual.nota.id}/chofer`, { chofer_id: chofer.id });
+    ctx.toast(`${actual.nota.folio} → 🏬 Cargan en Almacén`);
     siguiente();
   } catch (err) {
     $('#sp-aviso').textContent = err.message;
@@ -74,6 +89,8 @@ export function montarProgramarNueva({ catalogos, toast }) {
   dialogo().addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b || !actual) return;
+    if (b.dataset.spTipo === 'almacen') return almacen();
+    if (b.dataset.spTipo === 'envio') return paso('dia');
     if (b.dataset.spDia === 'otro') return otroDia();
     if (b.dataset.spDia) {
       actual.cuando = b.dataset.spDia;

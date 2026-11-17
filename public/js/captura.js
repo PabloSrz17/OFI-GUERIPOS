@@ -40,15 +40,17 @@ export function montarCaptura({ alGuardar, toast }) {
     pintarEtiqueta();
   }
 
-  // SC o SALIDA: la que toca por el folio que se va escribiendo, o la elegida con un clic.
+  // SC, SALIDA o PS (Pulpos): la que toca por el folio que se va escribiendo, o la elegida con clics.
   function pintarEtiqueta() {
-    const { texto, clase } = etiquetaOrigen({ origen: 'sicar', folio: c.folio.value, etiqueta: elegida });
+    const { texto, clase } = elegida === 'PS'
+      ? etiquetaOrigen({ origen: 'pulpos' })
+      : etiquetaOrigen({ origen: 'sicar', folio: c.folio.value, etiqueta: elegida });
     etiqueta.textContent = texto;
     etiqueta.className = `origen origen--${clase} origen--boton`;
   }
 
   etiqueta.addEventListener('click', () => {
-    elegida = etiqueta.textContent === 'SC' ? 'SALIDA' : 'SC';
+    elegida = { SC: 'SALIDA', SALIDA: 'PS', PS: 'SC' }[etiqueta.textContent] ?? 'SC';
     pintarEtiqueta();
   });
 
@@ -103,8 +105,8 @@ export function montarCaptura({ alGuardar, toast }) {
     const linea = (a) => [a.cantidad, a.unidad, a.material].filter(Boolean).join(' ');
     try {
       const nota = await api.post('/api/notas', {
-        origen: 'sicar',
-        etiqueta: elegida,
+        origen: elegida === 'PS' ? 'pulpos' : 'sicar',
+        etiqueta: elegida === 'PS' ? null : elegida,
         folio: c.folio.value,
         cliente: c.cliente.value.trim().toUpperCase(),
         telefono: c.telefono.value,

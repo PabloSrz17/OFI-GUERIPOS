@@ -18,7 +18,7 @@ export const UNIDADES = [
 ];
 const OTRAS = 'Saldos pendientes / Notas Pendientes';
 const EL_AVISA = '9999-12-31'; // "Él avisa": sin día fijo (notas.repo.js)
-const VIAJES = ['1er', '2do', '3er', '4to', '5to'];
+const VIAJES = ['1er', '2do', '3er', '4to', '5to', '6to', '7mo'];
 // Notas con camión pero sin viaje anotado (asignadas desde el tablero) se ven en el 1er viaje.
 const viajeDe = (n) => Math.min(Math.max(Number(n.viaje) || 1, 1), VIAJES.length);
 
@@ -27,6 +27,8 @@ export const dia = (desplazar = 0) => {
   d.setDate(d.getDate() + desplazar);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+// "Reparto de mañana": el siguiente día de reparto. El domingo no se labora, así que el de un sábado es el lunes.
+export const siguiente = () => (new Date().getDay() === 6 ? dia(2) : dia(1));
 const fechaLarga = (iso) => new Date(`${iso}T12:00`).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
 
 let ctx = null;          // { catalogos, toast }
@@ -69,6 +71,7 @@ function herramientas(n) {
     return `
     <div class="corcho__acciones">
       ${editar}
+      <button type="button" class="btn btn--secundario" data-accion="parcial" data-id="${n.id}">🚚 Salida parcial</button>
       <button type="button" class="btn" data-accion="reprogramar" data-id="${n.id}">Re-programar en Pendientes 🚚</button>
     </div>`;
   }
@@ -78,17 +81,69 @@ function herramientas(n) {
   const editable = ['pendiente', 'cargando'].includes(n.estado);
   if (!editable) {
     return `${n.chofer ? `<p class="corcho__suave">👤 ${esc(n.chofer)}</p>` : ''}
-    <div class="corcho__acciones">${editar}${regresar}</div>`;
+    <div class="corcho__acciones">${editar}${regresar}${n.estado === 'en_ruta' ? `<button type="button" class="btn btn--secundario" data-accion="entrega-pasada" data-id="${n.id}" title="Se entregó otro día y no se marcó">📅 Entrega pasada</button>` : ''}</div>`;
   }
   return `
     <div class="corcho__chofer">${selector(n, 'chofer', ctx.catalogos.choferes)}</div>
     <div class="corcho__acciones">
       ${editar}
-      <button type="button" class="btn btn--secundario" data-accion="parcial" data-id="${n.id}">✂ Parcial</button>
+      <button type="button" class="btn btn--secundario" data-accion="parcial" data-id="${n.id}">🚚 Salida parcial</button>
       ${n.estado === 'pendiente' ? `<button type="button" class="btn btn--secundario" data-accion="otro-dia" data-id="${n.id}">🔁 Reprogramar</button>` : ''}
       ${regresar}
+      <button type="button" class="btn btn--secundario" data-accion="entrega-pasada" data-id="${n.id}" title="Se entregó otro día y no se marcó">📅 Entrega pasada</button>
     </div>`;
 }
+
+// 📋 Ver salidas: los viajes que ya salieron del mismo pedido. Se piden al abrir y se recuerdan
+// para que el repintado del corcho no cierre ni vacíe la lista.
+const salidasAbiertas = new Set();
+const salidasVistas = new Map(); // id de la tarjeta -> html de la lista
+const horaCorta = (f) => (f ? new Date(f.replace(' ', 'T')).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+const cargaDe = (s) => (s.detalle
+  ? s.detalle.split('\n').filter((l) => l && !l.startsWith('⚠️')).join(' + ')
+  : [s.cantidad, s.unidad, s.material].filter(Boolean).join(' '));
+const listaSalidas = (lista) => (lista.length
+  ? `<ol class="corcho__salidas-lista">${lista.map((s, i) => `
+      <li><b>Salida #${i + 1}</b> · ${esc(s.folio)} · ${esc(horaCorta(s.fecha))}${s.estado === 'entregado' ? ' ✓' : ' 🚚'}
+        <br>${esc([s.chofer, s.camion].filter(Boolean).join(' · ') || 'Sin chofer')}
+        <br>${esc(cargaDe(s))}</li>`).join('')}</ol>`
+  : '<p class="corcho__suave">Todavía no sale ningún viaje.</p>');
+function salidas(n) {
+  if (!n.salidas) return '';
+  const abierta = salidasAbiertas.has(String(n.id));
+  return `<details class="corcho__salidas" data-salidas="${n.id}"${abierta ? ' open' : ''}>
+      <summary>📋 Ver salidas (${n.salidas})</summary>
+      <div>${salidasVistas.get(String(n.id)) ?? 'Cargando…'}</div>
+    </details>`;
+}
+async function alAbrirSalidas(e) {
+  const det = e.target;
+  if (!(det instanceof HTMLDetailsElement) || !det.dataset.salidas) return;
+  const id = det.dataset.salidas;
+  if (!det.open) { salidasAbiertas.delete(id); return; }
+  salidasAbiertas.add(id);
+  try {
+    salidasVistas.set(id, listaSalidas(await api.get(`/api/notas/${id}/salidas`)));
+  } catch (err) {
+    salidasVistas.set(id, `<p class="corcho__suave">${esc(err.message)}</p>`);
+  }
+  if (det.isConnected) det.querySelector('div').innerHTML = salidasVistas.get(id);
+}
+document.addEventListener('toggle', alAbrirSalidas, true);
+
+// 📝 Mini post-it: amarillo si la nota tiene observación. Abierto, se lee y se edita ahí mismo.
+const postitsAbiertos = new Set();
+const botonPostit = (n) => `<button type="button" class="corcho__postit-boton${n.postit ? ' corcho__postit-boton--lleno' : ''}" data-postit-abrir
+  title="${n.postit ? esc(n.postit) : 'Agregar una nota interna'}" aria-label="Post-it de la nota ${esc(n.folio)}" aria-expanded="${postitsAbiertos.has(String(n.id))}">📝</button>`;
+const postit = (n) => (postitsAbiertos.has(String(n.id))
+  ? `<div class="corcho__postit">
+      <textarea data-postit-texto maxlength="300" rows="3" placeholder="Nota interna (no la ve el cliente)">${esc(n.postit ?? '')}</textarea>
+      <div class="corcho__postit-botones">
+        <button type="button" class="btn btn--secundario" data-postit-cerrar>Cerrar</button>
+        <button type="button" class="btn" data-postit-guardar>Guardar</button>
+      </div>
+    </div>`
+  : (n.postit ? `<p class="corcho__postit-vista" data-postit-abrir>📝 ${esc(n.postit)}</p>` : ''));
 
 // Teléfono, aviso de WhatsApp y evidencia, como en Formato Entregas Pablo.
 function datosExtra(n) {
@@ -107,15 +162,18 @@ function tarjeta(n, { manana = false, futura = false } = {}) {
   return `
     <article class="corcho__nota${manana ? ' corcho__nota--manana' : ''}${entregada ? ' corcho__nota--entregado' : ''}${n.saldo ? ' corcho__nota--saldo' : ''}${futura ? '' : ` corcho__nota--e-${n.estado}`}" data-id="${n.id}" ${mover ? 'draggable="true"' : ''}>
       ${manana ? '<p class="corcho__alerta">⏰ Esta nota es para mañana</p>' : ''}
-      ${n.saldo ? '<p class="corcho__alerta corcho__alerta--saldo">⚠ Saldo pendiente</p>' : ''}
+      ${n.saldo ? '<p class="corcho__alerta corcho__alerta--saldo">⚠ Saldo pendiente · queda por entregar:</p>' : ''}
       <button type="button" class="corcho__eliminar" data-accion="cancelar" data-id="${n.id}" title="Eliminar nota" aria-label="Eliminar nota ${esc(n.folio)}">🗑</button>
+      ${botonPostit(n)}
       <header><b>${esc(n.folio)}</b>${botonEtiqueta(n)}${futura ? (n.camion && !manana ? `<span class="corcho__chip">${esc(n.camion)}</span>` : '') : `<span class="corcho__chip corcho__chip--${n.estado}">${NOMBRE_ESTADO[n.estado] ?? esc(n.estado)}</span>`}</header>
+      ${postit(n)}
       <p class="corcho__cliente">${esc(n.cliente)}</p>
       <div class="corcho__material">${renglones(n)}</div>
       ${!futura && faltaDireccion(n)
     ? `<button type="button" class="btn btn--ruta" data-accion="editar" data-foco="direccion" data-id="${n.id}">📍 Completar dirección</button>`
     : `<p class="corcho__suave">📍 ${esc(n.zona || n.direccion)}</p>`}
       ${futura ? '' : datosExtra(n)}
+      ${salidas(n)}
       ${futura ? '' : herramientas(n)}
       ${futura ? '' : botonEstatus(n)}
       ${futura && manana ? `
@@ -131,6 +189,10 @@ function tarjeta(n, { manana = false, futura = false } = {}) {
         <div class="corcho__acciones">
           <button type="button" class="btn btn--secundario" data-hoy>↩ Reparto del día</button>
           <button type="button" class="btn btn--secundario" data-a-manana>⏰ Reparto de mañana</button>
+        </div>
+        <div class="corcho__acciones">
+          <button type="button" class="btn btn--secundario" data-parcial-futura>🚚 Salida parcial</button>
+          <button type="button" class="btn btn--secundario" data-accion="entrega-pasada" data-id="${n.id}" title="Se entregó otro día y no se marcó">📅 Entrega pasada</button>
         </div>` : ''}
     </article>`;
 }
@@ -181,7 +243,7 @@ function pintarDia() {
 }
 
 function pintarFuturas() {
-  const manana = dia(1);
+  const manana = siguiente();
   $('#manana-fecha').textContent = fechaLarga(manana);
   $('#manana-contenido').innerHTML = rejilla(programadas.filter((n) => n.programada_para === manana), { futura: true, manana: true });
   // Por Confirmar · Otro día: primero "Él avisa" (sin día), luego por fecha después de mañana.
@@ -205,7 +267,7 @@ function pintarFuturas() {
 async function cargarFuturas(pintar = true) {
   try {
     programadas = await api.get('/api/notas/programadas');
-    const manana = dia(1);
+    const manana = siguiente();
     const cuenta = (fn) => programadas.filter(fn).length;
     $('#pestana-manana-n').textContent = cuenta((x) => x.programada_para === manana);
     $('#pestana-futuras-n').textContent = cuenta((x) => x.programada_para !== manana);
@@ -232,13 +294,15 @@ async function cambiarUnidad(id, columna, viaje) {
   const u = UNIDADES.find((x) => x.nombre === columna);
   if (columnaDe(nota) === columna && (!u || viajeDe(nota) === viaje)) return;
   const camion = u ? ctx.catalogos.camiones.find((c) => u.es.test(c.nombre)) : null;
-  if (u && !camion) return ctx.toast(`No encontré la ${columna} en la lista de camiones`, true);
+  if (u && !camion) { ctx.toast(`No encontré la ${columna} en la lista de camiones`, true); return false; }
   try {
     await api.patch(`/api/notas/${id}/viaje`, { camion_id: camion?.id ?? null, viaje });
     ctx.toast(`${nota.folio} → ${camion ? `${camion.nombre} · ${VIAJES[viaje - 1]} viaje` : 'sin unidad'}`);
   } catch (err) {
     ctx.toast(err.message, true);
+    return false;
   }
+  return true;
 }
 
 // Pestañas exclusivas: sólo una vista a la vez, a pantalla completa.
@@ -258,8 +322,8 @@ function mostrar(pestana) {
   if (['manana', 'futuras'].includes(pestana)) cargarFuturas();
 }
 
-export function montarCorcho({ catalogos, toast, avanzar }) {
-  ctx = { catalogos, toast, avanzar };
+export function montarCorcho({ catalogos, toast, avanzar, parcial }) {
+  ctx = { catalogos, toast, avanzar, parcial };
   const ventana = $('#ventana-notas');
   ventana.addEventListener('pestana', (e) => mostrar(e.detail));
   ventana.addEventListener('click', (e) => {
@@ -280,7 +344,7 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
   });
 
   // Al arrastrar una nota cerca del borde de arriba o de abajo, la vista se desplaza sola (más rápido
-  // mientras más cerca del borde), para poder soltarla en el 3er, 4to o 5to viaje.
+  // mientras más cerca del borde), para poder soltarla en el 3er al 7mo viaje.
   const BORDE = 90;      // px desde el borde donde empieza a moverse
   const MAXIMO = 18;     // px cada 16 ms en la orilla
   let velocidad = 0;
@@ -291,11 +355,17 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
     if (!velocidad || !vistaArrastre) { pararScroll(); return; }
     vistaArrastre.scrollTop += velocidad;
   }
+  let marco = null; // { top, bottom } de la vista, medido al empezar a arrastrar
   function autoScroll(e) {
     if (!arrastrada) return;
-    const vista = document.querySelector('.operacion__vista:not([hidden]) #corcho-contenido, .operacion__vista:not([hidden]) #manana-contenido')?.closest('.operacion__vista');
-    if (!vista) return;
-    const { top, bottom } = vista.getBoundingClientRect();
+    if (!marco) {
+      const vista = document.querySelector('.operacion__vista:not([hidden]) #corcho-contenido, .operacion__vista:not([hidden]) #manana-contenido')?.closest('.operacion__vista');
+      if (!vista) return;
+      vistaArrastre = vista;
+      marco = vista.getBoundingClientRect();
+    }
+    const vista = vistaArrastre;
+    const { top, bottom } = marco;
     const y = e.clientY;
     velocidad = y < top + BORDE ? -Math.ceil(MAXIMO * Math.min(1, (top + BORDE - y) / BORDE))
       : y > bottom - BORDE ? Math.ceil(MAXIMO * Math.min(1, (y - (bottom - BORDE)) / BORDE))
@@ -305,6 +375,7 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
   }
   function pararScroll() {
     velocidad = 0;
+    if (!arrastrada) marco = null;
     clearInterval(cuadro);
     cuadro = null;
   }
@@ -316,26 +387,58 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
 
   // Arrastrar: en el corcho de hoy y en el de mañana (acomodar con anticipación).
   for (const contenido of [$('#corcho-contenido'), $('#manana-contenido')]) {
+  let encima = null;     // zona resaltada ahora
+  let tarjetaMovida = null;
+  const limpiar = () => {
+    encima?.classList.remove('corcho__zona--encima');
+    encima = null;
+    tarjetaMovida?.classList.remove('corcho__nota--arrastrada');
+    contenido.classList.remove('corcho--arrastrando');
+  };
   contenido.addEventListener('dragstart', (e) => {
-    arrastrada = Number(e.target.closest('[data-id]')?.dataset.id);
+    const tarjeta = e.target.closest('[data-id]');
+    arrastrada = Number(tarjeta?.dataset.id);
     e.dataTransfer.effectAllowed = 'move';
+    // Fantasma chico (folio y cliente) en vez de la foto de toda la tarjeta con sus materiales.
+    const fantasma = document.createElement('div');
+    fantasma.className = 'corcho__fantasma';
+    fantasma.textContent = `${tarjeta.querySelector('header b')?.textContent ?? ''} · ${tarjeta.querySelector('.corcho__cliente')?.textContent ?? ''}`;
+    document.body.append(fantasma);
+    e.dataTransfer.setDragImage(fantasma, 16, 16);
+    setTimeout(() => fantasma.remove(), 0);
+    tarjetaMovida = tarjeta;
+    requestAnimationFrame(() => {
+      tarjeta.classList.add('corcho__nota--arrastrada');
+      contenido.classList.add('corcho--arrastrando');
+    });
   });
-  const limpiar = (menos) => contenido.querySelectorAll('.corcho__zona--encima').forEach((z) => z !== menos && z.classList.remove('corcho__zona--encima'));
   contenido.addEventListener('dragover', (e) => {
+    if (!arrastrada) return;
     const zona = e.target.closest('[data-zona]');
-    if (!arrastrada || !zona) return;
+    if (!zona) return;
     e.preventDefault();
-    limpiar(zona);
+    if (zona === encima) return; // misma zona: nada que repintar
+    encima?.classList.remove('corcho__zona--encima');
     zona.classList.add('corcho__zona--encima');
+    encima = zona;
   });
-  contenido.addEventListener('drop', (e) => {
+  contenido.addEventListener('drop', async (e) => {
     const zona = e.target.closest('[data-zona]');
     if (!arrastrada || !zona) return;
     e.preventDefault();
-    cambiarUnidad(arrastrada, zona.dataset.columna, Number(zona.dataset.viaje) || null);
+    const id = arrastrada;
+    const tarjeta = tarjetaMovida;
+    if (tarjeta && tarjeta.parentElement !== zona) {
+      zona.querySelector('.corcho__vacio')?.remove();
+      zona.append(tarjeta);
+    }
+    if (!(await cambiarUnidad(id, zona.dataset.columna, Number(zona.dataset.viaje) || null))) {
+      if (contenido.id === 'corcho-contenido') pintarDia(); else pintarFuturas();
+    }
   });
   contenido.addEventListener('dragend', () => {
     arrastrada = null;
+    marco = null;
     limpiar();
   });
   }
@@ -371,9 +474,57 @@ export function montarCorcho({ catalogos, toast, avanzar }) {
       }
     }
   });
+  // Salida parcial desde Por Confirmar: después pregunta para cuándo es lo que sale.
+  const cuando = $('#parcial-cuando');
+  ventana2.addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-parcial-futura]')) return;
+    const id = Number(idDe(e.target));
+    const nota = programadas.find((n) => n.id === id);
+    if (!nota || !(await ctx.parcial(nota))) return;
+    $('#parcial-cuando-resumen').innerHTML = `<div><b>${esc(nota.folio)}</b> · ${esc(nota.cliente)}</div>`;
+    cuando.returnValue = '';
+    cuando.showModal();
+    const r = await new Promise((listo) => cuando.addEventListener('close', () => listo(cuando.returnValue), { once: true }));
+    if (r === 'hoy') await programar(id, null);
+    else if (r === 'manana') await programar(id, siguiente());
+    else {
+      ctx.toast(`${nota.folio}: sigue en Por Confirmar · Otro día; ponle la fecha del cliente o «Él avisa»`);
+      await cargarFuturas();
+    }
+  });
+  ventana2.addEventListener('click', async (e) => {
+    const tarjeta = e.target.closest('.corcho__nota[data-id]');
+    if (!tarjeta) return;
+    const id = tarjeta.dataset.id;
+    const repintar = () => (tarjeta.closest('#corcho-contenido') ? pintarDia() : pintarFuturas());
+    if (e.target.closest('[data-postit-abrir]')) {
+      if (postitsAbiertos.has(id)) postitsAbiertos.delete(id); else postitsAbiertos.add(id);
+      repintar();
+      tarjeta.isConnected || $(`.corcho__nota[data-id="${id}"] [data-postit-texto]`)?.focus();
+    } else if (e.target.closest('[data-postit-cerrar]')) {
+      postitsAbiertos.delete(id);
+      repintar();
+    } else if (e.target.closest('[data-postit-guardar]')) {
+      const boton = e.target.closest('[data-postit-guardar]');
+      boton.disabled = true;
+      try {
+        const nota = await api.patch(`/api/notas/${id}/postit`, { postit: tarjeta.querySelector('[data-postit-texto]').value });
+        for (const lista of [notasDelDia, programadas]) {
+          const i = lista.findIndex((x) => String(x.id) === id);
+          if (i >= 0) lista[i] = { ...lista[i], postit: nota.postit };
+        }
+        postitsAbiertos.delete(id);
+        ctx.toast(nota.postit ? `📝 ${nota.folio}: post-it guardado` : `${nota.folio}: post-it borrado`);
+        repintar();
+      } catch (err) {
+        ctx.toast(err.message, true);
+        boton.disabled = false;
+      }
+    }
+  });
   ventana2.addEventListener('click', (e) => {
     if (e.target.closest('[data-hoy]')) programar(idDe(e.target), null);
-    if (e.target.closest('[data-a-manana]')) programar(idDe(e.target), dia(1));
+    if (e.target.closest('[data-a-manana]')) programar(idDe(e.target), siguiente());
   });
 }
 
@@ -382,7 +533,7 @@ export function recargarCorcho(notas) {
   notasDelDia = notas;
   if (!ctx) return;
   const abierta = $('#ventana-notas').open;
-  const eligiendo = $('#corcho-contenido').contains(document.activeElement) && document.activeElement.tagName === 'SELECT';
+  const eligiendo = $('#corcho-contenido').contains(document.activeElement) && ['SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
   if (abierta && activa === 'corcho' && !arrastrada && !eligiendo) pintarDia();
   cargarFuturas(abierta && ['manana', 'futuras'].includes(activa) && !arrastrada && !$(`#vista-${activa}`).contains(document.activeElement));
 }

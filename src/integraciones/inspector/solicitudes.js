@@ -218,7 +218,8 @@ async function procesarFoto(mensaje, { clave, telefono, contacto, conv, pie, yaH
   // Con productos leídos, el grupo recibe la imagen de la tarjeta (grupo.js). Se autoriza en la Oficina.
   if (renglones.length) bus.emit('solicitud:foto', id);
   if (!yaHablamos && !(datos.colonia && datos.metodo_pago)) {
-    await mensaje.client.sendMessage(mensaje.from, bienvenida(), { sendSeen: false });
+    const falta = { material: !renglones.length, colonia: !datos.colonia, pago: !datos.metodo_pago };
+    await mensaje.client.sendMessage(mensaje.from, bienvenida(new Date(), falta), { sendSeen: false });
     stmts.saludar.run(clave);
   }
 }
@@ -299,15 +300,16 @@ async function procesarMensaje(mensaje) {
 
   const conProductos = Boolean(datos?.es_cotizacion && datos.productos.length);
   const completa = conProductos && datos.colonia && datos.metodo_pago;
-  // Si ya se le pidieron los datos y falta alguno, la tarjeta sale igual: un humano lo completa.
-  if (conProductos && (completa || hablamos)) {
-    guardarSolicitud(clave, { telefono, contacto, datos, textos, conv });
-  } else if (!hablamos) {
+  // Con productos, la tarjeta sale desde el primer mensaje aunque falte colonia o pago: un humano lo completa
+  // y lo que el cliente conteste después la actualiza.
+  if (conProductos) guardarSolicitud(clave, { telefono, contacto, datos, textos, conv });
+  if (!hablamos && !completa) {
     // No mensaje.getChat(): falla en chats @lid. sendSeen false: el chat sigue sin leer para tu equipo.
-    await mensaje.client.sendMessage(mensaje.from, bienvenida(), { sendSeen: false });
+    const falta = conProductos ? { material: false, colonia: !datos.colonia, pago: !datos.metodo_pago } : undefined;
+    await mensaje.client.sendMessage(mensaje.from, bienvenida(new Date(), falta), { sendSeen: false });
     stmts.saludar.run(clave);
     console.log(`[inspector] bienvenida enviada a ${clave}`);
-  } else if (pide) {
+  } else if (pide && !conProductos) {
     // Pidió cotización sin lista y no toca bienvenida: la lista que mande después también se lee.
     stmts.guardarConversacion.run({ clave, textos, esperando: 1, solicitud_id: conv.solicitud_id });
   }

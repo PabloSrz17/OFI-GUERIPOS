@@ -122,13 +122,33 @@ export function montarOctavio({ toast, alCambiar }) {
         <button type="button" class="btn btn--secundario" data-revisar="${o.id}">Revisar</button></li>`).join('');
   }
 
+  // Lo que ya llegó y lo que falta, sólo cuando hubo entrega parcial.
+  const conFalta = (a, o) => {
+    if (!a || !o.avance.some((x) => x.recibido > 0)) return '';
+    if (a.pendiente <= 0) return ' <span class="orden__llego">✓ llegó</span>';
+    return ` <span class="orden__falta">· ${a.recibido > 0 ? `llegaron ${esc(a.recibido)}, ` : ''}faltan ${esc(a.pendiente)}</span>`;
+  };
   function tarjeta(o) {
     const sinEnviar = o.estado === 'aprobada' && o.whatsapp !== 'enviado' && o.telefono; // las capturadas aquí no tienen a quién
+    const recibir = esAlmacen(o) && o.estado === 'aprobada' ? `
+        <div class="orden__botones orden__recibir">
+          <button type="button" class="btn btn--ruta" data-recibir-orden="${o.id}" data-modo="todo">✅ Entregada</button>
+          <button type="button" class="btn" data-recibir-orden="${o.id}" data-modo="parcial">📦 Entregada parcialmente</button>
+        </div>` : '';
+    const plegada = estaPlegada(o);
     return `
-      <article class="orden">
-        <header><b>${esc(o.folio)}</b> <span class="orden__estado orden__estado--${esc(o.estado)}">${esc(ESTATUS[o.estado])}</span> <span>${esc(o.sucursal)}</span></header>
-        <p class="orden__de">${esc(o.solicitante)} · ${esc((o.aprobada_en ?? o.creado_en).slice(0, 16))}</p>
-        <ul>${o.renglones.map((r) => `<li>${esc(linea(r))}</li>`).join('')}</ul>
+      <article class="orden orden--${esc(o.estado)}${plegada ? ' orden--plegada' : ''}">
+        <button type="button" class="orden__cabeza" data-plegar-orden="${o.id}" aria-expanded="${!plegada}" title="${plegada ? 'Ver la orden' : 'Minimizar'}">
+          <span class="orden__flecha" aria-hidden="true">${plegada ? '▸' : '▾'}</span>
+          <b class="orden__folio">${esc(o.folio)}</b>
+          <span class="orden__quien">${esc(o.proveedor ?? o.solicitante)}</span>
+          <span class="orden__fecha">${esc((o.aprobada_en ?? o.creado_en).slice(0, 16))}</span>
+          <span class="orden__estado orden__estado--${esc(o.estado)}">${esc(ESTATUS[o.estado])}</span>
+        </button>
+        <div class="orden__cuerpo"${plegada ? ' hidden' : ''}>
+        <p class="orden__de">${esc(o.solicitante)} · ${esc(o.sucursal)}</p>
+        <ul>${o.renglones.map((r, i) => `<li>${esc(linea(r))}${conFalta(o.avance?.[i], o)}</li>`).join('')}</ul>
+        ${recibir}
         ${o.nota ? `<p class="orden__nota">📝 ${esc(o.nota)}</p>` : ''}
         ${o.whatsapp ? `<p class="orden__whatsapp">${esc(ESTADO_WHATSAPP[o.whatsapp] ?? o.whatsapp)}</p>` : ''}
         <div class="orden__botones orden__mover">
@@ -140,13 +160,27 @@ export function montarOctavio({ toast, alCambiar }) {
           ${sinEnviar ? `<button type="button" class="btn" data-reenviar="${o.id}">Reenviar 💬</button>` : ''}
           ${o.estado === 'cancelada' ? `<button type="button" class="btn btn--peligro" data-eliminar-orden="${o.id}">🗑 Eliminar</button>` : ''}
         </div>
+        </div>
       </article>`;
+  }
+
+  // Tarjetas que se minimizan con clic en la cabeza. Las Surtidas salen minimizadas; si alguien la abre,
+  // se queda abierta hasta que la orden cambie de columna. Sólo en esta pantalla (no se guarda).
+  const plegadas = new Map(); // id -> true/false que eligió el usuario
+  const estadoVisto = new Map(); // id -> estatus con que se pintó la última vez
+  const estaPlegada = (o) => plegadas.get(o.id) ?? o.estado === 'surtida';
+  function notarCambios() {
+    for (const o of ordenes) {
+      if (estadoVisto.has(o.id) && estadoVisto.get(o.id) !== o.estado) plegadas.delete(o.id); // pasó a Surtida: se minimiza sola
+      estadoVisto.set(o.id, o.estado);
+    }
   }
 
   // Dos tableros iguales: las de la sucursal (Concordia, por WhatsApp) y las de Almacén (capturadas aquí
   // o cambiadas a sucursal "Almacén" al editar).
   const esAlmacen = (o) => /^almac[eé]n$/i.test(String(o.sucursal ?? '').trim());
   function pintarPizarron() {
+    notarCambios();
     for (const [tablero, contador, filtro] of [['#pizarron-ordenes', '#pestana-ordenes-n', (o) => !esAlmacen(o)], ['#pizarron-almacen', '#pestana-almacen-n', esAlmacen]]) {
       const suyas = ordenes.filter((o) => o.estado in ESTATUS && filtro(o));
       for (const estado of ['aprobada', 'surtida', 'cancelada']) {
@@ -403,6 +437,13 @@ export function montarOctavio({ toast, alCambiar }) {
   });
 
   $('#ventana-ordenes').addEventListener('click', async (e) => {
+    const plegar = e.target.closest('[data-plegar-orden]');
+    if (plegar) {
+      const o = ordenes.find((x) => x.id === Number(plegar.dataset.plegarOrden));
+      if (o) plegadas.set(o.id, !estaPlegada(o));
+      pintarPizarron();
+      return;
+    }
     const editar = e.target.closest('[data-editar-orden]');
     if (editar) {
       const o = ordenes.find((x) => x.id === Number(editar.dataset.editarOrden));
@@ -458,6 +499,52 @@ export function montarOctavio({ toast, alCambiar }) {
         toast(err.message, true);
       }
       await recargar();
+    }
+  });
+
+  // ---- Recibir una orden de Almacén: Entregada / Entregada parcialmente, siempre con folio de entrada ----
+  const recibir = $('#recibir-orden');
+  const formRecibir = recibir.querySelector('form');
+  $('#ventana-ordenes').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-recibir-orden]');
+    if (!b) return;
+    const o = ordenes.find((x) => x.id === Number(b.dataset.recibirOrden));
+    if (!o) return;
+    const parcial = b.dataset.modo === 'parcial';
+    formRecibir.dataset.id = o.id;
+    formRecibir.dataset.modo = b.dataset.modo;
+    $('#recibir-orden-titulo').textContent = parcial ? `📦 ${o.folio} · Entregada parcialmente` : `✅ ${o.folio} · Entregada`;
+    $('#recibir-orden-resumen').innerHTML = `<b>${esc(o.proveedor ?? 'Sin proveedor')}</b> · ${esc(o.solicitante)}`;
+    $('#recibir-orden-ayuda').textContent = parcial
+      ? 'Escribe cuánto llegó de cada material. Lo que falte se queda pendiente en la orden.'
+      : 'Llegó todo lo que faltaba. La orden pasa a Surtidas.';
+    $('#recibir-orden-col').textContent = parcial ? 'Llegó' : '';
+    $('#recibir-orden-renglones').innerHTML = o.renglones.map((r, i) => ({ ...r, pendiente: o.avance?.[i]?.pendiente ?? aNumero(r.cantidad) })).map((r, i) => `
+      <tr><td>${esc(r.material)}</td><td>${esc(r.pendiente)} ${esc(r.unidad)}</td>
+      <td>${parcial ? `<input type="number" min="0" max="${esc(r.pendiente)}" step="any" data-renglon="${i}" value="${r.pendiente > 0 ? '' : 0}" ${r.pendiente > 0 ? '' : 'disabled'} aria-label="Llegó de ${esc(r.material)}">` : ''}</td></tr>`).join('');
+    formRecibir.elements.folio.value = '';
+    $('#recibir-orden-aviso').textContent = '';
+    recibir.showModal();
+    (parcial ? recibir.querySelector('[data-renglon]:not([disabled])') : formRecibir.elements.folio)?.focus();
+  });
+  formRecibir.addEventListener('click', (e) => { if (e.target.closest('[data-cerrar]')) recibir.close(); });
+  formRecibir.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const boton = formRecibir.querySelector('[type="submit"]');
+    const parcial = formRecibir.dataset.modo === 'parcial';
+    const cantidades = parcial ? [...recibir.querySelectorAll('[data-renglon]')].map((i) => i.value || '0') : null;
+    boton.disabled = true;
+    try {
+      const r = await api.post(`/api/octavio/ordenes/${formRecibir.dataset.id}/recibir`, { folio: formRecibir.elements.folio.value, cantidades });
+      recibir.close();
+      toast(r.completa ? `${r.orden.folio} entregada: pasó a Surtidas y a Entradas de Almacén` : `${r.orden.folio}: entrada registrada; lo que falta sigue pendiente`);
+      await recargar();
+      alCambiar();
+      $('#pestana-entradas').click(); // se ve la entrada recién registrada
+    } catch (err) {
+      $('#recibir-orden-aviso').textContent = err.message;
+    } finally {
+      boton.disabled = false;
     }
   });
 

@@ -40,7 +40,14 @@
       <button type="button" class="ventana__cerrar" data-sp-despues aria-label="Ahora no">✕</button>
     </header>
     <p id="sp-nota" class="sp__nota"></p>
-    <div id="sp-paso-dia">
+    <div id="sp-paso-tipo" hidden>
+      <p class="sp__pregunta">¿Esta nota es para envío o la cargarán en Almacén?</p>
+      <div class="sp__opciones">
+        <button type="button" class="btn" data-sp-tipo="envio">🚚 Envío</button>
+        <button type="button" class="btn btn--secundario" data-sp-tipo="almacen">🏬 Cargan en Almacén</button>
+      </div>
+    </div>
+    <div id="sp-paso-dia" hidden>
       <p class="sp__pregunta">¿Esta nota es para Reparto del día, Reparto de mañana u Otro día?</p>
       <div class="sp__opciones">
         <button type="button" class="btn" data-sp-dia="hoy">🚚 Reparto del día</button>
@@ -490,6 +497,57 @@
     </form>
   </dialog>
 
+  <!-- Max: recibir una orden de compra de Almacén (Entregada / Entregada parcialmente) -->
+  <dialog id="recibir-orden" class="dialogo dialogo--editar" aria-labelledby="recibir-orden-titulo">
+    <form autocomplete="off">
+      <h2 id="recibir-orden-titulo"></h2>
+      <div id="recibir-orden-resumen" class="dialogo__resumen"></div>
+      <p id="recibir-orden-ayuda" class="dialogo__aviso"></p>
+      <table class="recibir__tabla">
+        <thead><tr><th>Material</th><th>Falta</th><th id="recibir-orden-col">Llegó</th></tr></thead>
+        <tbody id="recibir-orden-renglones"></tbody>
+      </table>
+      <label class="campo">Folio de entrada (factura o nota del proveedor) <input name="folio" required></label>
+      <p id="recibir-orden-aviso" class="dialogo__aviso dialogo__aviso--error"></p>
+      <div class="dialogo__botones">
+        <button type="button" class="btn btn--secundario" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn btn--ruta">Guardar y pasar a Entradas</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="entrega-pasada" class="dialogo" aria-labelledby="entrega-pasada-titulo">
+    <form method="dialog">
+      <h2 id="entrega-pasada-titulo">📅 Registrar entrega pasada</h2>
+      <div id="entrega-pasada-resumen" class="dialogo__resumen"></div>
+      <p class="dialogo__aviso">Queda entregada en esa fecha: sale en el historial y en el formato de reparto de ese día, no en los de hoy. No se le manda WhatsApp al cliente.</p>
+      <div class="entrega-pasada__campos">
+        <label class="campo">¿Qué día se entregó? <input type="date" id="entrega-pasada-fecha" required></label>
+        <label class="campo">Viaje <select id="entrega-pasada-viaje"></select></label>
+        <label class="campo">Chofer <select id="entrega-pasada-chofer" required></select></label>
+        <label class="campo">Camión <select id="entrega-pasada-camion"></select></label>
+      </div>
+      <p id="entrega-pasada-aviso" class="dialogo__aviso dialogo__aviso--error" hidden></p>
+      <div class="dialogo__botones">
+        <button value="cancelar" class="btn btn--secundario" formnovalidate>Cancelar</button>
+        <button value="guardar" class="btn" id="entrega-pasada-guardar">✔ Registrar entrega</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="parcial-cuando" class="dialogo" aria-labelledby="parcial-cuando-titulo">
+    <form method="dialog">
+      <h2 id="parcial-cuando-titulo">🚚 ¿Para cuándo es esta salida?</h2>
+      <div id="parcial-cuando-resumen" class="dialogo__resumen"></div>
+      <p class="dialogo__aviso">Lo que no sale se queda en Por Confirmar · Otro día.</p>
+      <div class="dialogo__botones">
+        <button value="hoy" class="btn btn--ruta" autofocus>🚚 Reparto del día</button>
+        <button value="manana" class="btn btn--secundario">⏰ Reparto de mañana</button>
+        <button value="otro" class="btn btn--secundario">🗓 Otro día</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="salida-completa" class="dialogo" aria-labelledby="salida-completa-titulo">
     <form method="dialog">
       <h2 id="salida-completa-titulo">📦 ¿El material está saliendo completo?</h2>
@@ -511,6 +569,7 @@
         <input id="confirmar-telefono" type="tel" inputmode="tel" placeholder="981 196 5122" autocomplete="off">
       </label>
       <p id="confirmar-whatsapp" class="dialogo__aviso"></p>
+      <label class="dialogo__no-avisar"><input type="checkbox" id="confirmar-no-avisar"> 🔕 No avisar al cliente esta vez</label>
       <div class="dialogo__botones">
         <button value="cancelar" class="btn btn--secundario" autofocus>Cancelar</button>
         <button value="confirmar" class="btn btn--ruta">Sí, va en camino ▶</button>
@@ -629,8 +688,11 @@
   </dialog>
 
   <dialog id="ventana-historial" class="dialogo dialogo--historial" aria-labelledby="historial-titulo">
-    <h2 id="historial-titulo">📚 Historial de notas entregadas</h2>
-    <p class="dialogo__aviso">Las últimas 200.</p>
+    <div class="historial__cabeza">
+      <h2 id="historial-titulo">📚 Historial de notas entregadas</h2>
+      <input type="search" id="historial-buscar" class="historial__buscar" placeholder="🔍 Buscar por cliente o folio..." aria-label="Buscar por cliente o folio" autocomplete="off">
+    </div>
+    <p class="dialogo__aviso" id="historial-aviso">Las últimas 200.</p>
     <div class="historial__tabla">
       <table>
         <thead><tr><th>Entregada</th><th>Folio</th><th>Cliente</th><th>Productos</th><th>Chofer · Camión</th><th></th></tr></thead>
@@ -638,6 +700,7 @@
       </table>
     </div>
     <div class="dialogo__botones">
+      <a class="btn btn--sheets" href="https://docs.google.com/spreadsheets/d/1fTDdSPO2t9rxo4GZxeKxqJFws9Lgr4iAhlyCKUDgeBo/edit" target="_blank" rel="noopener">📊 Formato reparto</a>
       <button type="button" class="btn btn--secundario" data-cerrar-historial>Cerrar</button>
     </div>
   </dialog>

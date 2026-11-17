@@ -10,6 +10,7 @@ export const AVISO_WHATSAPP = {
   sin_telefono: '💬 Sin teléfono: no se avisó',
   no_whatsapp: '💬 Ese número no tiene WhatsApp',
   error: '⚠️ WhatsApp falló',
+  sin_aviso: '🔕 No se avisó al cliente',
 };
 // Registro de la entrega en Google Sheets (tabla sheets_registros).
 const REGISTRO_SHEETS = {
@@ -63,7 +64,7 @@ function hora(fecha) {
 }
 
 // Igual que en los corchos: unidad, número de viaje y chofer de cada nota.
-const VIAJES = ['1er', '2do', '3er', '4to', '5to'];
+const VIAJES = ['1er', '2do', '3er', '4to', '5to', '6to', '7mo'];
 const viajeDe = (n) => Math.min(Math.max(Number(n.viaje) || 1, 1), VIAJES.length);
 
 function logistica(nota) {

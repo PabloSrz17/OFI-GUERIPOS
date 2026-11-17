@@ -132,4 +132,56 @@ function armar(renglones, avisos) {
   };
 }
 
-module.exports = { renglonesVentana, dividir, armar };
+// Cuánto hay de cada producto (con cantidad) en una nota: clave -> { cantidad, base }.
+function porProducto(nota) {
+  const mapa = new Map();
+  if (!nota) return mapa;
+  for (const r of renglonesDe(nota).renglones) {
+    const n = aNumero(r.cantidad);
+    if (n === null) continue;
+    const clave = claveDe(r);
+    const actual = mapa.get(clave);
+    mapa.set(clave, { cantidad: (actual?.cantidad ?? 0) + n, base: actual?.base ?? r });
+  }
+  return mapa;
+}
+
+// Un viaje cambió de "antes" a "despues" (null = se borró). Lo que el viaje bajó regresa al saldo y lo
+// que subió se toma del saldo (sin pasarse de lo que queda). Un producto que el saldo no tiene y el
+// viaje sube se deja como está: puede ser material nuevo o una corrección de nombre.
+// Devuelve los renglones del saldo como quedan, o null si no cambia nada.
+function saldoAjustado(saldo, antes, despues) {
+  const viejo = porProducto(antes);
+  const nuevo = porProducto(despues);
+  const cambios = new Map();
+  for (const clave of new Set([...viejo.keys(), ...nuevo.keys()])) {
+    const delta = (viejo.get(clave)?.cantidad ?? 0) - (nuevo.get(clave)?.cantidad ?? 0);
+    if (Math.abs(delta) > 1e-9) cambios.set(clave, { delta, base: viejo.get(clave)?.base ?? nuevo.get(clave).base });
+  }
+  if (!cambios.size) return null;
+  const { renglones, avisos } = saldo ? renglonesDe(saldo) : { renglones: [], avisos: [] };
+  const enSaldo = porProducto(saldo);
+  let movio = false;
+  const resultado = [];
+  const vistos = new Set();
+  for (const r of renglones) {
+    const clave = claveDe(r);
+    const c = aNumero(r.cantidad) === null ? null : cambios.get(clave);
+    if (!c) { resultado.push(r); continue; }
+    if (vistos.has(clave)) continue; // repetido: ya se sumó en el primero
+    vistos.add(clave);
+    const total = enSaldo.get(clave).cantidad;
+    const queda = total + c.delta;
+    if (queda < -1e-9) throw httpError(400, `En el saldo sólo quedan ${redondear(total)} de ${r.material}: no alcanza para subir el viaje`);
+    movio = true;
+    if (queda > 1e-9) resultado.push(igual(queda, aNumero(r.cantidad)) ? r : conCantidad(r, redondear(queda)));
+  }
+  for (const [clave, c] of cambios) {
+    if (enSaldo.has(clave) || c.delta <= 0) continue;
+    movio = true;
+    resultado.push(conCantidad(c.base, redondear(c.delta))); // lo que bajó y el saldo no tenía
+  }
+  return movio ? { renglones: resultado, avisos } : null;
+}
+
+module.exports = { renglonesVentana, dividir, armar, saldoAjustado };

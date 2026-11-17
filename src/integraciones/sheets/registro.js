@@ -23,6 +23,7 @@ const stmts = {
   renombrar: db.prepare('UPDATE sheets_registros SET folio_hoja = ? WHERE nota_id = ?'),
   encolar: db.prepare('INSERT INTO sheets_cambios (accion, fecha, folio, nuevo) VALUES (?, ?, ?, ?)'),
   siguiente: db.prepare('SELECT * FROM sheets_cambios ORDER BY id LIMIT 1'),
+  cambiosDe: db.prepare('SELECT 1 FROM sheets_cambios WHERE folio = ? LIMIT 1'),
   aplicado: db.prepare('DELETE FROM sheets_cambios WHERE id = ?'),
   vencidos: db.prepare(`DELETE FROM sheets_cambios WHERE creado_en < datetime('now', 'localtime', '-7 days')`),
   porReintentar: db.prepare(`
@@ -49,7 +50,16 @@ function fila(nota) {
   };
 }
 
-async function enviar(cuerpo) {
+// La hoja atiende de una en una (candado del script): si se mandan varias juntas, se forman allá y se
+// vencen. Aquí se forman en orden y cada una espera a que termine la anterior.
+let turno = Promise.resolve();
+function enviar(cuerpo) {
+  const esta = turno.then(() => enviarYa(cuerpo));
+  turno = esta.catch(() => {});
+  return esta;
+}
+
+async function enviarYa(cuerpo) {
   const respuesta = await fetch(config.url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -77,14 +87,25 @@ async function registrar(nota) {
   }
   enCurso.add(nota.id);
   const datos = fila(nota);
+  let otraVez = null;
   try {
+    // Si antes falló (o se cortó), el renglón pudo quedar escrito en otro día: se borra primero.
+    if (stmts.previo.get(nota.id)) stmts.encolar.run('borrar', datos.fecha, nota.folio, null);
     await aplicarCambios(); // primero lo pendiente: un borrado atrasado no debe tumbar este renglón
+    if (stmts.cambiosDe.get(nota.folio)) throw new Error('la hoja no respondió al borrar el renglón anterior');
     await enviar({ fila: datos });
     // Pudieron cancelarla, regresarla o pasarla a ALMACÉN mientras se escribía: ese renglón ya no debe estar.
     const actual = notas.obtenerSiExiste(nota.id);
     if (actual?.estado !== 'entregado' || actual.es_almacen) {
       stmts.encolar.run('borrar', datos.fecha, nota.folio, null);
       aplicarCambios();
+      return;
+    }
+    // La cambiaron de día (o se volvió a entregar) mientras se escribía: va de nuevo en su día.
+    if (fila(actual).fecha !== datos.fecha) {
+      stmts.encolar.run('borrar', datos.fecha, nota.folio, null);
+      stmts.guardar.run(nota.id, 'error', 'cambió de día mientras se escribía', null, null);
+      otraVez = actual;
       return;
     }
     stmts.guardar.run(nota.id, 'registrado', null, nota.folio, datos.fecha);
@@ -97,6 +118,7 @@ async function registrar(nota) {
     console.error(`[sheets] ${nota.folio}:`, err.message);
   } finally {
     enCurso.delete(nota.id);
+    if (otraVez) registrar(otraVez);
   }
 }
 
@@ -130,7 +152,7 @@ function borrarRenglon(nota) {
 }
 
 function alRegresar(nota) {
-  if (nota.sheets === 'registrado') borrarRenglon(nota);
+  if (['registrado', 'error'].includes(nota.sheets)) borrarRenglon(nota);
   stmts.quitar.run(nota.id); // al volver a entregarla se escribe de nuevo
 }
 
