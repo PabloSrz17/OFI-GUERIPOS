@@ -58,6 +58,7 @@ app.use('/api/pizarron', require('./routes/pizarron.routes'));
 app.use('/api/asistencias', require('./routes/asistencias.routes'));
 app.use('/api/reportes', require('./routes/reportes.routes'));
 app.use('/api/evidencias', require('./routes/evidencias.routes'));
+app.use('/api/whatsapp', require('./routes/whatsapp-ventana.routes'));
 
 // Tiempo real (Server-Sent Events): cada pantalla abierta recibe un aviso al cambiar algo y se refresca.
 const EVENTOS = {
@@ -98,7 +99,7 @@ app.get('/api/resumen', (req, res) =>
 // Estado de WhatsApp y, si falta vincular, el QR a escanear (lo usa /whatsapp.html). El QR sólo se
 // entrega en esta PC: quien lo escanea queda dueño del WhatsApp del negocio.
 app.get('/api/whatsapp', async (req, res) =>
-  res.json({ ...integraciones.obtener().whatsapp, qr: seguridad.esEstaPC(req) ? await whatsapp.qrSvg() : null }));
+  res.json({ ...integraciones.obtener().whatsapp, estaPC: seguridad.esEstaPC(req), qr: seguridad.esEstaPC(req) ? await whatsapp.qrSvg() : null }));
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
 app.use(manejadorErrores);

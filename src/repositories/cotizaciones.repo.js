@@ -1,11 +1,13 @@
 // Cotizaciones de El Inspector, lista de precios y fletes por colonia.
 const db = require('../db/connection');
 const clientes = require('./clientes.repo');
-const { clave } = require('../integraciones/inspector/cotizador');
+const { clave, unidadCotizacion } = require('../integraciones/inspector/cotizador');
 
 const stmts = {
   precios: db.prepare('SELECT * FROM precios WHERE activo = 1 ORDER BY nombre'),
   precioPorId: db.prepare('SELECT * FROM precios WHERE id = ?'),
+  cambiarUnidad: db.prepare(`UPDATE precios SET unidad = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
+  quitarPrecio: db.prepare(`UPDATE precios SET activo = 0, actualizado_en = datetime('now', 'localtime') WHERE id = ? AND activo = 1`),
   nuevoPrecio: db.prepare('INSERT INTO precios (nombre, unidad, precio, claves) VALUES (?, ?, ?, ?)'),
   cambiarPrecio: db.prepare(`UPDATE precios SET precio = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ?`),
   fletes: db.prepare('SELECT * FROM fletes ORDER BY colonia'),
@@ -24,6 +26,7 @@ const stmts = {
   partidas: db.prepare('SELECT * FROM cotizacion_partidas WHERE cotizacion_id = ? ORDER BY orden'),
   recientes: db.prepare(`
     SELECT co.id, co.total, co.colonia, co.whatsapp, co.creado_en, co.estado, co.seguimiento_estado, co.seguimiento_para,
+           co.aviso_cliente, co.aviso_en, co.aviso_texto,
            cl.nombre AS cliente, cl.telefono AS cliente_telefono
     FROM cotizaciones co JOIN clientes cl ON cl.id = co.cliente_id
     ORDER BY co.id DESC LIMIT ?`),
@@ -75,14 +78,20 @@ function aprender(partidas, colonia, actualizarPrecios) {
       }
       continue;
     }
-    const enLista = p.precio_id ? stmts.precioPorId.get(p.precio_id) : null;
+    // Mismo nombre que uno ya guardado ("Varilla 3/8" = "VARILLA 3/8"): ése, no uno repetido.
+    const enLista = (p.precio_id ? stmts.precioPorId.get(p.precio_id) : null)
+      ?? stmts.precios.all().find((x) => clave(x.nombre) === clave(p.descripcion));
     if (!enLista) {
       const claves = [...new Set([clave(p.texto), clave(p.descripcion)].filter(Boolean))].join(',');
       stmts.nuevoPrecio.run(p.descripcion, p.unidad, p.precio, claves);
       aprendido.nuevos.push(p.descripcion);
-    } else if (actualizarPrecios && enLista.precio !== p.precio) {
-      stmts.cambiarPrecio.run(p.precio, enLista.id);
-      aprendido.actualizados.push(enLista.nombre);
+    } else if (actualizarPrecios) {
+      const otroPrecio = enLista.precio !== p.precio;
+      // La unidad también es del concepto: la próxima vez se pone sola ("Block de 10" -> pza).
+      const otraUnidad = p.unidad && unidadCotizacion(enLista.unidad) !== p.unidad;
+      if (otroPrecio) stmts.cambiarPrecio.run(p.precio, enLista.id);
+      if (otraUnidad) stmts.cambiarUnidad.run(p.unidad, enLista.id);
+      if (otroPrecio || otraUnidad) aprendido.actualizados.push(enLista.nombre);
     }
   }
   return aprendido;
@@ -118,6 +127,8 @@ const editar = db.transaction((id, { partidas, total }, datos = null) => {
 module.exports = {
   editar,
   precios: () => stmts.precios.all(),
+  // 🧹 Se oculta (activo = 0): ya no se sugiere ni se cotiza; las cotizaciones viejas no cambian.
+  quitarPrecio: (id) => stmts.quitarPrecio.run(id).changes > 0,
   fletes: () => stmts.fletes.all(),
   fletePorColonia: (colonia) => stmts.flete.get(clave(colonia)) ?? null,
   aprobar,

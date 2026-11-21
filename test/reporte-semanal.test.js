@@ -95,6 +95,8 @@ test('Control de Gasolina: la carga anotada a mano sale en la bitácora y en los
   assert.equal(cargas[0].reporto, 'Oficina (a mano)');
   assert.equal(total, 450);
   assert.equal(reporte.bitacoraCombustible({ unidad: 'esta', min: '500' }).cargas.length, 0);
+  // Se anota con la fecha de hoy: se borra para no colarse en otra prueba si hoy cae en su semana.
+  db.prepare('DELETE FROM combustible WHERE id = ?').run(c.id);
 });
 
 test('Edgar: notas del mismo chofer y unidad que salen con 20 minutos o menos entre sí son un solo viaje', () => {

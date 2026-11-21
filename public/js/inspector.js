@@ -5,6 +5,8 @@ import { api } from './api.js';
 import { formatear } from './telefono.js';
 import { miniaturaFoto } from './visor-foto.js';
 import { filaArticuloConPrecio as filaArticulo } from './captura.js';
+import { selectUnidad, enMayusculas, unidadCotizacion, UNIDADES } from './unidades-cotizacion.js';
+import { montarSugerencias } from './sugerencias-conceptos.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const dinero = (n) => `$${Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -31,7 +33,7 @@ function filaHtml(p, i) {
     <tr data-i="${i}" class="${p.tipo === 'flete' ? 'fila-flete' : ''}">
       <td><input data-campo="descripcion" value="${esc(p.descripcion)}"></td>
       <td><input data-campo="cantidad" value="${esc(p.cantidad)}" class="n"></td>
-      <td><input data-campo="unidad" value="${esc(p.unidad)}" class="corto"></td>
+      <td>${p.tipo === 'flete' ? `<input data-campo="unidad" value="${esc(p.unidad)}" class="corto">` : selectUnidad('data-campo="unidad" class="corto"', p.unidad)}</td>
       <td><input data-campo="precio" type="number" min="0" step="any" value="${falta ? '' : esc(p.precio)}"
                  class="n ${falta ? 'falta' : ''}" placeholder="${p.tipo === 'flete' ? 'sin flete' : '¿precio?'}"></td>
       <td class="n importe"></td>
@@ -72,7 +74,7 @@ function recalcular(raiz, b) {
   let completos = true;
   raiz.querySelectorAll('tbody tr').forEach((tr) => {
     const p = b.partidas[tr.dataset.i];
-    for (const input of tr.querySelectorAll('input')) p[input.dataset.campo] = input.value;
+    for (const input of tr.querySelectorAll('input, select')) p[input.dataset.campo] = input.value;
     const sinFlete = p.tipo === 'flete' && !(Number(p.precio) > 0); // opcional: no aparece en la cotización
     const cantidad = aNumero(p.cantidad);
     const falta = !sinFlete && (p.precio === '' || !(Number(p.precio) >= 0) || !(cantidad > 0));
@@ -117,7 +119,33 @@ function clicRenglon(raiz, b, e) {
   return true;
 }
 
+// Lista de precios ("conceptos"): sugiere precio y unidad al escribir (mismas reglas que buscarPrecio del servidor).
+let catalogo = [];
+const clave = (t) => ` ${String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9ñ ]/g, ' ').replace(/s+/g, ' ').trim()} `;
+function conceptoDeLista(material) {
+  const t = clave(material);
+  let mejor = null;
+  for (const p of catalogo) {
+    for (const k of p.claves.split(',').map((x) => x.trim()).filter(Boolean)) {
+      if (t.includes(` ${k} `) && k.length > (mejor?.largo ?? 0)) mejor = { p, largo: k.length };
+    }
+  }
+  return mejor?.p ?? null;
+}
+
+// La unidad del concepto se pone sola, sin pisar la que alguien escogió a mano.
+function sugerirUnidad(select, concepto) {
+  if (!select || (select.value && !select.dataset.sugerido)) return;
+  const u = unidadCotizacion(concepto?.unidad);
+  if (!UNIDADES.includes(u)) return;
+  select.value = u;
+  select.dataset.sugerido = '1';
+}
+const alEscogerUnidad = (e) => { if (e.target.tagName === 'SELECT') delete e.target.dataset.sugerido; };
+
 function alEscribir(raiz, b, e) {
+  alEscogerUnidad(e);
+  if (e.target.dataset.campo === 'descripcion') sugerirUnidad(e.target.closest('tr').querySelector('select[data-campo="unidad"]'), conceptoDeLista(e.target.value));
   if (e.target.closest('tbody')) recalcular(raiz, b);
   if (e.target.dataset.dato === 'colonia') { // el flete sigue a la colonia
     const flete = b.partidas.find((p) => p.tipo === 'flete');
@@ -154,20 +182,64 @@ export function montarInspector({ toast, alAprobar }) {
   let editando = null; // { cot, partidas }: cotización del historial abierta para corregir
   let historial = [];
   const buscar = document.querySelector('#cotizaciones-buscar');
-  // Lista de precios para sugerir el precio al escribir el material (mismas reglas que buscarPrecio del servidor).
-  let catalogo = [];
-  api.get('/api/cotizaciones/precios').then((r) => { catalogo = r.precios; }).catch(() => {});
-  const clave = (t) => ` ${String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9ñ ]/g, ' ').replace(/s+/g, ' ').trim()} `;
-  function precioDeLista(material) {
-    const t = clave(material);
-    let mejor = null;
-    for (const p of catalogo) {
-      for (const k of p.claves.split(',').map((x) => x.trim()).filter(Boolean)) {
-        if (t.includes(` ${k} `) && k.length > (mejor?.largo ?? 0)) mejor = { precio: p.precio, largo: k.length };
-      }
-    }
-    return mejor?.precio ?? null;
+  api.get('/api/cotizaciones/precios').then((r) => { catalogo = r.precios; pintarConceptos(); }).catch(() => {});
+
+  // Cliente, colonia y descripciones de la cotización en MAYÚSCULAS al teclear.
+  document.addEventListener('input', (e) => { if (e.target.closest?.('#form-cotizar, .cot')) enMayusculas(e); }, true);
+
+  // 🧹 Conceptos guardados (la lista de precios que se sugiere al escribir el material): borrar los repetidos
+  // o mal escritos. Se ocultan: ya no se sugieren ni Chatito los usa al cotizar.
+  const conceptosBuscar = document.querySelector('#conceptos-buscar');
+  function pintarConceptos() {
+    const t = conceptosBuscar.value.trim().toUpperCase();
+    const lista = catalogo.filter((p) => p.nombre.toUpperCase().includes(t))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }) || a.id - b.id);
+    document.querySelector('#conceptos-n').textContent = catalogo.length;
+    document.querySelector('#conceptos-lista').innerHTML = lista.map((p) => `
+      <li><span>${esc(p.nombre)} <small>${esc(unidadCotizacion(p.unidad))} · ${dinero(p.precio)}</small></span>
+        <button type="button" class="btn btn--secundario" data-borrar-concepto="${p.id}" aria-label="Borrar ${esc(p.nombre)}">🗑 Borrar</button></li>`).join('')
+      || '<li>No hay conceptos con ese nombre.</li>';
+    document.querySelector('#lista-materiales').innerHTML = catalogo.map((p) => `<option value="${esc(p.nombre)}"></option>`).join('');
   }
+  conceptosBuscar.addEventListener('input', pintarConceptos);
+  async function borrarConcepto(p) {
+    try {
+      await api.delete(`/api/cotizaciones/precios/${p.id}`);
+    } catch (err) {
+      toast(err.message, true);
+      throw err;
+    }
+    catalogo = catalogo.filter((x) => x.id !== p.id);
+    pintarConceptos();
+    toast(`"${p.nombre}" borrado de los conceptos`);
+  }
+  document.querySelector('#conceptos-lista').addEventListener('click', async (e) => {
+    const boton = e.target.closest('[data-borrar-concepto]');
+    if (!boton) return;
+    const p = catalogo.find((x) => x.id === Number(boton.dataset.borrarConcepto));
+    if (!p || !window.confirm(`¿Borrar "${p.nombre}" (${dinero(p.precio)}) de los conceptos guardados?`)) return;
+    boton.disabled = true;
+    await borrarConcepto(p).catch(() => { boton.disabled = false; });
+  });
+
+  // Sugerencias al escribir la descripción, con 🗑 para borrar ahí mismo. Al elegir una se ponen su precio
+  // y su unidad (sin pisar lo que alguien ya escribió a mano).
+  montarSugerencias({
+    campos: '#cotizar-articulos [data-articulo="material"], .cot [data-campo="descripcion"]',
+    lista: () => catalogo,
+    alBorrar: borrarConcepto,
+    alElegir(input, p) {
+      const fila = input.closest('.fila-articulo, tr');
+      const precio = fila.querySelector('[data-articulo="precio"], [data-campo="precio"]');
+      sugerirUnidad(fila.querySelector('select'), p);
+      if (precio && (!precio.value || precio.dataset.sugerido)) {
+        precio.value = p.precio ?? '';
+        precio.dataset.sugerido = '1';
+      }
+      (precio ?? input).dispatchEvent(new Event('input', { bubbles: true })); // recalcula importes
+      if (precio) precio.dataset.sugerido = '1'; // el evento de arriba lo borra en Nueva cotización
+    },
+  });
   // Importe de cada renglón y total abajo de los artículos.
   function recalcularFilas() {
     let total = 0;
@@ -184,11 +256,15 @@ export function montarInspector({ toast, alAprobar }) {
   filas.addEventListener('input', (e) => {
     const precio = e.target.closest('.fila-articulo')?.querySelector('[data-articulo="precio"]');
     if (e.target.dataset.articulo === 'precio') delete e.target.dataset.sugerido;
-    // Al escribir el material se sugiere el de la lista, sin pisar uno escrito a mano.
-    if (e.target.dataset.articulo === 'material' && precio && (!precio.value || precio.dataset.sugerido)) {
-      const sugerido = precioDeLista(e.target.value);
-      precio.value = sugerido ?? '';
-      if (sugerido != null) precio.dataset.sugerido = '1';
+    alEscogerUnidad(e);
+    // Al escribir el material se sugieren el precio y la unidad de la lista, sin pisar lo escrito a mano.
+    if (e.target.dataset.articulo === 'material') {
+      const concepto = conceptoDeLista(e.target.value);
+      sugerirUnidad(e.target.closest('.fila-articulo').querySelector('select[data-articulo="unidad"]'), concepto);
+      if (precio && (!precio.value || precio.dataset.sugerido)) {
+        precio.value = concepto?.precio ?? '';
+        if (concepto) precio.dataset.sugerido = '1';
+      }
     }
     recalcularFilas();
   });
@@ -251,6 +327,11 @@ export function montarInspector({ toast, alAprobar }) {
       no_whatsapp: '⚠️ recordatorio: sin WhatsApp',
       error: '⚠️ recordatorio no salió',
     }[c.seguimiento_estado];
+    // Lo que el cliente avisó por WhatsApp (Chatito, pagos.js).
+    const avisoTxt = { pagado: '💰 El cliente avisó que pagó', comprobante: '🧾 Comprobante por revisar', confirmado: '✅ Confirmó' }[c.aviso_cliente];
+    const aviso = avisoTxt
+      ? `<br><small class="cot-aviso cot-aviso--${esc(c.aviso_cliente)}">${avisoTxt} · ${esc(String(c.aviso_en ?? '').slice(11, 16))} «${esc(c.aviso_texto)}»</small>`
+      : '';
     const botones = c.estado === 'aprobada'
       ? `<button type="button" class="btn" data-marcar="pagada">💰 Pagada</button>
          <button type="button" class="btn btn--secundario" data-marcar="cerrada">🚫 Cerrar</button>`
@@ -260,7 +341,7 @@ export function montarInspector({ toast, alAprobar }) {
       <li data-id="${c.id}">
         <span><a href="/api/cotizaciones/${c.id}/imagen" target="_blank">${esc(c.folio)}</a>
           · ${esc(c.cliente)} · ${esc(c.colonia)} · ${dinero(c.total)} · ${esc(c.creado_en.slice(0, 16))}
-          ${c.whatsapp === 'enviado' ? '· 💬' : ''} ${recordatorio ? `· ${recordatorio}` : ''}</span>
+          ${c.whatsapp === 'enviado' ? '· 💬' : ''} ${recordatorio ? `· ${recordatorio}` : ''}${aviso}</span>
         <span class="solicitudes__botones">
           <button type="button" class="btn btn--secundario" data-editar>✏️ Editar</button>
           ${botones}
@@ -446,7 +527,8 @@ export function montarInspector({ toast, alAprobar }) {
     t.json = JSON.stringify(s.borrador);
     t.borrador = { ...s.borrador, solicitud: s.mensaje, solicitud_id: s.id };
     t.el.innerHTML = `
-      <p class="autorizar__de"><b>${esc(s.nombre)}</b> · ${esc(s.recibido_en.slice(11, 16))}</p>
+      <p class="autorizar__de"><b>${esc(s.nombre)}</b> · ${esc(s.recibido_en.slice(11, 16))}
+        <button type="button" class="autorizar__whatsapp" data-abrir-whatsapp data-telefono="${esc(s.telefono)}" title="Ver y contestar su chat">💬 Abrir chat</button></p>
       <p class="solicitudes__mensaje"></p>
       <div class="auditoria">
         ${miniaturaFoto(s.foto)}

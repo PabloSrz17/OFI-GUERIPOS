@@ -205,11 +205,57 @@ export function montarOctavio({ toast, alCambiar }) {
       </article>`;
   }
 
+  // Semanas de lunes a sábado. El domingo no se trabaja: lo que se capture ese día va con la semana que acaba.
+  const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const isoDia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  function lunesDe(fecha) {
+    const d = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // domingo (0) retrocede 6: semana que acaba
+    return d;
+  }
+  function tituloSemana(lunes) {
+    const sabado = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + 5);
+    const ini = lunes.getMonth() === sabado.getMonth() ? `${lunes.getDate()}` : `${lunes.getDate()} de ${MESES[lunes.getMonth()]}`;
+    const anio = lunes.getFullYear() === sabado.getFullYear() ? '' : ` de ${lunes.getFullYear()}`;
+    return { sabado, texto: `Semana del ${ini}${anio} al ${sabado.getDate()} de ${MESES[sabado.getMonth()]} de ${sabado.getFullYear()}` };
+  }
+  // Qué semanas están abiertas: se respeta lo que el usuario abrió o cerró entre recargas.
+  const semanasAbiertas = new Map();
+
   function pintarTableroEntradas() {
     const aviso = entradas.length >= MAX_ENTRADAS ? `<p class="tablero-entradas__aviso">Se muestran las ${MAX_ENTRADAS} más recientes.</p>` : '';
     $('#pestana-entradas-n').textContent = entradas.length;
-    $('#pizarron-entradas').innerHTML = aviso + (entradas.map(tarjetaEntrada).join('') || '<p class="ordenes__vacio">Sin entradas todavía.</p>');
+    const semanas = new Map(); // lunes ISO -> entradas, de la más nueva a la más vieja
+    for (const e of entradas) {
+      const [a, m, d] = e.creado_en.slice(0, 10).split('-').map(Number);
+      const clave = isoDia(lunesDe(new Date(a, m - 1, d)));
+      semanas.set(clave, [...(semanas.get(clave) ?? []), e]);
+    }
+    const actual = isoDia(lunesDe(new Date()));
+    const orden = [...semanas.keys()].sort().reverse();
+    // La semana actual abre sola; si no tiene entradas, abre la más reciente.
+    const porDefecto = semanas.has(actual) ? actual : orden[0];
+    const bloques = orden.map((clave) => {
+      const lista = semanas.get(clave);
+      const [a, m, d] = clave.split('-').map(Number);
+      const { sabado, texto } = tituloSemana(new Date(a, m - 1, d));
+      const abierta = semanasAbiertas.get(clave) ?? clave === porDefecto;
+      return `
+        <details class="semana-entradas" data-semana="${clave}"${abierta ? ' open' : ''}>
+          <summary class="semana-entradas__cabeza">
+            <span class="semana-entradas__flecha" aria-hidden="true">▸</span>
+            <span class="semana-entradas__titulo">${texto}${clave === actual ? ' <span class="semana-entradas__hoy">ESTA SEMANA</span>' : ''}</span>
+            <span class="semana-entradas__n">${lista.length} ${lista.length === 1 ? 'entrada' : 'entradas'}</span>
+          </summary>
+          <div class="semana-entradas__tarjetas">${lista.map(tarjetaEntrada).join('')}</div>
+          <a class="semana-entradas__imprimir" href="/entradas.html?desde=${clave}&hasta=${isoDia(new Date(sabado.getFullYear(), sabado.getMonth(), sabado.getDate() + 1))}" target="_blank" rel="noopener">🖨 Imprimir esta semana</a>
+        </details>`;
+    });
+    $('#pizarron-entradas').innerHTML = aviso + (bloques.join('') || '<p class="ordenes__vacio">Sin entradas todavía.</p>');
   }
+  $('#pizarron-entradas').addEventListener('toggle', (e) => {
+    if (e.target.matches('.semana-entradas')) semanasAbiertas.set(e.target.dataset.semana, e.target.open);
+  }, true);
 
   async function recargar() {
     try {

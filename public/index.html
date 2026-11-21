@@ -283,6 +283,7 @@
         <p class="panel__rol"></p>
         <span class="panel__estado"></span>
       </div>
+      <button type="button" class="panel__whatsapp" data-abrir-whatsapp title="Ver y contestar WhatsApp" hidden>💬 WhatsApp</button>
       <button type="button" class="panel__cerrar" aria-label="Cerrar">×</button>
     </header>
     <p class="panel__titulo">AHORA</p>
@@ -371,6 +372,12 @@
           <summary>Historial de cotizaciones</summary>
           <input id="cotizaciones-buscar" type="search" placeholder="Buscar folio, cliente o colonia" aria-label="Buscar cotización">
           <ul id="cotizaciones-recientes"></ul>
+        </details>
+        <details class="inspector__recientes conceptos">
+          <summary>🧹 Conceptos guardados (<span id="conceptos-n">0</span>)</summary>
+          <p class="captura__ayuda">Los que se sugieren al escribir la descripción. Borra los repetidos o mal escritos.</p>
+          <input id="conceptos-buscar" type="search" placeholder="Buscar concepto, ej. varilla" aria-label="Buscar concepto">
+          <ul id="conceptos-lista" class="conceptos__lista"></ul>
         </details>
       </section>
     </div>

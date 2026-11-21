@@ -249,6 +249,7 @@ function abrirPanel(id) {
   panel.querySelector('textarea').placeholder = `Escríbele a ${AGENTES[id].nombre}…`;
   panel.querySelector('.panel__enviar').textContent = `Enviar a ${AGENTES[id].nombre}`;
   panel.querySelectorAll('[data-funcion]').forEach((f) => { f.hidden = f.dataset.funcion !== id; });
+  panel.querySelector('.panel__whatsapp').hidden = id !== 'inspector';
   if (id === 'chasis' && ultimoResumen) {
     marcarNotasVistas();
     actualizarOficina(ultimoResumen);

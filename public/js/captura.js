@@ -4,6 +4,7 @@ import { api } from './api.js';
 import { formatear } from './telefono.js';
 import { etiquetaOrigen } from './kanban.js';
 import { leerImagen, interpretarTicket } from './leer-ticket.js';
+import { selectUnidad } from './unidades-cotizacion.js';
 
 const MIN_CONFIANZA = 45; // menos que esto suele ser letra a mano o foto borrosa: mejor no llenar con basura
 const CONFIANZA_BUENA = 75; // el PDF de SICAR da 85 o más; la foto del impreso, unos 60 y con errores
@@ -18,8 +19,11 @@ export const filaArticulo = (a = {}) => `
   </div>`;
 
 // La de Nueva cotización: además, precio unitario e importe (cantidad × precio, se calcula solo).
+// Su unidad es una de las 5 fijas (unidades-cotizacion.js).
 export const filaArticuloConPrecio = (a = {}) => filaArticulo(a)
   .replace('<div class="fila-articulo">', '<div class="fila-articulo fila-articulo--precio">')
+  .replace(/<input data-articulo="unidad"[^>]*>/, () => selectUnidad('data-articulo="unidad"', a.unidad))
+  .replace(' list="lista-materiales"', '') // usa las sugerencias propias (sugerencias-conceptos.js), con 🗑
   .replace('<button type="button" class="fila-articulo__quitar"', `<label class="campo">Precio $ <input data-articulo="precio" type="number" min="0" step="any" inputmode="decimal" value="${esc(a.precio ?? '')}" placeholder="de la lista"></label>
     <p class="campo fila-articulo__importe">Importe <output data-articulo="importe">—</output></p>
     <button type="button" class="fila-articulo__quitar"`);

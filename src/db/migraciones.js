@@ -191,6 +191,14 @@ function salidasParciales(db) {
 }
 
 // Mini post-it: observación interna de la nota (no la ve el cliente ni va a la hoja).
+// Lo que el cliente avisó por WhatsApp de su cotización (pagado / confirmado / comprobante), con hora y texto.
+function avisoClienteCotizaciones(db) {
+  const columnas = db.prepare('PRAGMA table_info(cotizaciones)').all().map((c) => c.name);
+  for (const c of ['aviso_cliente', 'aviso_en', 'aviso_texto']) {
+    if (!columnas.includes(c)) db.exec(`ALTER TABLE cotizaciones ADD COLUMN ${c} TEXT`);
+  }
+}
+
 function postitDeNota(db) {
   const columnas = db.prepare('PRAGMA table_info(notas)').all().map((c) => c.name);
   if (!columnas.includes('postit')) db.exec('ALTER TABLE notas ADD COLUMN postit TEXT');
@@ -312,4 +320,5 @@ module.exports = function migrar(db) {
   camionPorNota(db);
   seguimientoCotizaciones(db);
   telefonosDesdeDirecciones(db);
+  avisoClienteCotizaciones(db);
 };

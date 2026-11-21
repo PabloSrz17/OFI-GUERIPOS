@@ -49,7 +49,8 @@ function soloRedLocal(req, res, next) {
 function hashesDeScripts(carpeta) {
   const hashes = new Set();
   for (const archivo of fs.readdirSync(carpeta).filter((a) => a.endsWith('.html'))) {
-    const html = fs.readFileSync(path.join(carpeta, archivo), 'utf8');
+    // El navegador lee los saltos de línea de Windows (\r\n) como \n: el hash debe ser del mismo texto.
+    const html = fs.readFileSync(path.join(carpeta, archivo), 'utf8').replace(/\r\n?/g, '\n');
     for (const [, codigo] of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)) {
       hashes.add(`'sha256-${crypto.createHash('sha256').update(codigo).digest('base64')}'`);
     }

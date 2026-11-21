@@ -38,12 +38,29 @@ test('busca en el catálogo por palabras completas y la clave más larga', () =>
   assert.equal(buscarPrecio(CATALOGO, 'block 10x20x40'), null);
 });
 
+test('vigas: respeta la medida aunque se haya aprendido "vigas" para otra', () => {
+  const vigas = [
+    { id: 112, nombre: 'VIGA 5.00 T-12-5 HILOS', unidad: 'pz', precio: 562.5, claves: 'vigas,viga 5 00 t 12 5 hilos' },
+    { id: 125, nombre: 'VIGA 4.20 T-12-5 HILOS', unidad: 'pz', precio: 508.2, claves: 'viga 4 20 t 12 5 hilos', actualizado_en: '2026-01-01' },
+    { id: 180, nombre: 'VIGA 4.20 T-12-5 HILOS', unidad: 'pz', precio: 525, claves: 'viga 4 20 t 12 5 hilos', actualizado_en: '2026-06-01' },
+    { id: 171, nombre: 'Viga de 4.90', unidad: 'pz', precio: 612.5, claves: 'viga de 4 90' },
+    { id: 172, nombre: 'Viga de 2 m', unidad: 'pz', precio: 250, claves: 'viga de 2 m' },
+  ];
+  assert.equal(buscarPrecio(vigas, 'vigas 3.28 m'), null);       // no hay de esa medida: la pone un humano
+  assert.equal(buscarPrecio(vigas, 'vigas 7'), null);
+  assert.equal(buscarPrecio(vigas, 'vigas 4.90').id, 171);
+  assert.equal(buscarPrecio(vigas, 'vigas 4.20').id, 180);        // la de precio más reciente
+  assert.equal(buscarPrecio(vigas, 'viga de 2 m').id, 172);
+  assert.equal(buscarPrecio(vigas, 'vigas 5.00').id, 112);
+  assert.equal(buscarPrecio(vigas, 'vigas').id, 112);              // sin medida, como antes
+});
+
 test('borrador: precio de lista, producto desconocido y flete sin precio', () => {
   const { solicitud } = interpretarSolicitud('Ana, 7 m3 polvo + 20 block 10x20x40, Fovi');
   const b = armarBorrador(solicitud, CATALOGO, null);
   assert.deepEqual(b.partidas.map((p) => [p.descripcion, p.unidad, p.precio]), [
-    ['Polvo', 'm³', 550],
-    ['Block 10x20x40', 'pz', null],
+    ['Polvo', 'm3', 550],
+    ['Block 10x20x40', 'pza', null],
     ['Flete a Fovi', 'viaje', null],
   ]);
   const conFlete = armarBorrador(solicitud, CATALOGO, { precio: 350 });

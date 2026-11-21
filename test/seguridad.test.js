@@ -46,7 +46,7 @@ test('otra página no puede cambiar datos', () => {
 });
 
 test('la CSP permite justo los scripts escritos en los HTML', () => {
-  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8').replace(/\r\n?/g, '\n');
   const [, mapa] = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
   const hashes = hashesDeScripts(path.join(__dirname, '../public'));
   assert.ok(hashes.includes(`'sha256-${crypto.createHash('sha256').update(mapa).digest('base64')}'`));

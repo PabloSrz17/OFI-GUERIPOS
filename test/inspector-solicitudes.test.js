@@ -66,7 +66,7 @@ test('quien ya pidió cotización puede seguir contestando sin repetir la palabr
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM conversaciones_whatsapp WHERE clave LIKE ?').get('%9990000003').n, 0);
 });
 
-test('la lista de hace menos de 2 minutos se junta con "cotizar por favor"', async () => {
+test('la lista de hace menos de 30 minutos se junta con "cotizar por favor"', async () => {
   const numero = '5219990000005';
   const db = require('../src/db/connection');
   const lista = mensaje('8 bultos de cemento\n3 kg de alambre', { numero });
@@ -78,14 +78,36 @@ test('la lista de hace menos de 2 minutos se junta con "cotizar por favor"', asy
   assert.equal(textos, '8 bultos de cemento\n3 kg de alambre\ncotizar por favor');
 });
 
-test('lo de hace más de 2 minutos no se junta', async () => {
+test('lo de hace más de 30 minutos no se junta', async () => {
   const numero = '5219990000006';
   const db = require('../src/db/connection');
   const vieja = mensaje('Ya llegó mi pedido?', { numero });
-  vieja.timestamp -= 121;
+  vieja.timestamp -= 31 * 60;
   await procesarMensaje(vieja);
   await procesarMensaje(mensaje('cotizar', { numero }));
   assert.equal(db.prepare('SELECT textos FROM conversaciones_whatsapp WHERE clave LIKE ?').get('%9990000006').textos, 'cotizar');
+});
+
+test('la lista de hace 5 minutos sí se junta (19-nov: se perdía con 2 minutos)', async () => {
+  const numero = '5219990000011';
+  const db = require('../src/db/connection');
+  const lista = mensaje('Material para el fovi:\n3 mtrs de polvo\n20 sacos de cemento', { numero });
+  lista.timestamp -= 5 * 60;
+  await procesarMensaje(lista);
+  await procesarMensaje(mensaje('hola, para cotizar este material', { numero }));
+  assert.equal(db.prepare('SELECT textos FROM conversaciones_whatsapp WHERE clave LIKE ?').get('%9990000011').textos,
+    'Material para el fovi:\n3 mtrs de polvo\n20 sacos de cemento\nhola, para cotizar este material');
+});
+
+test('"para cotizar este material" citando la lista: la lista citada cuenta aunque sea vieja', async () => {
+  const numero = '5219990000012';
+  const db = require('../src/db/connection');
+  const responde = mensaje('hola, para cotizar este material', { numero });
+  responde.hasQuotedMsg = true;
+  responde.getQuotedMessage = async () => ({ fromMe: false, body: 'Material para el fovi:\n10 sacos de cal' });
+  await procesarMensaje(responde);
+  assert.equal(db.prepare('SELECT textos FROM conversaciones_whatsapp WHERE clave LIKE ?').get('%9990000012').textos,
+    'Material para el fovi:\n10 sacos de cal\nhola, para cotizar este material');
 });
 
 test('no se mezclan los mensajes de otro número', async () => {

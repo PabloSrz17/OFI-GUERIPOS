@@ -19,6 +19,7 @@ const { bajarImagen } = require('../whatsapp/medios');
 const octavio = require('../octavio/ordenes');
 const evidencias = require('../sulema/evidencias');
 const combustible = require('../agentes/combustible');
+const pagos = require('./pagos');
 const ocr = require('./ocr');
 
 const Anthropic = AnthropicSDK.default ?? AnthropicSDK;
@@ -35,9 +36,10 @@ const pideCotizacion = (texto) => {
 };
 const HACE_24H = `datetime('now', 'localtime', '-24 hours')`;
 
-// Muchos mandan primero la lista y luego "cotizar por favor": lo de los 2 minutos anteriores se junta
-// con la palabra clave. Queda sólo en memoria: lo de quien no pide cotización nunca llega a la base.
-const VENTANA_MS = 2 * 60_000;
+// Muchos mandan primero la lista y luego "cotizar por favor": lo de los 30 minutos anteriores se junta
+// con la palabra clave (con 2 se perdió una lista mandada 5 min antes, 19-nov). Queda sólo en memoria:
+// lo de quien no pide cotización nunca llega a la base.
+const VENTANA_MS = 30 * 60_000;
 const recientes = new Map(); // clave -> [{ mensaje, texto, esFoto, ms }]
 const momento = (mensaje) => (mensaje.timestamp ? mensaje.timestamp * 1000 : Date.now());
 
@@ -132,6 +134,12 @@ const stmts = {
     ON CONFLICT (clave) DO UPDATE SET textos = @textos, esperando = @esperando, solicitud_id = @solicitud_id,
       actualizado_en = datetime('now', 'localtime')`),
   saludar: db.prepare(`UPDATE conversaciones_whatsapp SET esperando = 1, bienvenida_en = datetime('now', 'localtime') WHERE clave = ?`),
+  // Mensajes ya leídos (en vivo o al ponerse al día) y hasta dónde se leyó, para no repetir.
+  marcarVisto: db.prepare(`INSERT OR IGNORE INTO integracion_vistos (origen, folio, resultado) VALUES ('whatsapp', ?, 'leido')`),
+  vistoHasta: db.prepare(`INSERT INTO ajustes (clave, valor) VALUES ('whatsapp_visto_hasta', @t)
+    ON CONFLICT (clave) DO UPDATE SET valor = MAX(CAST(valor AS INTEGER), CAST(@t AS INTEGER))`),
+  leerVistoHasta: db.prepare(`SELECT CAST(valor AS INTEGER) AS t FROM ajustes WHERE clave = 'whatsapp_visto_hasta'`),
+  limpiarVistos: db.prepare(`DELETE FROM integracion_vistos WHERE origen = 'whatsapp' AND fecha < datetime('now', 'localtime', '-7 days')`),
   atendida: db.prepare(`UPDATE conversaciones_whatsapp SET textos = '', esperando = 0, solicitud_id = NULL WHERE solicitud_id = ?`),
 };
 
@@ -228,7 +236,12 @@ async function procesarMensaje(mensaje) {
   // Sólo chats privados de texto o foto (no grupos, estados ni canales).
   const esFoto = mensaje.type === 'image';
   if (mensaje.fromMe || !(esFoto || mensaje.type === 'chat') || !/@(c\.us|lid)$/.test(mensaje.from)) return;
-  if (mensaje.timestamp && Date.now() / 1000 - mensaje.timestamp > MAX_ATRASO_S) return;
+  // Cada mensaje se lee una sola vez, llegue en vivo o al ponerse al día.
+  const idVisto = mensaje.id?.id ? `${mensaje.from}:${mensaje.id.id}` : null;
+  if (idVisto && stmts.marcarVisto.run(idVisto).changes === 0) return;
+  if (mensaje.timestamp) stmts.vistoHasta.run({ t: String(mensaje.timestamp) });
+  // Viejo (la Oficina o WhatsApp estuvo apagado): sólo saca la tarjeta de cotización, sin contestarle nada.
+  const atrasado = Boolean(mensaje.timestamp && Date.now() / 1000 - mensaje.timestamp > MAX_ATRASO_S);
   const texto = String(mensaje.body ?? '').trim();
   if (!texto && !esFoto) return;
 
@@ -237,6 +250,8 @@ async function procesarMensaje(mensaje) {
   const telefono = normalizar(contacto?.id?.user ?? contacto?.number);
   const clave = telefono ?? mensaje.from;
 
+  // Sulema, Edgar y Max sólo en vivo: al ponerse al día no se contesta ni se anota nada de ellos.
+  if (!atrasado) {
   // Sulema primero: la foto de una nota firmada con "Sulema" y "nota" no es pedido ni orden.
   if (await evidencias.recibir(mensaje, { clave, texto, esFoto, envio: contacto?.pushname || contacto?.name || clave })) return;
 
@@ -262,10 +277,14 @@ async function procesarMensaje(mensaje) {
     await octavio.recibir(mensaje, { clave, telefono, contacto, texto, aviso: pideOrden, antes, leerFoto: bajarYLeer, guardarFoto });
     return;
   }
+  }
   if (telefono && stmts.esChofer.get(telefono)) return;
 
   const previa = stmts.conversacion.get(clave);
   const conv = previa && !previa.vencida ? previa : { textos: '', esperando: 0, solicitud_id: null };
+  // 💰 "ya pagué" / "confirmo" / foto del comprobante: su cotización abierta cambia sola (pagos.js).
+  // A media solicitud nueva (esperando su lista) no se toca: eso es su pedido, no un pago.
+  if (!pideCotizacion(texto) && !conv.esperando && pagos.revisar({ telefono, texto, esFoto })) return;
   // Quien ya pidió cotización sigue contestando (material, colonia, pago) sin repetir las palabras.
   const pide = pideCotizacion(texto);
   if (!pide && !conv.esperando && !conv.solicitud_id) {
@@ -273,8 +292,11 @@ async function procesarMensaje(mensaje) {
     return;
   }
   const antes = pide ? tomarRecientes(clave, momento(mensaje)) : [];
-  const anteriores = antes.filter((r) => !r.esFoto && r.texto).map((r) => r.texto);
-  const yaHablamos = () => Boolean(stmts.conversacion.get(clave)?.saludado || (telefono && stmts.contactoReciente.get({ t: telefono })));
+  // "para cotizar este material" contestando (citando) la lista: la lista citada también cuenta.
+  const citado = pide && mensaje.hasQuotedMsg ? await mensaje.getQuotedMessage().catch(() => null) : null;
+  const textoCitado = citado && !citado.fromMe ? String(citado.body ?? '').trim() : '';
+  const anteriores = [...new Set([textoCitado, ...antes.filter((r) => !r.esFoto && r.texto).map((r) => r.texto)].filter(Boolean))];
+  const yaHablamos = () => atrasado || Boolean(stmts.conversacion.get(clave)?.saludado || (telefono && stmts.contactoReciente.get({ t: telefono })));
   const fotos = antes.filter((r) => r.esFoto).map((r) => r.mensaje);
   if (esFoto) fotos.push(mensaje);
   if (fotos.length) {
@@ -303,6 +325,14 @@ async function procesarMensaje(mensaje) {
   // Con productos, la tarjeta sale desde el primer mensaje aunque falte colonia o pago: un humano lo completa
   // y lo que el cliente conteste después la actualiza.
   if (conProductos) guardarSolicitud(clave, { telefono, contacto, datos, textos, conv });
+  if (atrasado) {
+    // Pidió cotización de noche sin lista legible: igual sale su tarjeta para que alguien le escriba.
+    if (pide && !conProductos) {
+      const vacia = { nombre_cliente: datos?.nombre_cliente ?? '', colonia: datos?.colonia ?? '', metodo_pago: datos?.metodo_pago ?? '', productos: [{ cantidad: '', unidad: '', producto: '' }] };
+      guardarSolicitud(clave, { telefono, contacto, datos: vacia, textos, conv });
+    }
+    return;
+  }
   if (!hablamos && !completa) {
     // No mensaje.getChat(): falla en chats @lid. sendSeen false: el chat sigue sin leer para tu equipo.
     const falta = conProductos ? { material: false, colonia: !datos.colonia, pago: !datos.metodo_pago } : undefined;
@@ -361,11 +391,31 @@ async function cotizacionDeFotoGrupo(mensaje, clave, pie) {
   return id;
 }
 
+// Al conectar (por ejemplo en la mañana, tras una noche apagado) lee lo que llegó desde el último
+// mensaje leído, hasta 3 días atrás. Lo ya leído se salta (integracion_vistos). La primera vez sólo
+// apunta la hora: lo anterior ya se atendió en vivo.
+const MAX_PONERSE_AL_DIA_S = 3 * 24 * 3600;
+async function ponerseAlDia(whatsapp, encolar) {
+  const ahora = Math.floor(Date.now() / 1000);
+  const hasta = stmts.leerVistoHasta.get()?.t;
+  if (!hasta) { stmts.vistoHasta.run({ t: String(ahora) }); return 0; }
+  stmts.limpiarVistos.run();
+  const mensajes = await whatsapp.mensajesDesde(Math.max(hasta - 60, ahora - MAX_PONERSE_AL_DIA_S));
+  mensajes.forEach(encolar);
+  console.log(`[inspector] poniéndose al día: ${mensajes.length} mensajes desde ${new Date(hasta * 1000).toLocaleString('es-MX')}`);
+  return mensajes.length;
+}
+
 // Uno a la vez: si llegan dos mensajes seguidos del mismo número, no salen dos bienvenidas.
 function iniciar(whatsapp) {
   let cola = Promise.resolve();
-  whatsapp.alMensaje((m) => {
+  const encolar = (m) => {
     cola = cola.then(() => procesarMensaje(m)).catch((err) => console.error('[inspector] WhatsApp:', err.message));
+  };
+  whatsapp.alMensaje(encolar);
+  whatsapp.alConectar(() => {
+    // Unos segundos para que WhatsApp termine de bajar los chats de la noche.
+    setTimeout(() => ponerseAlDia(whatsapp, encolar).catch((err) => console.error('[inspector] ponerse al día:', err.message)), 20_000);
   });
 }
 
@@ -375,6 +425,7 @@ module.exports = {
   obtener: (id) => stmts.porId.get(id),
   pideCotizacion,
   procesarMensaje,
+  ponerseAlDia,
   cotizacionDelGrupo,
   cotizacionDeFotoGrupo,
   pendientes: () => stmts.pendientes.all().map((s) => ({ ...s, borrador: JSON.parse(s.borrador) })),

@@ -19,6 +19,10 @@ const router = express.Router();
 // Historial: ?limite= hasta 200 (sin él, las últimas 10).
 router.get('/', (req, res) => res.json(cotizaciones.recientes(Math.min(Math.max(Number(req.query.limite) || 10, 1), 200))));
 router.get('/precios', (req, res) => res.json({ precios: cotizaciones.precios(), fletes: cotizaciones.fletes() }));
+router.delete('/precios/:id', (req, res) => {
+  if (!cotizaciones.quitarPrecio(Number(req.params.id))) return res.status(404).json({ error: 'Ese concepto ya no está' });
+  return res.status(204).end();
+});
 
 // Bandeja de solicitudes que llegaron por WhatsApp (pendientes de revisar).
 router.get('/solicitudes', (req, res) => res.json(solicitudes.pendientes()));

@@ -135,7 +135,19 @@ body { display: flex; flex-direction: column; overflow: hidden; background: #f7e
 .orden__estado--aprobada { background: #2563eb; }
 .orden__estado--surtida { background: #15803d; }
 .orden__estado--cancelada { background: #6b7280; }
-.tablero-entradas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; align-items: start; }
+.tablero-entradas { display: grid; gap: 12px; }
+/* Una semana por bloque (lunes a sábado), plegable. Mismo naranja de las tarjetas sobre el café del panel. */
+.semana-entradas { background: var(--panel); border: 2px solid #9a3412; border-radius: 6px; }
+.semana-entradas__cabeza { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; cursor: pointer; list-style: none; background: var(--panel-2); border-radius: 4px; }
+.semana-entradas__cabeza::-webkit-details-marker { display: none; }
+.semana-entradas__cabeza:hover, .semana-entradas__cabeza:focus-visible { background: rgb(249 115 22 / 0.18); outline: none; }
+.semana-entradas__flecha { color: #f97316; transition: transform 0.15s; }
+.semana-entradas[open] .semana-entradas__flecha { transform: rotate(90deg); }
+.semana-entradas__titulo { flex: 1; min-width: 0; font-weight: 800; color: var(--texto); }
+.semana-entradas__hoy { margin-left: 6px; padding: 1px 6px; font-size: 11px; color: #fff; background: #c2410c; border-radius: 4px; vertical-align: middle; }
+.semana-entradas__n { padding: 2px 10px; font-size: 13px; font-weight: 700; color: #fdba74; border: 1px solid #f97316; border-radius: 999px; }
+.semana-entradas__tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; align-items: start; padding: 12px; }
+.semana-entradas__imprimir { display: block; padding: 0 12px 10px; font-size: 13px; color: #fdba74; text-align: right; }
 .entradas-imprimir { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .entradas-imprimir[hidden] { display: none; }
 .entradas-imprimir__boton { display: block; margin-top: 8px; text-align: center; }
@@ -506,7 +518,7 @@ details.plegable[hidden] { display: none; }
 .inspector__recientes { margin-top: 12px; font-size: 13px; color: var(--texto-suave); }
 .inspector__recientes summary { cursor: pointer; }
 .inspector__recientes ul { max-height: 360px; overflow-y: auto; }
-#cotizaciones-buscar { width: 100%; margin: 8px 0 4px; }
+#cotizaciones-buscar, #conceptos-buscar { width: 100%; margin: 8px 0 4px; }
 .inspector__recientes a { color: var(--color); }
 @media (max-width: 640px) { .cot__datos { grid-template-columns: 1fr; } }
 
@@ -1057,3 +1069,46 @@ details.plegable[hidden] { display: none; }
 /* 📅 Entrega pasada */
 .entrega-pasada__campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 8px 0; }
 .entrega-pasada__campos select, .entrega-pasada__campos input { width: 100%; box-sizing: border-box; }
+
+/* 💬 Botones de WhatsApp de Chatito */
+.panel__whatsapp, .autorizar__whatsapp { display: inline-flex; align-items: center; gap: 4px; font-family: inherit; font-weight: 700; color: #fff; background: #25d366; border: none; border-radius: 999px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); cursor: pointer; }
+.panel__whatsapp { margin-left: auto; align-self: center; padding: 6px 12px; font-size: 13px; }
+.panel__whatsapp:not([hidden]) + .panel__cerrar { margin-left: 4px; }
+.autorizar__whatsapp { margin-left: 6px; padding: 2px 9px; font-size: 12px; vertical-align: middle; }
+.panel__whatsapp:hover, .autorizar__whatsapp:hover { background: #1ebe5b; }
+.panel__whatsapp:focus-visible, .autorizar__whatsapp:focus-visible { outline: 2px solid #f26b1d; outline-offset: 2px; }
+
+/* Sugerencias de conceptos en cotizaciones (con 🗑 para borrar) */
+.sugerencias { position: fixed; z-index: 1000; margin: 0; padding: 4px 0; list-style: none; max-height: 260px; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--panel-2); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .45); }
+.sugerencias li { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; cursor: pointer; color: var(--texto); font-size: 13px; }
+.sugerencias li:hover, .sugerencias li.activa { background: var(--panel-2); }
+.sugerencias__nombre { flex: 1; min-width: 0; }
+.sugerencias__nombre small { opacity: .65; margin-left: 6px; }
+.sugerencias button { flex: none; background: rgb(255 80 80 / .14); color: var(--texto); border: 1px solid rgb(255 80 80 / .35); cursor: pointer; font-size: 12px; padding: 2px 8px; border-radius: 6px; }
+.sugerencias button:hover { background: rgb(255 80 80 / .35); }
+
+/* Selector de Unidad de las cotizaciones: igual que los demás campos (oscuro, mismo alto), con flecha clara */
+.captura--campos select, .cot select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 28px 8px 8px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--texto);
+  background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23f2b36b' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 9px center;
+  border: 1px solid #d08a4e;
+  border-radius: 8px;
+  appearance: none;
+  cursor: pointer;
+}
+.cot select { padding-top: 6px; padding-bottom: 6px; border: 2px solid #000; border-radius: 0; max-width: 96px; }
+.captura--campos select:hover, .cot select:hover { border-color: #f2b36b; }
+.captura--campos select:focus-visible, .cot select:focus-visible { outline: 3px solid var(--color); outline-offset: 1px; border-color: #f2b36b; }
+.captura--campos select option, .cot select option { color: var(--texto); background: var(--panel); }
+
+/* Aviso del cliente por WhatsApp en el historial de cotizaciones (pagó / comprobante / confirmó). */
+.cot-aviso { display: inline-block; margin-top: 2px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+.cot-aviso--pagado { background: #1f4d2b; color: #9be7a8; }
+.cot-aviso--comprobante { background: #5a4313; color: #f2c56b; }
+.cot-aviso--confirmado { background: #173c5a; color: #9ccfff; }

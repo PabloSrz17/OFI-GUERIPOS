@@ -137,7 +137,7 @@ test('editar a mano: cambia renglones y total, agrega partidas y conserva folio 
   assert.equal(editada.folio, antes.folio);
   assert.equal(editada.cliente, 'CLIENTE');
   assert.equal(editada.total, 1200 + 1500 + 300);
-  assert.deepEqual(editada.partidas.map((p) => [p.descripcion, p.importe]), [['Grava', 1200], ['Cemento Maya', 1500], ['Flete a Fovi', 300]]);
+  assert.deepEqual(editada.partidas.map((p) => [p.descripcion, p.importe]), [['GRAVA', 1200], ['CEMENTO MAYA', 1500], ['FLETE A FOVI', 300]]);
   assert.equal(cotizaciones.editar(999999, calcular([{ descripcion: 'X', cantidad: 1, unidad: 'pz', precio: 1 }])), null);
 });
 
@@ -154,4 +154,33 @@ test('editar a mano el cliente, WhatsApp y ubicación: mismo folio y mismos reng
   assert.equal(editada.cliente_telefono, '529811234567');
   assert.equal(editada.colonia, 'Santa Ana');
   assert.equal(editada.total, antes.total);
+});
+
+test('conceptos: no se repite el mismo nombre al aprobar y se pueden borrar', () => {
+  const aprobarCon = (descripcion, precio) => cotizaciones.aprobar({
+    cliente: 'CLIENTE', telefono: null, colonia: 'Fovi', solicitud: null, total: precio,
+    partidas: [{ tipo: 'producto', descripcion, cantidad: 1, unidad: 'pza', precio, importe: precio, texto: 'tubo pvc' }],
+  }, false);
+  const conNombre = () => cotizaciones.precios().filter((p) => p.nombre.toUpperCase() === 'TUBO PVC 4');
+  aprobarCon('TUBO PVC 4', 200);
+  aprobarCon('Tubo PVC 4', 210); // mismo concepto, otra forma de escribirlo
+  assert.equal(conNombre().length, 1);
+  const [tubo] = conNombre();
+  assert.equal(cotizaciones.quitarPrecio(tubo.id), true);
+  assert.equal(conNombre().length, 0);
+  assert.equal(cotizaciones.quitarPrecio(tubo.id), false); // ya no estaba
+});
+
+test('conceptos: la unidad corregida se guarda en el concepto (si se pide guardar)', () => {
+  const aprobarCon = (unidad, guardar) => cotizaciones.aprobar({
+    cliente: 'CLIENTE', telefono: null, colonia: 'Fovi', solicitud: null, total: 16,
+    partidas: [{ tipo: 'producto', descripcion: 'BLOCK DE 12 PRUEBA', cantidad: 1, unidad, precio: 16, importe: 16, texto: 'block de 12 prueba' }],
+  }, guardar);
+  const unidad = () => cotizaciones.precios().find((p) => p.nombre === 'BLOCK DE 12 PRUEBA').unidad;
+  aprobarCon('kg', false);
+  assert.equal(unidad(), 'kg');
+  aprobarCon('pza', false);
+  assert.equal(unidad(), 'kg'); // sin "Guardar precios" no cambia
+  aprobarCon('pza', true);
+  assert.equal(unidad(), 'pza');
 });

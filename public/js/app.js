@@ -7,6 +7,7 @@ import { montarCaptura } from './captura.js';
 import { montarEditarNota } from './editar-nota.js';
 import { montarParcial } from './parcial.js';
 import { montarEntregaPasada } from './entrega-pasada.js';
+import { montarWhatsapp } from './whatsapp-ventana.js';
 import { montarVisorFoto } from './visor-foto.js';
 import { montarCierre } from './cierre.js';
 import { montarInspector, recargarSolicitudes } from './inspector.js';
@@ -398,6 +399,7 @@ async function iniciar() {
   montarEditarNota({ notaPorId, catalogos, alGuardar: refrescar, toast });
   abrirParcial = montarParcial({ notaPorId, alGuardar: refrescar, toast });
   montarEntregaPasada({ notaPorId, catalogos, alGuardar: refrescar, toast });
+  montarWhatsapp({ toast });
   montarVisorFoto();
   montarCierre({ notasActuales: () => notasActuales, alCerrar: refrescar, toast });
   montarInspector({ toast, alAprobar: refrescar });
