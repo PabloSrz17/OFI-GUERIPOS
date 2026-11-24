@@ -1,0 +1,539 @@
+// Corchos de Edgar: (1) programación del día por unidad, (2) notas para otro día.
+// Las notas programadas no salen en el tablero ni en el corcho del día hasta su fecha (lo filtra el servidor).
+import { api } from './api.js';
+import { renglones, selector, botonEtiqueta, faltaDireccion, AVISO_WHATSAPP, REGRESAR_A } from './kanban.js';
+import { formatear } from './telefono.js';
+
+const $ = (sel) => document.querySelector(sel);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const NOMBRE_ESTADO = { pendiente: 'Pendiente', cargando: 'Cargando', en_ruta: 'En Ruta', entregado: 'Entregado ✓' };
+
+// Columnas fijas; lo que no es de estas cinco (sin camión, Almacén…) va en la última.
+export const UNIDADES = [
+  { nombre: 'Nissan Blanca', es: /nissan\s*blanca/i },
+  { nombre: 'Nissan Roja', es: /nissan\s*roja/i },
+  { nombre: 'RAM', es: /^ram\b/i },
+  { nombre: 'Ford F450', es: /f\s*-?\s*450/i },
+  { nombre: 'Torton', es: /torton/i },
+];
+const OTRAS = 'Saldos pendientes / Notas Pendientes';
+const EL_AVISA = '9999-12-31'; // "Él avisa": sin día fijo (notas.repo.js)
+const VIAJES = ['1er', '2do', '3er', '4to', '5to', '6to', '7mo'];
+// Notas con camión pero sin viaje anotado (asignadas desde el tablero) se ven en el 1er viaje.
+const viajeDe = (n) => Math.min(Math.max(Number(n.viaje) || 1, 1), VIAJES.length);
+
+export const dia = (desplazar = 0) => {
+  const d = new Date();
+  d.setDate(d.getDate() + desplazar);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+// "Reparto de mañana": el siguiente día de reparto. El domingo no se labora, así que el de un sábado es el lunes.
+export const siguiente = () => (new Date().getDay() === 6 ? dia(2) : dia(1));
+const fechaLarga = (iso) => new Date(`${iso}T12:00`).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+
+let ctx = null;          // { catalogos, toast }
+let notasDelDia = [];
+let programadas = [];
+let arrastrada = null;
+
+// Viajes minimizados. Los entregados completos se minimizan solos; lo que el usuario abra o cierre
+// a mano se respeta. Se recuerda en este navegador y se reinicia cada día.
+const LLAVE_PLEGADO = 'corcho-plegado';
+let plegado = {};
+const listosVistos = new Set(); // viajes que ya estaban entregados completos en la pintada anterior
+let yaPintado = false;          // la primera pintada con notas no cuenta como "se acaba de completar"
+try {
+  const guardado = JSON.parse(localStorage.getItem(LLAVE_PLEGADO) ?? '{}');
+  if (guardado.dia === dia()) plegado = guardado.viajes ?? {};
+} catch { /* sin almacenamiento: sólo dura mientras esté abierta */ }
+function guardarPlegado() {
+  try { localStorage.setItem(LLAVE_PLEGADO, JSON.stringify({ dia: dia(), viajes: plegado })); } catch { /* nada */ }
+}
+
+function columnaDe(nota) {
+  return UNIDADES.find((u) => u.es.test(nota.camion ?? ''))?.nombre ?? OTRAS;
+}
+
+// Mismo paso que en Notas pendientes (y misma confirmación antes de salir a ruta).
+function botonEstatus(n) {
+  if (n.saldo) return ''; // el saldo primero se re-programa en Pendientes
+  const texto = n.estado === 'pendiente' ? 'Empezar a cargar ▶'
+    : n.estado === 'cargando' ? (n.es_almacen ? 'Marcar entregado ✓' : 'Enviar a ruta ▶')
+      : n.estado === 'en_ruta' ? 'Marcar entregado ✓' : '';
+  return texto ? `<button type="button" class="btn corcho__avanzar corcho__avanzar--${n.estado}" data-avanzar>${texto}</button>` : '';
+}
+
+// Lo mismo que en Notas pendientes: chofer (el camión lo da la columna), envío parcial y otro día.
+// Los manejan app.js y parcial.js por data-accion, igual que en el tablero.
+function herramientas(n) {
+  const editar = `<button type="button" class="btn btn--secundario" data-accion="editar" data-id="${n.id}">✎ Editar</button>`;
+  if (n.saldo) {
+    return `
+    <div class="corcho__acciones">
+      ${editar}
+      <button type="button" class="btn btn--secundario" data-accion="parcial" data-id="${n.id}">🚚 Salida parcial</button>
+      <button type="button" class="btn" data-accion="reprogramar" data-id="${n.id}">Re-programar en Pendientes 🚚</button>
+    </div>`;
+  }
+  const regresar = REGRESAR_A[n.estado]
+    ? `<button type="button" class="btn btn--regresar" data-accion="regresar" data-id="${n.id}" title="Deshacer: regresar a ${REGRESAR_A[n.estado]}">↩ Regresar</button>`
+    : '';
+  const editable = ['pendiente', 'cargando'].includes(n.estado);
+  if (!editable) {
+    return `${n.chofer ? `<p class="corcho__suave">👤 ${esc(n.chofer)}</p>` : ''}
+    <div class="corcho__acciones">${editar}${regresar}${n.estado === 'en_ruta' ? `<button type="button" class="btn btn--secundario" data-accion="entrega-pasada" data-id="${n.id}" title="Se entregó otro día y no se marcó">📅 Entrega pasada</button>` : ''}</div>`;
+  }
+  return `
+    <div class="corcho__chofer">${selector(n, 'chofer', ctx.catalogos.choferes)}</div>
+    <div class="corcho__acciones">
+      ${editar}
+      <button type="button" class="btn btn--secundario" data-accion="parcial" data-id="${n.id}">🚚 Salida parcial</button>
+      ${n.estado === 'pendiente' ? `<button type="button" class="btn btn--secundario" data-accion="otro-dia" data-id="${n.id}">🔁 Reprogramar</button>` : ''}
+      ${regresar}
+      <button type="button" class="btn btn--secundario" data-accion="entrega-pasada" data-id="${n.id}" title="Se entregó otro día y no se marcó">📅 Entrega pasada</button>
+    </div>`;
+}
+
+// 📋 Ver salidas: los viajes que ya salieron del mismo pedido. Se piden al abrir y se recuerdan
+// para que el repintado del corcho no cierre ni vacíe la lista.
+const salidasAbiertas = new Set();
+const salidasVistas = new Map(); // id de la tarjeta -> html de la lista
+const horaCorta = (f) => (f ? new Date(f.replace(' ', 'T')).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+const cargaDe = (s) => (s.detalle
+  ? s.detalle.split('\n').filter((l) => l && !l.startsWith('⚠️')).join(' + ')
+  : [s.cantidad, s.unidad, s.material].filter(Boolean).join(' '));
+const listaSalidas = (lista) => (lista.length
+  ? `<ol class="corcho__salidas-lista">${lista.map((s, i) => `
+      <li><b>Salida #${i + 1}</b> · ${esc(s.folio)} · ${esc(horaCorta(s.fecha))}${s.estado === 'entregado' ? ' ✓' : ' 🚚'}
+        <br>${esc([s.chofer, s.camion].filter(Boolean).join(' · ') || 'Sin chofer')}
+        <br>${esc(cargaDe(s))}</li>`).join('')}</ol>`
+  : '<p class="corcho__suave">Todavía no sale ningún viaje.</p>');
+function salidas(n) {
+  if (!n.salidas) return '';
+  const abierta = salidasAbiertas.has(String(n.id));
+  return `<details class="corcho__salidas" data-salidas="${n.id}"${abierta ? ' open' : ''}>
+      <summary>📋 Ver salidas (${n.salidas})</summary>
+      <div>${salidasVistas.get(String(n.id)) ?? 'Cargando…'}</div>
+    </details>`;
+}
+async function alAbrirSalidas(e) {
+  const det = e.target;
+  if (!(det instanceof HTMLDetailsElement) || !det.dataset.salidas) return;
+  const id = det.dataset.salidas;
+  if (!det.open) { salidasAbiertas.delete(id); return; }
+  salidasAbiertas.add(id);
+  try {
+    salidasVistas.set(id, listaSalidas(await api.get(`/api/notas/${id}/salidas`)));
+  } catch (err) {
+    salidasVistas.set(id, `<p class="corcho__suave">${esc(err.message)}</p>`);
+  }
+  if (det.isConnected) det.querySelector('div').innerHTML = salidasVistas.get(id);
+}
+document.addEventListener('toggle', alAbrirSalidas, true);
+
+// 📝 Mini post-it: amarillo si la nota tiene observación. Abierto, se lee y se edita ahí mismo.
+const postitsAbiertos = new Set();
+const botonPostit = (n) => `<button type="button" class="corcho__postit-boton${n.postit ? ' corcho__postit-boton--lleno' : ''}" data-postit-abrir
+  title="${n.postit ? esc(n.postit) : 'Agregar una nota interna'}" aria-label="Post-it de la nota ${esc(n.folio)}" aria-expanded="${postitsAbiertos.has(String(n.id))}">📝</button>`;
+const postit = (n) => (postitsAbiertos.has(String(n.id))
+  ? `<div class="corcho__postit">
+      <textarea data-postit-texto maxlength="300" rows="3" placeholder="Nota interna (no la ve el cliente)">${esc(n.postit ?? '')}</textarea>
+      <div class="corcho__postit-botones">
+        <button type="button" class="btn btn--secundario" data-postit-cerrar>Cerrar</button>
+        <button type="button" class="btn" data-postit-guardar>Guardar</button>
+      </div>
+    </div>`
+  : (n.postit ? `<p class="corcho__postit-vista" data-postit-abrir>📝 ${esc(n.postit)}</p>` : ''));
+
+// Teléfono, aviso de WhatsApp y evidencia, como en Formato Entregas Pablo.
+function datosExtra(n) {
+  const lineas = [
+    n.cliente_telefono ? `📱 ${formatear(n.cliente_telefono)}` : '',
+    AVISO_WHATSAPP[n.whatsapp] ?? '',
+    n.evidencias ? `📸 ${n.estado === 'entregado' ? 'Entregada con evidencia' : 'Con foto de evidencia'}` : '',
+  ].filter(Boolean);
+  return lineas.map((l) => `<p class="corcho__suave">${esc(l)}</p>`).join('');
+}
+
+// Todo el material de la nota (todos los renglones); si es muy larga, se desplaza dentro de la tarjeta.
+function tarjeta(n, { manana = false, futura = false } = {}) {
+  const entregada = n.estado === 'entregado';
+  const mover = !n.es_almacen && ['pendiente', 'cargando'].includes(n.estado) && (!futura || manana);
+  return `
+    <article class="corcho__nota${manana ? ' corcho__nota--manana' : ''}${entregada ? ' corcho__nota--entregado' : ''}${n.saldo ? ' corcho__nota--saldo' : ''}${futura ? '' : ` corcho__nota--e-${n.estado}`}" data-id="${n.id}" ${mover ? 'draggable="true"' : ''}>
+      ${manana ? '<p class="corcho__alerta">⏰ Esta nota es para mañana</p>' : ''}
+      ${n.saldo ? '<p class="corcho__alerta corcho__alerta--saldo">⚠ Saldo pendiente · queda por entregar:</p>' : ''}
+      <button type="button" class="corcho__eliminar" data-accion="cancelar" data-id="${n.id}" title="Eliminar nota" aria-label="Eliminar nota ${esc(n.folio)}">🗑</button>
+      ${botonPostit(n)}
+      <header><b>${esc(n.folio)}</b>${botonEtiqueta(n)}${futura ? (n.camion && !manana ? `<span class="corcho__chip">${esc(n.camion)}</span>` : '') : `<span class="corcho__chip corcho__chip--${n.estado}">${NOMBRE_ESTADO[n.estado] ?? esc(n.estado)}</span>`}</header>
+      ${postit(n)}
+      <p class="corcho__cliente">${esc(n.cliente)}</p>
+      <div class="corcho__material">${renglones(n)}</div>
+      ${!futura && faltaDireccion(n)
+    ? `<button type="button" class="btn btn--ruta" data-accion="editar" data-foco="direccion" data-id="${n.id}">📍 Completar dirección</button>`
+    : `<p class="corcho__suave">📍 ${esc(n.zona || n.direccion)}</p>`}
+      ${futura ? '' : datosExtra(n)}
+      ${salidas(n)}
+      ${futura ? '' : herramientas(n)}
+      ${futura ? '' : botonEstatus(n)}
+      ${futura && manana ? `
+        <div class="corcho__acciones">
+          <button type="button" class="btn btn--secundario" data-accion="otro-dia" data-id="${n.id}">🔁 Reprogramar</button>
+          <button type="button" class="btn btn--secundario" data-hoy>↩ A hoy</button>
+        </div>` : ''}
+      ${futura && !manana ? `
+        <div class="corcho__acciones corcho__fecha">
+          <label>Fecha del cliente <input type="date" value="${n.programada_para === EL_AVISA ? '' : n.programada_para}" min="${dia(1)}" data-fecha></label>
+          <label class="corcho__avisa"><input type="checkbox" data-avisa${n.programada_para === EL_AVISA ? ' checked' : ''}> 📞 Él avisa</label>
+        </div>
+        <div class="corcho__acciones">
+          <button type="button" class="btn btn--secundario" data-hoy>↩ Reparto del día</button>
+          <button type="button" class="btn btn--secundario" data-a-manana>⏰ Reparto de mañana</button>
+        </div>
+        <div class="corcho__acciones">
+          <button type="button" class="btn btn--secundario" data-parcial-futura>🚚 Salida parcial</button>
+          <button type="button" class="btn btn--secundario" data-accion="entrega-pasada" data-id="${n.id}" title="Se entregó otro día y no se marcó">📅 Entrega pasada</button>
+        </div>` : ''}
+    </article>`;
+}
+
+// Cuadrícula unidad × viaje. Hoy: las entregadas se quedan en su viaje, en verde, como registro del día
+// (se archivan con el Cierre de Jornada). Mañana: se acomodan con anticipación y mañana ya salen así.
+function rejilla(notas, opciones = {}) {
+  const columnas = [...UNIDADES.map((u) => u.nombre), OTRAS];
+  return columnas.map((nombre) => {
+    const suyas = notas.filter((n) => columnaDe(n) === nombre);
+    const entregadas = suyas.filter((n) => n.estado === 'entregado').length;
+    const m3 = suyas.filter((n) => /m³|m3/i.test(n.unidad ?? '') && Number(n.cantidad)).reduce((t, n) => t + Number(n.cantidad), 0);
+    return `
+      <section class="corcho__columna${nombre === OTRAS ? ' corcho__columna--otras' : ''}">
+        <h3>${nombre === OTRAS ? '' : '🚚 '}${esc(nombre)}</h3>
+        <p class="corcho__cuenta">${suyas.length} ${suyas.length === 1 ? 'nota' : 'notas'}${entregadas ? ` · <span class="corcho__ok">${entregadas} entregada${entregadas === 1 ? '' : 's'}</span>` : ''}${m3 ? ` · ${Math.round(m3 * 10) / 10} m³` : ''}</p>
+        ${nombre === OTRAS
+    ? `<div class="corcho__zona corcho__zona--otras" data-zona data-columna="${esc(nombre)}">${suyas.map((n) => tarjeta(n, opciones)).join('') || '<p class="corcho__vacio">Sin notas</p>'}</div>`
+    : VIAJES.map((v, k) => {
+      const delViaje = suyas.filter((n) => viajeDe(n) === k + 1);
+      const listo = delViaje.length && delViaje.every((n) => n.estado === 'entregado');
+      const llave = `${opciones.manana ? 'manana' : 'hoy'}|${nombre}|${k + 1}`;
+      // Al entregarse la última nota, el viaje se minimiza aunque antes lo hayan abierto a mano.
+      if (listo && !listosVistos.has(llave)) {
+        if (yaPintado) delete plegado[llave];
+        listosVistos.add(llave);
+      } else if (!listo) listosVistos.delete(llave);
+      const cerrado = delViaje.length > 0 && (plegado[llave] ?? Boolean(listo));
+      const titulo = `${v} viaje${delViaje.length ? ` <span>${listo ? '✓ ' : ''}${delViaje.length}</span>` : ''}`;
+      return `
+            <div class="corcho__zona corcho__viaje${listo ? ' corcho__viaje--listo' : ''}${cerrado ? ' corcho__viaje--plegado' : ''}" data-zona data-columna="${esc(nombre)}" data-viaje="${k + 1}">
+              <h4>${delViaje.length
+    ? `<button type="button" class="corcho__plegar" data-plegar="${esc(llave)}" aria-expanded="${!cerrado}" title="${cerrado ? 'Ver las notas de este viaje' : 'Minimizar este viaje'}">${cerrado ? '▸' : '▾'} ${titulo}</button>`
+    : titulo}</h4>
+              ${cerrado
+    ? `<p class="corcho__plegado">${listo ? 'Entregado completo · ' : ''}${delViaje.length} ${delViaje.length === 1 ? 'nota oculta' : 'notas ocultas'}</p>`
+    : delViaje.map((n) => tarjeta(n, opciones)).join('')}
+            </div>`;
+    }).join('')}
+      </section>`;
+  }).join('');
+}
+
+function pintarDia() {
+  $('#corcho-fecha').textContent = fechaLarga(dia());
+  $('#corcho-contenido').innerHTML = rejilla(notasDelDia);
+  if (notasDelDia.length) yaPintado = true;
+}
+
+function pintarFuturas() {
+  const manana = siguiente();
+  $('#manana-fecha').textContent = fechaLarga(manana);
+  $('#manana-contenido').innerHTML = rejilla(programadas.filter((n) => n.programada_para === manana), { futura: true, manana: true });
+  // Por Confirmar · Otro día: primero "Él avisa" (sin día), luego por fecha después de mañana.
+  const otras = programadas.filter((n) => n.programada_para !== manana);
+  const fechas = [...new Set(otras.map((n) => n.programada_para))].sort((a, b) => (a === EL_AVISA ? -1 : b === EL_AVISA ? 1 : a.localeCompare(b)));
+  $('#futuras-contenido').innerHTML = fechas.map((f) => `
+    <section class="corcho__columna${f === EL_AVISA ? ' corcho__columna--avisa' : ''}">
+      <h3>${f === EL_AVISA ? '📞 Él avisa · por confirmar' : esc(fechaLarga(f))}</h3>
+      ${otras.filter((n) => n.programada_para === f).map((n) => tarjeta(n, { futura: true })).join('')}
+    </section>`).join('') || '<p class="corcho__vacio">Ninguna nota por confirmar ni para otro día.</p>';
+  // Para programar: las pendientes de hoy.
+  const select = $('#futuras-nota');
+  const elegida = select.value;
+  select.innerHTML = '<option value="">Elige la nota…</option>' + notasDelDia
+    .filter((n) => n.estado === 'pendiente')
+    .map((n) => `<option value="${n.id}">${esc(n.folio)} · ${esc(n.cliente)} · ${esc(n.material)}</option>`).join('');
+  select.value = elegida;
+  $('#futuras-fecha').min = manana;
+}
+
+async function cargarFuturas(pintar = true) {
+  try {
+    programadas = await api.get('/api/notas/programadas');
+    const manana = siguiente();
+    const cuenta = (fn) => programadas.filter(fn).length;
+    $('#pestana-manana-n').textContent = cuenta((x) => x.programada_para === manana);
+    $('#pestana-futuras-n').textContent = cuenta((x) => x.programada_para !== manana);
+    if (pintar) pintarFuturas();
+  } catch (err) {
+    ctx.toast(`No se cargaron las notas para otro día: ${err.message}`, true);
+  }
+}
+
+async function programar(id, fecha, conFecha = false) {
+  try {
+    const nota = await api.patch(`/api/notas/${id}/programar`, { fecha, con_fecha: conFecha });
+    ctx.toast(fecha === 'avisa' ? `${nota.folio} pasó a Por Confirmar · Otro día (él avisa)` : fecha ? `${nota.folio} quedó para el ${fechaLarga(fecha)}` : `${nota.folio} regresó a hoy`);
+  } catch (err) {
+    ctx.toast(err.message, true);
+  }
+  await cargarFuturas(); // el tablero se repinta solo por el aviso del servidor
+}
+
+// Soltar en un viaje de una unidad = cambiarle camión y número de viaje (mismas reglas que el tablero).
+async function cambiarUnidad(id, columna, viaje) {
+  const nota = [...notasDelDia, ...programadas].find((n) => n.id === id);
+  if (!nota) return;
+  const u = UNIDADES.find((x) => x.nombre === columna);
+  if (columnaDe(nota) === columna && (!u || viajeDe(nota) === viaje)) return;
+  const camion = u ? ctx.catalogos.camiones.find((c) => u.es.test(c.nombre)) : null;
+  if (u && !camion) { ctx.toast(`No encontré la ${columna} en la lista de camiones`, true); return false; }
+  try {
+    await api.patch(`/api/notas/${id}/viaje`, { camion_id: camion?.id ?? null, viaje });
+    ctx.toast(`${nota.folio} → ${camion ? `${camion.nombre} · ${VIAJES[viaje - 1]} viaje` : 'sin unidad'}`);
+  } catch (err) {
+    ctx.toast(err.message, true);
+    return false;
+  }
+  return true;
+}
+
+// Pestañas exclusivas: sólo una vista a la vez, a pantalla completa.
+let activa = 'corcho';
+let formatoDia = 'corcho'; // 'corcho' | 'notas': el último que eligieron en Reparto del día
+function mostrar(pestana) {
+  if (pestana === 'corcho' || pestana === 'notas') {
+    if (pestana === 'corcho') pestana = formatoDia; // la pestaña abre el formato que estaban usando
+  }
+  activa = pestana;
+  const delDia = pestana === 'corcho' || pestana === 'notas';
+  document.querySelectorAll('#ventana-notas [data-pestana]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.pestana === (delDia ? 'corcho' : pestana))));
+  $('#formato-dia').hidden = !delDia;
+  document.querySelectorAll('#formato-dia [data-formato]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.formato === pestana)));
+  document.querySelectorAll('#ventana-notas .operacion__vista').forEach((v) => { v.hidden = v.id !== `vista-${pestana}`; });
+  if (pestana === 'corcho') pintarDia();
+  if (['manana', 'futuras'].includes(pestana)) cargarFuturas();
+}
+
+export function montarCorcho({ catalogos, toast, avanzar, parcial }) {
+  ctx = { catalogos, toast, avanzar, parcial };
+  const ventana = $('#ventana-notas');
+  ventana.addEventListener('pestana', (e) => mostrar(e.detail));
+  ventana.addEventListener('click', (e) => {
+    const plegar = e.target.closest('[data-plegar]');
+    if (plegar) {
+      plegado[plegar.dataset.plegar] = plegar.getAttribute('aria-expanded') === 'true';
+      guardarPlegado();
+      if (plegar.dataset.plegar.startsWith('manana|')) pintarFuturas(); else pintarDia();
+      return;
+    }
+    const p = e.target.closest('[data-pestana]');
+    if (p) mostrar(p.dataset.pestana);
+    const f = e.target.closest('[data-formato]');
+    if (f) {
+      formatoDia = f.dataset.formato;
+      mostrar(formatoDia);
+    }
+  });
+
+  // Al arrastrar una nota cerca del borde de arriba o de abajo, la vista se desplaza sola (más rápido
+  // mientras más cerca del borde), para poder soltarla en el 3er al 7mo viaje.
+  const BORDE = 90;      // px desde el borde donde empieza a moverse
+  const MAXIMO = 18;     // px cada 16 ms en la orilla
+  let velocidad = 0;
+  let vistaArrastre = null;
+  let cuadro = null;
+  // Un temporizador (no requestAnimationFrame): sigue moviendo aunque la ventana no esté al frente.
+  function avanzarScroll() {
+    if (!velocidad || !vistaArrastre) { pararScroll(); return; }
+    vistaArrastre.scrollTop += velocidad;
+  }
+  let marco = null; // { top, bottom } de la vista, medido al empezar a arrastrar
+  function autoScroll(e) {
+    if (!arrastrada) return;
+    if (!marco) {
+      const vista = document.querySelector('.operacion__vista:not([hidden]) #corcho-contenido, .operacion__vista:not([hidden]) #manana-contenido')?.closest('.operacion__vista');
+      if (!vista) return;
+      vistaArrastre = vista;
+      marco = vista.getBoundingClientRect();
+    }
+    const vista = vistaArrastre;
+    const { top, bottom } = marco;
+    const y = e.clientY;
+    velocidad = y < top + BORDE ? -Math.ceil(MAXIMO * Math.min(1, (top + BORDE - y) / BORDE))
+      : y > bottom - BORDE ? Math.ceil(MAXIMO * Math.min(1, (y - (bottom - BORDE)) / BORDE))
+        : 0;
+    vistaArrastre = vista;
+    if (velocidad && !cuadro) cuadro = setInterval(avanzarScroll, 16);
+  }
+  function pararScroll() {
+    velocidad = 0;
+    if (!arrastrada) marco = null;
+    clearInterval(cuadro);
+    cuadro = null;
+  }
+  // En toda la ventana: también sobre la cabecera o fuera de la vista sigue desplazando.
+  ventana.addEventListener('dragover', autoScroll);
+  ventana.addEventListener('drop', pararScroll);
+  ventana.addEventListener('dragend', pararScroll);
+  ventana.addEventListener('dragleave', (e) => { if (!e.relatedTarget) pararScroll(); });
+
+  // Arrastrar: en el corcho de hoy y en el de mañana (acomodar con anticipación).
+  for (const contenido of [$('#corcho-contenido'), $('#manana-contenido')]) {
+  let encima = null;     // zona resaltada ahora
+  let tarjetaMovida = null;
+  const limpiar = () => {
+    encima?.classList.remove('corcho__zona--encima');
+    encima = null;
+    tarjetaMovida?.classList.remove('corcho__nota--arrastrada');
+    contenido.classList.remove('corcho--arrastrando');
+  };
+  contenido.addEventListener('dragstart', (e) => {
+    const tarjeta = e.target.closest('[data-id]');
+    arrastrada = Number(tarjeta?.dataset.id);
+    e.dataTransfer.effectAllowed = 'move';
+    // Fantasma chico (folio y cliente) en vez de la foto de toda la tarjeta con sus materiales.
+    const fantasma = document.createElement('div');
+    fantasma.className = 'corcho__fantasma';
+    fantasma.textContent = `${tarjeta.querySelector('header b')?.textContent ?? ''} · ${tarjeta.querySelector('.corcho__cliente')?.textContent ?? ''}`;
+    document.body.append(fantasma);
+    e.dataTransfer.setDragImage(fantasma, 16, 16);
+    setTimeout(() => fantasma.remove(), 0);
+    tarjetaMovida = tarjeta;
+    requestAnimationFrame(() => {
+      tarjeta.classList.add('corcho__nota--arrastrada');
+      contenido.classList.add('corcho--arrastrando');
+    });
+  });
+  contenido.addEventListener('dragover', (e) => {
+    if (!arrastrada) return;
+    const zona = e.target.closest('[data-zona]');
+    if (!zona) return;
+    e.preventDefault();
+    if (zona === encima) return; // misma zona: nada que repintar
+    encima?.classList.remove('corcho__zona--encima');
+    zona.classList.add('corcho__zona--encima');
+    encima = zona;
+  });
+  contenido.addEventListener('drop', async (e) => {
+    const zona = e.target.closest('[data-zona]');
+    if (!arrastrada || !zona) return;
+    e.preventDefault();
+    const id = arrastrada;
+    const tarjeta = tarjetaMovida;
+    if (tarjeta && tarjeta.parentElement !== zona) {
+      zona.querySelector('.corcho__vacio')?.remove();
+      zona.append(tarjeta);
+    }
+    if (!(await cambiarUnidad(id, zona.dataset.columna, Number(zona.dataset.viaje) || null))) {
+      if (contenido.id === 'corcho-contenido') pintarDia(); else pintarFuturas();
+    }
+  });
+  contenido.addEventListener('dragend', () => {
+    arrastrada = null;
+    marco = null;
+    limpiar();
+  });
+  }
+  const contenido = $('#corcho-contenido');
+  contenido.addEventListener('click', async (e) => {
+    const boton = e.target.closest('[data-avanzar]');
+    if (boton) {
+      boton.disabled = true;
+      if (!(await ctx.avanzar(boton.closest('[data-id]').dataset.id))) boton.disabled = false;
+    }
+  });
+
+  $('#futuras-nueva').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = $('#futuras-nota').value;
+    const fecha = $('#futuras-fecha').value;
+    if (!id || !fecha) return toast('Elige la nota y la fecha', true);
+    $('#futuras-nueva').reset();
+    programar(id, fecha, true);
+  });
+  document.addEventListener('notas-programadas', () => cargarFuturas());
+  // Reprogramar, fecha del cliente, "Él avisa" y regresar a hoy o a mañana: en cualquier pestaña.
+  const ventana2 = $('#ventana-notas');
+  const idDe = (el) => el.closest('[data-id]').dataset.id;
+  ventana2.addEventListener('change', (e) => {
+    if (e.target.matches('[data-fecha]') && e.target.value) programar(idDe(e.target), e.target.value, true);
+    if (e.target.matches('[data-avisa]')) {
+      if (e.target.checked) programar(idDe(e.target), 'avisa');
+      else {
+        e.target.checked = true; // sin fecha no puede dejar de ser "Él avisa"
+        e.target.closest('[data-id]').querySelector('[data-fecha]')?.focus();
+        toast('Ponle la fecha del cliente para quitar «Él avisa»');
+      }
+    }
+  });
+  // Salida parcial desde Por Confirmar: después pregunta para cuándo es lo que sale.
+  const cuando = $('#parcial-cuando');
+  ventana2.addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-parcial-futura]')) return;
+    const id = Number(idDe(e.target));
+    const nota = programadas.find((n) => n.id === id);
+    if (!nota || !(await ctx.parcial(nota))) return;
+    $('#parcial-cuando-resumen').innerHTML = `<div><b>${esc(nota.folio)}</b> · ${esc(nota.cliente)}</div>`;
+    cuando.returnValue = '';
+    cuando.showModal();
+    const r = await new Promise((listo) => cuando.addEventListener('close', () => listo(cuando.returnValue), { once: true }));
+    if (r === 'hoy') await programar(id, null);
+    else if (r === 'manana') await programar(id, siguiente());
+    else {
+      ctx.toast(`${nota.folio}: sigue en Por Confirmar · Otro día; ponle la fecha del cliente o «Él avisa»`);
+      await cargarFuturas();
+    }
+  });
+  ventana2.addEventListener('click', async (e) => {
+    const tarjeta = e.target.closest('.corcho__nota[data-id]');
+    if (!tarjeta) return;
+    const id = tarjeta.dataset.id;
+    const repintar = () => (tarjeta.closest('#corcho-contenido') ? pintarDia() : pintarFuturas());
+    if (e.target.closest('[data-postit-abrir]')) {
+      if (postitsAbiertos.has(id)) postitsAbiertos.delete(id); else postitsAbiertos.add(id);
+      repintar();
+      tarjeta.isConnected || $(`.corcho__nota[data-id="${id}"] [data-postit-texto]`)?.focus();
+    } else if (e.target.closest('[data-postit-cerrar]')) {
+      postitsAbiertos.delete(id);
+      repintar();
+    } else if (e.target.closest('[data-postit-guardar]')) {
+      const boton = e.target.closest('[data-postit-guardar]');
+      boton.disabled = true;
+      try {
+        const nota = await api.patch(`/api/notas/${id}/postit`, { postit: tarjeta.querySelector('[data-postit-texto]').value });
+        for (const lista of [notasDelDia, programadas]) {
+          const i = lista.findIndex((x) => String(x.id) === id);
+          if (i >= 0) lista[i] = { ...lista[i], postit: nota.postit };
+        }
+        postitsAbiertos.delete(id);
+        ctx.toast(nota.postit ? `📝 ${nota.folio}: post-it guardado` : `${nota.folio}: post-it borrado`);
+        repintar();
+      } catch (err) {
+        ctx.toast(err.message, true);
+        boton.disabled = false;
+      }
+    }
+  });
+  ventana2.addEventListener('click', (e) => {
+    if (e.target.closest('[data-hoy]')) programar(idDe(e.target), null);
+    if (e.target.closest('[data-a-manana]')) programar(idDe(e.target), siguiente());
+  });
+}
+
+// Cada vez que cambia el tablero: repinta lo que esté abierto.
+export function recargarCorcho(notas) {
+  notasDelDia = notas;
+  if (!ctx) return;
+  const abierta = $('#ventana-notas').open;
+  const eligiendo = $('#corcho-contenido').contains(document.activeElement) && ['SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
+  if (abierta && activa === 'corcho' && !arrastrada && !eligiendo) pintarDia();
+  cargarFuturas(abierta && ['manana', 'futuras'].includes(activa) && !arrastrada && !$(`#vista-${activa}`).contains(document.activeElement));
+}

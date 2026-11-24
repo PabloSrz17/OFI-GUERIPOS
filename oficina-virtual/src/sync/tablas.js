@@ -1,0 +1,25 @@
+// Tablas que se comparten entre el servidor Principal y el de Mostrador, de padres a hijos.
+// No se comparten: lo de WhatsApp que sólo vive en el Principal (conversaciones), la memoria de los agentes,
+// los ajustes de cada PC, las sesiones del PIN y la cola de Google Sheets.
+module.exports = [
+  'clientes',
+  'choferes',
+  'camiones',
+  'trabajadores',
+  'precios',
+  'fletes',
+  'notas',
+  'historial_estados',
+  'evidencias',
+  'whatsapp_envios',
+  'sheets_registros',
+  'integracion_vistos',
+  'chalkboard',
+  'combustible',
+  'cotizaciones',
+  'cotizacion_partidas',
+  'solicitudes_whatsapp',
+  'asistencias',
+  'ordenes_compra',
+  'entradas_almacen',
+];

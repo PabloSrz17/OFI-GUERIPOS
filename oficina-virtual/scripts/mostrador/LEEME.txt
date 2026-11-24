@@ -1,0 +1,36 @@
+OFICINA VIRTUAL EN DOS SERVIDORES
+=================================
+
+PRINCIPAL (la PC de la oficina)
+  Oficina completa + Chatito (WhatsApp), robot de Pulpos y Google Sheets. Es la fuente principal.
+  .env:  SERVER_ROLE=primary   ENABLE_CHATITO=true   PEER_SERVER_URL=http://IP-DE-MOSTRADOR:3000   SYNC_TOKEN=...
+
+MOSTRADOR (la PC donde esta SICAR)
+  Su propia Oficina (pantallas, API y base de datos) que arranca sola al prender la PC y trabaja aunque el
+  Principal este apagado: cotizaciones, entregas, asistencias, ordenes, etc. se guardan ahi.
+  Chatito apagado: no abre otra sesion del WhatsApp del negocio.
+  .env:  SERVER_ROLE=secondary ENABLE_CHATITO=false  PEER_SERVER_URL=http://IP-DEL-PRINCIPAL:3000  SYNC_TOKEN=(el mismo)
+
+COMO SE JUNTAN
+  Cada 15 segundos cada servidor le pide al otro lo nuevo. Si uno esta apagado, el otro sigue; al volver se ponen
+  al dia solos. Si los dos cambiaron lo mismo, gana el cambio mas reciente. Si los dos crearon el mismo numero
+  (por ejemplo la cotizacion C-0167) mientras estaban separados, el Principal conserva el suyo y la del Mostrador
+  pasa al siguiente numero libre, con todo lo que tenia. Si los dos importaron la misma venta, queda una sola nota.
+  SICAR: lo importa el Principal; el Mostrador solo lo importa mientras el Principal no contesta.
+  Punto de Venta: es uno solo, el del Principal (el boton del Mostrador lleva alla).
+  En la barra de arriba, "Enlace" dice si el otro servidor contesta.
+  Programa: el Mostrador se actualiza solo. Cada 2 minutos le pregunta al Principal si cambio el programa; si si,
+  lo baja (sin tocar su .env ni sus datos), guarda respaldo en data\actualizacion\anterior y se reinicia. Si con lo
+  nuevo no logra arrancar (3 veces), regresa solo a lo anterior. Si cambian las dependencias, hay que correr INSTALAR.cmd.
+  Boton "Punto de Venta" en Mostrador: abre una ventana aparte que imprime directo en la WL88S; si ya esta abierta, la trae al frente.
+
+INSTALAR
+  1. En el Principal:   npm run mostrador:paquete      (arma dist\oficina-mostrador.zip y prepara su .env)
+  2. Reinicia la Oficina del Principal.
+  3. Copia el .zip a la PC de Mostrador, descomprimelo y abre INSTALAR.cmd (necesita Node.js LTS e internet).
+  4. Si Windows pregunta por el Firewall en Mostrador, permite Node.js en redes privadas.
+  Las dos PCs deben tener IP fija en el modem (reservada), si no el enlace se pierde cuando cambian.
+
+NO SE COMPARTE
+  Las fotos de evidencias (se quedan en el Principal), las platicas de WhatsApp, la memoria de los agentes, el PIN
+  y las sesiones de cada PC.

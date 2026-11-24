@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reporte semanal</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    /* styles.css bloquea el scroll del body (es para la oficina 3D): aquí la página sí se desplaza. */
+    html, body.pagina-reporte { height: auto; }
+    body.pagina-reporte { display: block; overflow-y: auto; min-height: 100%; }
+    /* Barra fija arriba: siempre se puede volver, cambiar de semana o imprimir. */
+    .reporte__barra { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; background: #f7e3c6; border-bottom: 2px solid #4a3221; }
+    .reporte__barra h1 { margin: 0 auto 0 0 !important; }
+    .reporte__barra .btn { margin: 0; }
+    .reporte { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+    .reporte h1, .reporte__barra h1 { font: 800 21px var(--pixel); color: #4a3221; margin: 0 0 12px; }
+    .reporte__semana label { color: #4a3221; font-weight: 700; }
+    .reporte__semana { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .reporte section { margin-bottom: 16px; padding: 14px 16px; background: var(--panel-2); border: 2px solid #000; box-shadow: var(--sombra); }
+    .reporte h2 { margin: 0 0 10px; font: 800 16px var(--pixel); }
+    .cifras { display: flex; flex-wrap: wrap; gap: 24px; }
+    .cifras b { display: block; font-size: 30px; }
+    .reporte table { width: 100%; margin-top: 12px; border-collapse: collapse; }
+    .reporte th, .reporte td { padding: 6px 8px; border-bottom: 1px solid #0006; text-align: left; }
+    .reporte td:last-child, .reporte th:last-child { text-align: right; }
+    .reporte .izq-final td:last-child, .reporte .izq-final th:last-child { text-align: left; }
+    .reporte a { color: var(--en-ruta); }
+    .reporte h3 { margin: 16px 0 0; font-size: 14px; }
+    .reporte .tabla-ancha { overflow-x: auto; }
+    .reporte .num { text-align: right; white-space: nowrap; }
+    .reporte tfoot td, .reporte .total { font-weight: 800; }
+    .reporte .vacio { opacity: .4; }
+    .reporte .nota-chica { margin: 6px 0 0; font-size: 12px; opacity: .8; }
+    /* Detalle de Max: letra grande y un material por línea. */
+    .reporte table.detalle { font-size: 15px; }
+    .reporte table.detalle td { vertical-align: top; }
+    .reporte table.detalle td:last-child, .reporte table.detalle th:last-child { text-align: left; }
+    .reporte table.detalle ul { margin: 0; padding: 0; list-style: none; }
+    .reporte table.detalle li + li { margin-top: 3px; }
+    .reporte table.detalle li { display: flex; gap: 8px; }
+    .reporte table.detalle .cant { flex: 0 0 auto; min-width: 72px; font-weight: 800; white-space: nowrap; }
+    .reporte table.detalle small { display: block; margin-top: 4px; opacity: .8; }
+    .reporte .estado { white-space: nowrap; font-weight: 700; }
+    .reporte .fecha { white-space: nowrap; }
+    .reporte details.entregas { margin-top: 14px; }
+    .reporte details.entregas summary { display: inline-block; cursor: pointer; list-style: none; }
+    @media print { .reporte details.entregas:not([open]) { display: none; } .reporte details.entregas summary { display: none; } }
+    .reporte tr.grupo td { padding-top: 12px; font-weight: 800; font-size: 15px; border-bottom: 2px solid currentColor; }
+    @media print { .reporte tr.grupo td { background: #f3f3f3 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    /* Impresión: hoja blanca, letra negra, tablas con rayas. */
+    @media print {
+      @page { margin: 12mm; }
+      body { background: #fff !important; color: #000; }
+      .reporte { max-width: none; padding: 0; }
+      .reporte__barra h1, .reporte h2, .reporte h3 { color: #000; }
+      .reporte section { background: #fff; color: #000; border: 1.5px solid #000; box-shadow: none; }
+      .reporte th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .reporte th, .reporte td { border: 1px solid #000; color: #000; }
+      .reporte tr { break-inside: avoid; }
+      .badge { color: #000; background: none; border: 0; font-weight: 700; }
+    }
+    @media print { .reporte__semana label, .reporte__semana button, .volver, .reporte__barra .btn { display: none; } .reporte__barra { position: static; border: 0; padding: 0; } }
+  </style>
+</head>
+<body class="pagina-reporte">
+  <header class="reporte__barra">
+    <h1>📊 Reporte semanal</h1>
+    <a href="/" class="btn btn--secundario volver">← Volver a la Oficina</a>
+  </header>
+  <main class="reporte">
+    <div class="reporte__semana">
+      <label>Semana del día <input type="date" id="dia"></label>
+      <button type="button" id="imprimir" class="btn btn--secundario">🖨 Imprimir</button>
+      <span id="periodo" class="badge">Cargando…</span>
+    </div>
+    <section>
+      <h2>Max · compras y almacén</h2>
+      <div class="cifras">
+        <p>Órdenes de compra solicitadas<b id="ordenes">–</b></p>
+        <p>Entradas de material<b id="entradas">–</b></p>
+      </div>
+      <h3>🧾 Órdenes de compra solicitadas</h3>
+      <div class="tabla-ancha"><table class="detalle">
+        <thead><tr><th>Fecha</th><th>Solicitó</th><th>Va a</th><th>Material</th><th>Estado</th></tr></thead>
+        <tbody id="lista-ordenes"></tbody>
+      </table></div>
+      <h3>📦 Entradas de material</h3>
+      <div class="tabla-ancha"><table class="detalle">
+        <thead><tr><th>Fecha</th><th>Proveedor</th><th>Folio</th><th>Material que entró</th></tr></thead>
+        <tbody id="lista-entradas"></tbody>
+      </table></div>
+    </section>
+    <section>
+      <h2>Chatito · cotizaciones</h2>
+      <div class="cifras">
+        <p>Cotizaciones hechas<b id="creadas">–</b></p>
+        <p>De ésas, pagadas<b id="pagadas">–</b></p>
+      </div>
+    </section>
+    <section>
+      <h2>Edgar · reparto</h2>
+      <div class="cifras"><p>Pedidos despachados<b id="despachados">–</b></p></div>
+      <h3>🚚 Viajes por chofer y unidad</h3>
+      <div class="tabla-ancha"><table id="viajes"></table></div>
+      <p class="nota-chica">Notas que salieron juntas (mismo chofer y unidad, con 20 min o menos entre una y otra) cuentan como un solo viaje.</p>
+      <!-- Cerrado: sólo se ve (y se imprime) si lo abres. -->
+      <details class="entregas">
+        <summary class="btn btn--secundario">📋 Ver qué se entregó (por chofer)</summary>
+        <div class="tabla-ancha"><table class="detalle">
+          <thead><tr><th>Entregada</th><th>Folio</th><th>Cliente</th><th>Material</th><th>Unidad</th></tr></thead>
+          <tbody id="lista-entregas"></tbody>
+        </table></div>
+      </details>
+    </section>
+    <section>
+      <h2>Edgar · control de gasolina / diésel</h2>
+      <div class="cifras">
+        <p>Gasto total<b id="gas-importe">–</b></p>
+        <p>Litros cargados<b id="gas-litros">–</b></p>
+        <p>Cargas<b id="gas-cargas">–</b></p>
+      </div>
+      <p id="gas-sin-litros" class="nota-chica" hidden></p>
+      <h3>⛽ Por unidad</h3>
+      <div class="tabla-ancha"><table>
+        <thead><tr><th>Unidad</th><th class="num">Cargas</th><th class="num">Litros</th><th class="num">Importe</th></tr></thead>
+        <tbody id="gas-unidades"></tbody>
+      </table></div>
+      <h3>🧾 Historial de la semana</h3>
+      <div class="tabla-ancha"><table class="izq-final">
+        <thead><tr><th>Fecha</th><th>Unidad</th><th>Tipo</th><th class="num">Litros</th><th class="num">Importe</th><th>Reportó</th></tr></thead>
+        <tbody id="gas-cargas-lista"></tbody>
+      </table></div>
+    </section>
+    <p class="volver"><a href="/">← Volver a la Oficina Virtual</a></p>
+  </main>
+  <script type="module" src="/js/reporte.js"></script>
+</body>
+</html>

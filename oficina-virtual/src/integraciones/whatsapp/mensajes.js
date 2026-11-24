@@ -1,0 +1,85 @@
+// Textos de los avisos al cliente. Edítalos aquí; se reinicia la Oficina para que tomen efecto.
+const { whatsapp } = require('../../config');
+
+const primerNombre = (cliente) => {
+  const nombre = String(cliente ?? '').trim().split(/\s+/)[0] ?? '';
+  return nombre && !/^p[uú]blico$/i.test(nombre) ? ` ${nombre.charAt(0)}${nombre.slice(1).toLowerCase()}` : '';
+};
+
+// Todos los materiales de la nota. Con varios, están en "detalle", un renglón por producto. No van el
+// aviso interno de revisar en Pulpos ni el servicio de envío, que no es material (igual que en la hoja).
+function materiales(nota) {
+  const renglones = String(nota.detalle ?? '').split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('⚠️') && !/SERVICIO|ENV[IÍ]O|FLETE/i.test(l))
+    .map((l) => `• ${l.replace(/\s×\s/, ' ').toLowerCase()}`);
+  if (renglones.length) return renglones;
+  if (/VER EN PULPOS/.test(nota.material)) return ['• Los materiales de tu nota'];
+  return [`• ${[nota.cantidad, nota.unidad].filter(Boolean).join(' ').toLowerCase()} de ${String(nota.material).toLowerCase()}`];
+}
+
+function enRuta(nota) {
+  return [
+    `¡Hola${primerNombre(nota.cliente)}! 👋 Te escribimos de *${whatsapp.negocio}*.`,
+    '',
+    `Tu pedido *${nota.folio}* ya va en camino 🚚`,
+    ...materiales(nota),
+    '',
+    nota.chofer ? `• Lo lleva: ${nota.chofer}${nota.camion ? ` en la ${nota.camion}` : ''}` : null,
+    `• Entrega en: ${nota.direccion}`,
+    '',
+    '¡Gracias por tu compra!',
+  ].filter((l) => l !== null).join('\n');
+}
+
+// "280, N1002 y N1004"
+const enLista = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}` : xs[0]);
+
+// Varias notas del mismo cliente en el mismo viaje: un solo mensaje con todos los materiales.
+// Si van a direcciones distintas, se dice a dónde va cada una.
+function enRutaVarias(lista) {
+  const [primera] = lista;
+  const direcciones = [...new Set(lista.map((n) => n.direccion))];
+  const unaDireccion = direcciones.length === 1;
+  return [
+    `¡Hola${primerNombre(primera.cliente)}! 👋 Te escribimos de *${whatsapp.negocio}*.`,
+    '',
+    `Tus pedidos *${enLista(lista.map((n) => n.folio))}* ya van en camino 🚚`,
+    ...lista.flatMap((n) => ['', `*${n.folio}*${unaDireccion ? '' : ` · entrega en: ${n.direccion}`}`, ...materiales(n)]),
+    '',
+    primera.chofer ? `• Los lleva: ${primera.chofer}${primera.camion ? ` en la ${primera.camion}` : ''}` : null,
+    unaDireccion ? `• Entrega en: ${primera.direccion}` : null,
+    '',
+    '¡Gracias por tu compra!',
+  ].filter((l) => l !== null).join('\n');
+}
+
+// Según la hora en que sale el mensaje: 00:00–11:59 días, 12:00–18:59 tardes, 19:00–23:59 noches.
+function saludo(fecha = new Date()) {
+  const hora = fecha.getHours();
+  return hora < 12 ? 'buenos días' : hora < 19 ? 'buenas tardes' : 'buenas noches';
+}
+const conMayuscula = (t) => t[0].toUpperCase() + t.slice(1);
+
+// Respuesta automática de El Inspector: nunca lleva precios. Sólo pregunta lo que el cliente no dijo.
+const TODO = { material: true, colonia: true, pago: true };
+function bienvenida(fecha = new Date(), falta = TODO) {
+  const preguntas = [
+    falta.material && '🧱 ¿Qué material necesita?',
+    falta.colonia && '📍 ¿En qué colonia o poblado es la entrega?',
+    falta.pago && '💳 ¿Cómo le gustaría pagar?',
+  ].filter(Boolean);
+  return [
+    `¡Hola, ${saludo(fecha)}! 😊 Qué gusto saludarle, gracias por escribirnos a *${whatsapp.negocio}*.`,
+    '',
+    preguntas.length
+      ? `Con mucho gusto le ayudamos. Para darle su cotización, ¿nos comparte por favor ${preguntas.length > 1 ? 'estos datos' : 'este dato'}?`
+      : 'Con mucho gusto le ayudamos, en un momento le enviamos su cotización.',
+    ...(preguntas.length ? ['', ...preguntas] : []),
+  ].join('\n');
+}
+
+// Recordatorio de 24 horas: el saludo se calcula al momento de mandarlo.
+const seguimiento = (fecha = new Date()) => `${conMayuscula(saludo(fecha))}, ¿qué le pareció la cotización? ¿Algo más en lo que podamos ayudarle?`;
+
+module.exports = { enRuta, enRutaVarias, bienvenida, seguimiento, saludo };

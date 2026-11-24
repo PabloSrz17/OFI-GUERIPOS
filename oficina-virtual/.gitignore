@@ -1,0 +1,48 @@
+node_modules/
+# Punto de Venta armado (lo genera el proyecto del POS con npm run build:oficina)
+pos/
+.env
+data/*.sqlite*
+# Sesión del navegador del robot de Pulpos (contiene la sesión iniciada)
+data/pulpos-perfil/
+# Sesión de whatsapp-web.js (Paso 2)
+.wwebjs_auth/
+.wwebjs_cache/
+# Credenciales de Google Sheets (Paso 2)
+credentials/
+
+# Respaldos locales de la base de datos y fotos de clientes
+data/respaldos/
+data/fotos/
+
+# Registro y control del arranque automático
+data/logs/
+data/oficina.pid
+
+# Vinculación de WhatsApp (equivale a una sesión de WhatsApp Web)
+data/whatsapp-sesion/
+data/whatsapp-cache/
+
+# Código de Apps Script con el token real
+data/google-sheets/
+
+# Todo lo demás en data/ también es privado: datos de clientes y sesiones
+data/
+
+# Variables de entorno (la plantilla sin claves sí se guarda)
+.env.*
+!.env.example
+
+# Temporales y registros
+*.log
+*.tmp
+*.temp
+*.bak
+*.pid
+npm-debug.log*
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Paquete para la PC de Mostrador (lleva contraseñas)
+dist/

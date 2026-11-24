@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar · Oficina Virtual</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="pin">
+  <main class="pin__caja">
+    <h1>🔒 Oficina Virtual</h1>
+    <p id="pin-texto" class="pin__texto">Cargando…</p>
+    <form id="pin-form" autocomplete="off" hidden>
+      <label class="campo">PIN
+        <input id="pin-uno" type="password" inputmode="numeric" maxlength="12" autocomplete="off" required>
+      </label>
+      <label id="pin-dos-campo" class="campo" hidden>Repite el PIN
+        <input id="pin-dos" type="password" inputmode="numeric" maxlength="12" autocomplete="off">
+      </label>
+      <button type="submit" class="btn btn--ruta" id="pin-boton">Entrar</button>
+    </form>
+    <p id="pin-error" class="pin__error" role="alert"></p>
+  </main>
+  <script type="module" src="/js/login.js"></script>
+</body>
+</html>
