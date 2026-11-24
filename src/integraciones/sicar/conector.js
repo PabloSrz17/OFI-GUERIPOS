@@ -68,8 +68,17 @@ async function cancelarLasDeSicar() {
   return canceladas;
 }
 
+// En el servidor de Mostrador, SICAR sólo se importa mientras el Principal no contesta (si no, lo importa él y aquí
+// llega por la sincronización). Así la misma venta no se importa dos veces.
+const enEspera = () => require('../../config').rol === 'secondary' && require('../../sync/servidor').parEnLinea();
+
 async function ciclo() {
   try {
+    if (enEspera()) {
+      estado.reportar(ORIGEN, true, 'En espera: el servidor Principal importa las ventas de SICAR');
+      temporizador = setTimeout(ciclo, config.intervaloMs);
+      return;
+    }
     await revisar();
   } catch (err) {
     const mensaje = err.code === 'ER_ACCESS_DENIED_ERROR'

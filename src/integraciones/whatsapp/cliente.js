@@ -27,6 +27,7 @@ let vigia = null;
 let inicioIntento = 0;
 let ultimoAvance = 0;
 let alFinal = false; // sesión aceptada y carga al 99% o más
+let chromePid = null; // el Chrome de la última conexión: los reintentos que fallan al abrir no tienen el suyo
 let aProposito = false; // la Oficina misma está cerrando el navegador (reintento o apagado)
 const alConectar = [];
 const alMensaje = [];
@@ -55,9 +56,34 @@ function reconectarEn(ms) {
   clearTimeout(reintento);
   reintento = setTimeout(async () => {
     aProposito = true;
-    await cliente?.destroy().catch(() => {});
+    await cerrarChrome(cliente);
     conectar();
   }, ms);
+}
+
+// destroy() no siempre apaga Chrome: si la pestaña se cerró o se perdió la conexión, el proceso se queda vivo con el
+// perfil apartado y cada reintento falla con "The browser is already running" (24-nov). Se mata el que quede.
+function sigueVivo(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function cerrarChrome(anterior) {
+  const pid = anterior?.pupBrowser?.process?.()?.pid ?? chromePid;
+  await anterior?.destroy().catch(() => {});
+  if (!pid || !sigueVivo(pid)) return;
+  console.error(`[whatsapp] Chrome anterior (pid ${pid}) seguía abierto; cerrándolo`);
+  if (process.platform === 'win32') {
+    await new Promise((listo) => require('node:child_process').execFile('taskkill', ['/PID', String(pid), '/T', '/F'], () => listo()));
+  } else {
+    try { process.kill(pid, 'SIGKILL'); } catch { /* ya no estaba */ }
+  }
+  chromePid = null;
+  await new Promise((listo) => setTimeout(listo, 1500)); // que Windows suelte el perfil
 }
 
 // La librería se presenta por defecto como Chrome 101 de Mac y WhatsApp rechaza vincular
@@ -146,6 +172,7 @@ function conectar() {
     estado.reportar(ORIGEN, true, `Conectado · ${hora()}`);
     console.log(`[whatsapp] conectado ${horaLog()}, a los ${Math.round((Date.now() - inicioIntento) / 1000)} s del intento`);
     alConectar.forEach((fn) => fn());
+    chromePid = este.pupBrowser?.process()?.pid ?? chromePid;
     protegerVentana(este).catch((err) => console.error('[whatsapp] ventana:', err.message));
   });
   // Mensajes entrantes (sólo los que te escriben, no los que mandas tú).

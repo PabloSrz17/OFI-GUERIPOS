@@ -14,6 +14,7 @@ const respaldos = require('./integraciones/respaldos');
 const integraciones = require('./integraciones/estado');
 const robotPulpos = require('./integraciones/pulpos/robot');
 const conectorSicar = require('./integraciones/sicar/conector');
+const conectorPos = require('./integraciones/pos/conector');
 const whatsapp = require('./integraciones/whatsapp/cliente');
 const avisosWhatsapp = require('./integraciones/whatsapp/avisos');
 const registroSheets = require('./integraciones/sheets/registro');
@@ -22,11 +23,16 @@ const bus = require('./events/bus');
 const solicitudes = require('./integraciones/inspector/solicitudes');
 const ordenes = require('./integraciones/octavio/ordenes');
 const asistencias = require('./repositories/asistencias.repo');
+const sync = require('./sync/servidor');
 
 const app = express();
 const PUBLICO = path.join(__dirname, '..', 'public');
 app.disable('x-powered-by');
 app.use(seguridad.soloRedLocal);
+// Punto de Venta en /pos/ (misma app y mismo puerto). Va antes del JSON, el PIN y la CSP: tiene los suyos.
+require('./pos').montar(app);
+// Enlace con el otro servidor (Principal ↔ Mostrador). Lo pide un servidor con SYNC_TOKEN, no una persona: va antes del PIN.
+app.use('/api/sync', sync.router);
 app.use(seguridad.encabezados(PUBLICO));
 app.use(express.json({ limit: '100kb' }));
 app.use('/api/pin', pin.router);
@@ -48,6 +54,29 @@ app.use('/vendor/tesseract-core', express.static(path.join(__dirname, '..', 'nod
 app.use('/vendor/tesseract-data', express.static(path.join(__dirname, '..', 'node_modules', '@tesseract.js-data', 'spa')));
 
 app.get('/api/health', (req, res) => res.json({ ok: true, hora: new Date().toISOString() }));
+// Estado del enlace con el otro servidor y "Sincronizar ahora".
+app.get('/api/sincronizacion', (req, res) => res.json(sync.resumen()));
+app.post('/api/sincronizacion/ahora', async (req, res) => {
+  await sync.sincronizarAhora();
+  res.json(sync.resumen());
+});
+// Botón "Punto de Venta" en la PC del servidor: abre o trae al frente la ventana de impresión directa.
+// 409 = aquí no aplica (otra PC o apagado): el navegador abre /pos/ normal.
+app.post('/api/pos/ventana', async (req, res) => {
+  // Esta misma PC, la abran como localhost o con su IP de la red.
+  const ip = (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
+  const propias = Object.values(os.networkInterfaces()).flat().map((i) => i?.address);
+  if (!config.pos.ventana || !(seguridad.esEstaPC(req) || propias.includes(ip))) return res.status(409).json({ error: 'No disponible' });
+  const url = config.rol === 'secondary' && config.sync.peer ? `${config.sync.peer}/pos/` : `http://localhost:${config.port}/pos/`;
+  try {
+    const r = await require('./ventana-pos').abrirVentana({ url, impresora: config.pos.impresora });
+    if (r === 'sin-navegador') return res.status(409).json({ error: 'No encontré Chrome ni Edge' });
+    res.json({ ventana: r });
+  } catch (e) {
+    console.error('[pos] no se pudo abrir la ventana:', e.message);
+    res.status(409).json({ error: 'No se pudo abrir la ventana' });
+  }
+});
 app.use('/api/notas', require('./routes/notas.routes'));
 app.get('/api/choferes', (req, res) => res.json(choferes.listarActivos()));
 app.get('/api/camiones', (req, res) => res.json(camiones.listarActivos()));
@@ -70,6 +99,8 @@ app.get('/api/eventos', (req, res) => {
   res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   res.flushHeaders();
   const oyentes = Object.entries(EVENTOS).map(([evento, tipo]) => [evento, () => res.write(`event: ${tipo}\ndata: {}\n\n`)]);
+  // Llegaron cambios del otro servidor: se refrescan todas las pantallas.
+  oyentes.push(['sync:aplicado', () => new Set(Object.values(EVENTOS)).forEach((tipo) => res.write(`event: ${tipo}\ndata: {}\n\n`))]);
   oyentes.forEach(([evento, fn]) => bus.on(evento, fn));
   const latido = setInterval(() => res.write(': latido\n\n'), 25_000); // evita que se corte por inactividad
   req.on('close', () => {
@@ -111,23 +142,31 @@ app.listen(config.port, config.host, () => {
     .map((i) => `http://${i.address}:${config.port}`);
   console.log(`Oficina Virtual lista en http://localhost:${config.port}`);
   if (config.host === '0.0.0.0') ipsLocales.forEach((url) => console.log(`  Red local: ${url}`));
+  console.log(`  Servidor ${config.rol === 'secondary' ? 'de Mostrador (secundario)' : 'Principal'}; Chatito ${config.chatito ? 'activo' : 'apagado'}`);
   robotPulpos.iniciar();
   conectorSicar.iniciar();
-  avisosWhatsapp.iniciar();
-  solicitudes.iniciar(whatsapp);
-  require('./integraciones/agentes/grupo').iniciar(whatsapp);
+  conectorPos.iniciar(); // apagado hasta POS_CONECTOR_ACTIVO=true
+  // Chatito: todo lo que lee o escribe en el WhatsApp del negocio. En Mostrador va apagado (ENABLE_CHATITO=false).
+  if (config.chatito) {
+    avisosWhatsapp.iniciar();
+    solicitudes.iniciar(whatsapp);
+    require('./integraciones/agentes/grupo').iniciar(whatsapp);
+    require('./integraciones/inspector/seguimiento').iniciar();
+  }
   require('./integraciones/sulema/paquetes').iniciar();
-  require('./integraciones/inspector/seguimiento').iniciar();
   require('./integraciones/recordatorio-lista').iniciar();
   require('./integraciones/avisos-celular').iniciar();
   require('./integraciones/aviso-fecha').iniciar();
   whatsapp.iniciar();
   registroSheets.iniciar();
   respaldos.iniciar();
+  sync.iniciar({ reiniciar: apagar }); // en Mostrador, también la actualización automática
 });
 
 // Cierra los navegadores (robot y WhatsApp) y la conexión a SICAR al detener el servidor (Ctrl+C).
 async function apagar() {
+  sync.detener();
+  conectorPos.detener();
   await Promise.all([robotPulpos.detener(), conectorSicar.detener(), whatsapp.detener()]);
   process.exit(0);
 }

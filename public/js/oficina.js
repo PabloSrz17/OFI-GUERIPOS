@@ -11,8 +11,8 @@ const AGENTES = {
 const ESTADOS = { disponible: 'Disponible', procesando: 'Procesando', espera: 'En espera' };
 const ESTADO_CAMION = { patio: 'En patio', cargando: 'Cargando', en_ruta: 'En ruta' };
 
-const NOMBRES_CONECTOR = { pulpos: 'PS', sicar: 'SC', whatsapp: 'WhatsApp', sheets: 'Sheets', respaldos: 'Respaldo' };
-const CONECTORES_DE_VENTAS = ['pulpos', 'sicar']; // los vigila Sulema; WhatsApp lo vigila Edgar
+const NOMBRES_CONECTOR = { pulpos: 'PS', pos: 'PV', sicar: 'SC', whatsapp: 'WhatsApp', sheets: 'Sheets', respaldos: 'Respaldo', sync: 'Enlace' };
+const CONECTORES_DE_VENTAS = ['pulpos', 'pos', 'sicar']; // los vigila Sulema; WhatsApp lo vigila Edgar
 
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -104,6 +104,7 @@ function avisoDeFalla([id, e]) {
   const m = e.mensaje ?? '';
   if (/sesi[oó]n.*cerrada/i.test(m)) return `¡${nombre}: sesión cerrada, hay que volver a entrar!`;
   if (/^Devueltas/i.test(m)) return `¡Venta devuelta en ${nombre}! ${m.replace(/^.*?:\s*/, '').replace(/\s*·.*$/, '')}`;
+  if (/^Eliminadas/i.test(m)) return `¡Venta eliminada en ${nombre}! ${m.replace(/^.*?:\s*/, '').replace(/\s*·.*$/, '')}`;
   if (/^Revisa contra/i.test(m)) return `¡Revisa contra ${nombre}: ${m.replace(/^.*?:\s*/, '').replace(/\s*·.*$/, '')}!`;
   return `¡${nombre} sin conexión!`;
 }

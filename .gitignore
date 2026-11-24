@@ -1,4 +1,6 @@
 node_modules/
+# Punto de Venta armado (lo genera el proyecto del POS con npm run build:oficina)
+pos/
 .env
 data/*.sqlite*
 # Sesión del navegador del robot de Pulpos (contiene la sesión iniciada)
@@ -41,3 +43,6 @@ npm-debug.log*
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Paquete para la PC de Mostrador (lleva contraseñas)
+dist/

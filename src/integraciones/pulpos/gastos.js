@@ -12,6 +12,12 @@ const limpio = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').t
 const esCombustible = (texto) => /\b(gas|gasolina|diesel|disel|combustible|magna|premium)\b/.test(limpio(texto));
 
 const REPORTO = 'Pulpos (caja)';
+// Las mismas cargas pueden venir de la Caja del Punto de Venta nuevo (src/integraciones/pos). Sus ids llevan "pos:"
+// y cada fuente sólo quita las suyas. El POS dice exactamente qué retiro se anuló, así que no hace falta adivinar.
+const PULPOS = { reporto: REPORTO, prefijo: '', exacto: false, log: '[pulpos]' };
+const POS = { reporto: 'Punto de Venta (caja)', prefijo: 'pos:', exacto: true, log: '[pos]' };
+const DE_CAJA = new Set([PULPOS.reporto, POS.reporto]);
+const esDe = (fuente, id) => (fuente.prefijo ? String(id).startsWith(fuente.prefijo) : !String(id).startsWith(POS.prefijo));
 
 // Mismos nombres que el corcho de Edgar.
 const UNIDADES = [
@@ -47,7 +53,7 @@ function horaLocal(iso) {
 }
 
 // Movimientos de caja de Pulpos -> cargas de combustible. Sólo retiros vivos que hablan de combustible.
-function aCargas(movimientos) {
+function aCargas(movimientos, fuente = PULPOS) {
   return (movimientos ?? [])
     .filter((m) => m?.id && !m.deletedAt && Number(m.amount) < 0 && esCombustible(m.details))
     .map((m) => {
@@ -57,7 +63,7 @@ function aCargas(movimientos) {
         unidad: UNIDADES.find((u) => u.es.test(texto))?.nombre ?? 'SIN UNIDAD',
         importe: Math.abs(Number(m.amount)),
         concepto: /\b(diesel|disel)\b/.test(texto) ? 'diesel' : 'gasolina',
-        reporto: REPORTO,
+        reporto: fuente.reporto,
         mensaje: String(m.details).trim(),
         creado_en: horaLocal(m.createdAt),
       };
@@ -68,12 +74,12 @@ function aCargas(movimientos) {
 const misma = (a, b) => a === 'SIN UNIDAD' || b === 'SIN UNIDAD' || unidadCanonica(a) === unidadCanonica(b);
 
 // De Pulpos: si ya la reportaron (WhatsApp o a mano) ese día por el mismo importe y unidad, sólo se liga.
-function anotarUna(c) {
+function anotarUna(c, fuente = PULPOS) {
   if (stmts.mismoDia.all(c.creado_en, c.importe).some((r) => r.pulpos_id === c.pulpos_id)) return false;
   const reportada = stmts.mismoDia.all(c.creado_en, c.importe).find((r) => !r.pulpos_id && misma(r.unidad, c.unidad));
   if (reportada) {
     stmts.ligar.run(c.pulpos_id, reportada.id);
-    console.log(`[pulpos] combustible de caja ya reportado: ${c.unidad} $${c.importe} (${c.mensaje})`);
+    console.log(`${fuente.log} combustible de caja ya reportado: ${c.unidad} $${c.importe} (${c.mensaje})`);
     return false;
   }
   return stmts.anotar.run(c).changes > 0;
@@ -82,7 +88,7 @@ function anotarUna(c) {
 // Reporte por WhatsApp o a mano de hoy: si esa carga ya entró de la Caja de Pulpos, se completa esa fila
 // (quién reportó, litros) en lugar de anotar otra. Devuelve true si se emparejó.
 function emparejarReporte({ unidad, importe, litros = null, reporto, mensaje = '' }) {
-  const dePulpos = stmts.hoy.all(importe).find((r) => r.reporto === REPORTO && misma(r.unidad, unidad));
+  const dePulpos = stmts.hoy.all(importe).find((r) => DE_CAJA.has(r.reporto) && misma(r.unidad, unidad));
   if (!dePulpos) return false;
   stmts.completar.run({
     id: dePulpos.id,
@@ -96,21 +102,21 @@ function emparejarReporte({ unidad, importe, litros = null, reporto, mensaje = '
 
 // Retiros que ya entraron y que la Caja ya no manda: si sólo venían de Pulpos se quitan; si alguien también
 // los reportó (WhatsApp o a mano) se quedan, sólo se desligan de Pulpos. Devuelve cuántas se quitaron/desligaron.
-function quitarBorrados(movimientos) {
+function quitarBorrados(movimientos, fuente = PULPOS) {
   const vivos = (movimientos ?? []).filter((m) => m?.id && !m.deletedAt);
   const ids = new Set(vivos.map((m) => m.id));
   const horas = vivos.map((m) => horaLocal(m.createdAt)).filter(Boolean);
   let cambios = 0;
   for (const r of stmts.ligadas.all()) {
-    if (ids.has(r.pulpos_id)) continue;
+    if (!esDe(fuente, r.pulpos_id) || ids.has(r.pulpos_id)) continue;
     // Sin movimientos anteriores en la Caja no se sabe si fue un borrado o el corte: se deja.
-    if (!horas.some((h) => h <= r.creado_en)) continue;
-    if (r.reporto === REPORTO) {
+    if (!fuente.exacto && !horas.some((h) => h <= r.creado_en)) continue;
+    if (r.reporto === fuente.reporto) {
       stmts.borrar.run(r.id);
-      console.log(`[pulpos] borrado en la Caja, se quita de Edgar: ${r.unidad} $${r.importe} (${r.mensaje})`);
+      console.log(`${fuente.log} borrado en la Caja, se quita de Edgar: ${r.unidad} $${r.importe} (${r.mensaje})`);
     } else {
       stmts.desligar.run(r.id);
-      console.log(`[pulpos] borrado en la Caja; se queda lo que reportó ${r.reporto}: ${r.unidad} $${r.importe}`);
+      console.log(`${fuente.log} borrado en la Caja; se queda lo que reportó ${r.reporto}: ${r.unidad} $${r.importe}`);
     }
     cambios++;
   }
@@ -118,11 +124,11 @@ function quitarBorrados(movimientos) {
 }
 
 // Devuelve las cargas nuevas que se anotaron.
-function anotar(movimientos) {
-  quitarBorrados(movimientos);
-  const nuevas = aCargas(movimientos).filter(anotarUna);
-  for (const c of nuevas) console.log(`[pulpos] combustible de caja: ${c.unidad} $${c.importe} (${c.mensaje})`);
+function anotar(movimientos, fuente = PULPOS) {
+  quitarBorrados(movimientos, fuente);
+  const nuevas = aCargas(movimientos, fuente).filter((c) => anotarUna(c, fuente));
+  for (const c of nuevas) console.log(`${fuente.log} combustible de caja: ${c.unidad} $${c.importe} (${c.mensaje})`);
   return nuevas;
 }
 
-module.exports = { aCargas, anotar, quitarBorrados, horaLocal, emparejarReporte, unidadCanonica, REPORTO };
+module.exports = { aCargas, anotar, quitarBorrados, horaLocal, emparejarReporte, unidadCanonica, REPORTO, FUENTES: { PULPOS, POS } };

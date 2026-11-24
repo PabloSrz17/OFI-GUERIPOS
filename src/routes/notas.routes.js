@@ -46,7 +46,7 @@ router.patch('/:id/etiqueta', (req, res) => {
 });
 
 // Orígenes que se pueden capturar a mano. Una de Pulpos capturada a mano ya no la repite el robot (mismo origen y folio).
-const ORIGENES_MANUALES = ['manual', 'sicar', 'pulpos'];
+const ORIGENES_MANUALES = ['manual', 'sicar', 'pulpos', 'pos'];
 
 // "HH:MM" de hoy -> "AAAA-MM-DD HH:MM:00" (hora de la venta); null = ahora.
 function horaDeHoy(valor) {

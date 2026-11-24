@@ -25,8 +25,29 @@ function Anotar($texto) {
   Add-Content -Path $log -Encoding UTF8 -Value "===== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $texto ====="
 }
 
+# Actualización automática (src/sync/programa.js): si con el programa nuevo la Oficina no logra quedarse
+# arriba (se cae 3 veces seguidas), se regresan los archivos que tenía antes.
+$actualizacion = Join-Path $raiz 'data\actualizacion'
+function Revisar-Actualizacion {
+  $pendiente = Join-Path $actualizacion 'pendiente.json'
+  if (-not (Test-Path $pendiente)) { return }
+  try { $p = Get-Content $pendiente -Raw -Encoding UTF8 | ConvertFrom-Json } catch { Remove-Item -LiteralPath $pendiente -Force; return }
+  $p.intentos = [int]$p.intentos + 1
+  if ($p.intentos -le 3) {
+    [IO.File]::WriteAllText($pendiente, ($p | ConvertTo-Json -Depth 3))
+    return
+  }
+  Anotar 'El programa nuevo no arrancó: se regresa al anterior'
+  $respaldo = Join-Path $actualizacion 'anterior'
+  foreach ($r in @($p.archivos)) { if ($r) { Copy-Item -LiteralPath (Join-Path $respaldo $r) -Destination (Join-Path $raiz $r) -Force -ErrorAction SilentlyContinue } }
+  foreach ($r in @($p.nuevos)) { if ($r) { Remove-Item -LiteralPath (Join-Path $raiz $r) -Force -ErrorAction SilentlyContinue } }
+  [IO.File]::WriteAllText((Join-Path $actualizacion 'rechazada.txt'), [string]$p.version)
+  Remove-Item -LiteralPath $pendiente -Force
+}
+
 while ($true) {
   if ((Test-Path $log) -and (Get-Item $log).Length -gt 5MB) { Move-Item $log "$log.anterior" -Force }
+  Revisar-Actualizacion
   # Un navegador del robot que quedó huérfano bloquearía el perfil de Pulpos: se cierra.
   Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" |
     Where-Object { $_.ExecutablePath -like '*\.cache\puppeteer*' -and -not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue) } |

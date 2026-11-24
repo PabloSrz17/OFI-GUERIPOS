@@ -26,7 +26,7 @@ const CHOFER_EDITABLE = ['pendiente', 'cargando'];
 import { formatear } from './telefono.js';
 import { miniaturaFoto } from './visor-foto.js';
 
-const ORIGENES = { pulpos: 'PS', sicar: 'SC', whatsapp: 'WA' };
+const ORIGENES = { pulpos: 'PS', pos: 'PV', sicar: 'SC', whatsapp: 'WA' };
 
 // Etiqueta de la tarjeta. Las notas capturadas a mano con folio de N001 a N1000 son de SALIDA, no de SICAR.
 export function etiquetaOrigen(nota) {

@@ -16,7 +16,8 @@
     "test": "node --test",
     "inicio:instalar": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inicio-automatico.ps1",
     "inicio:quitar": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inicio-automatico.ps1 -Quitar",
-    "oficina:detener": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/detener-oficina.ps1"
+    "oficina:detener": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/detener-oficina.ps1",
+    "mostrador:paquete": "node scripts/mostrador/preparar-paquete.js"
   },
   "engines": {
     "node": ">=22.9"

@@ -1,7 +1,7 @@
 // Cargas de combustible que el equipo le reporta a Edgar por WhatsApp, en el grupo o en chat privado
 // ("Edgar, la estaquitas echó 500 de gasolina"). La IA saca la unidad y el monto; se guarda en la
-// tabla combustible y Edgar contesta "Enterado ✅". Con el robot de Pulpos encendido, además pregunta
-// si lo registra como retiro en la Caja de Pulpos; sólo lo hace si esa misma persona contesta "sí".
+// tabla combustible y Edgar contesta "Enterado ✅". Con el robot de Pulpos o el conector del Punto de Venta encendido,
+// además pregunta si lo registra como retiro en esa Caja (src/integraciones/caja.js); sólo si esa persona contesta "sí".
 const AnthropicSDK = require('@anthropic-ai/sdk');
 const db = require('../../db/connection');
 const gastos = require('../pulpos/gastos');
@@ -17,8 +17,9 @@ const NO = /^(no|nel|nop|todavia no|aun no)\b/;
 const pendientes = new Map();
 // Se puede cambiar en las pruebas: aquí no se abre ningún navegador.
 const pulpos = {
-  activo: () => require('../../config').pulpos.activo,
-  registrar: (retiro) => require('../pulpos/robot').registrarRetiro(retiro),
+  activo: () => require('../caja').caja().activo,
+  registrar: (retiro) => require('../caja').caja().registrarRetiro(retiro),
+  corto: () => require('../caja').caja().corto,
 };
 
 // "gas nissan blanca (Edgar)": como lo escribe la cajera, así el robot lo reconoce al leer la Caja.
@@ -71,14 +72,14 @@ async function anotar(texto, reporto, clave = null) {
   if (!unidad || !(c.importe > 0)) return 'No entendí la unidad o el importe. Escríbelo así: Edgar, la estaquitas echó 500 de gasolina';
   const carga = { unidad, importe: c.importe, concepto: c.concepto, litros: c.litros > 0 ? c.litros : null, reporto, mensaje: texto };
   if (gastos.emparejarReporte(carga)) {
-    console.log(`[edgar] combustible: ${unidad} $${c.importe} ya estaba en la Caja de Pulpos`);
+    console.log(`[edgar] combustible: ${unidad} $${c.importe} ya estaba en la Caja`);
     return ENTERADO;
   }
   stmts.anotar.run(carga);
   console.log(`[edgar] combustible: ${unidad} $${c.importe} de ${c.concepto}`);
   if (!clave || !pulpos.activo()) return ENTERADO;
   pendientes.set(clave, { ...carga, hasta: Date.now() + ESPERA_RESPUESTA_MS });
-  return `${ENTERADO}\n¿Lo registro como retiro en la Caja de PS? (${pesos(carga.importe)} · ${motivoDe(carga)})\nContesta "sí" o "no".`;
+  return `${ENTERADO}\n¿Lo registro como retiro en la Caja de ${pulpos.corto()}? (${pesos(carga.importe)} · ${motivoDe(carga)})\nContesta "sí" o "no".`;
 }
 
 // ¿Este mensaje es la respuesta a "¿Lo registro en Pulpos?"?
@@ -95,15 +96,15 @@ async function responder(clave, texto) {
   pendientes.delete(clave); // una sola vez, aunque contesten "sí" dos veces
   if (!carga) return null;
   const t = limpio(texto).replace(/^edgar[\s,:]*/, '').trim();
-  if (NO.test(t)) return 'Ok, no lo registro en PS.';
+  if (NO.test(t)) return `Ok, no lo registro en ${pulpos.corto()}.`;
   const motivo = motivoDe(carga);
   try {
     await pulpos.registrar({ importe: carga.importe, motivo });
-    console.log(`[edgar] retiro registrado en Pulpos: ${pesos(carga.importe)} · ${motivo}`);
-    return `Listo ✅ quedó el retiro en la Caja de PS: ${pesos(carga.importe)} · ${motivo}`;
+    console.log(`[edgar] retiro registrado en ${pulpos.corto()}: ${pesos(carga.importe)} · ${motivo}`);
+    return `Listo ✅ quedó el retiro en la Caja de ${pulpos.corto()}: ${pesos(carga.importe)} · ${motivo}`;
   } catch (err) {
-    console.error('[edgar] retiro en Pulpos:', err.message);
-    return `No pude registrarlo en PS (${err.message}). Regístralo a mano en la Caja: ${pesos(carga.importe)} · ${motivo}`;
+    console.error('[edgar] retiro en la Caja:', err.message);
+    return `No pude registrarlo en ${pulpos.corto()} (${err.message}). Regístralo a mano en la Caja: ${pesos(carga.importe)} · ${motivo}`;
   }
 }
 

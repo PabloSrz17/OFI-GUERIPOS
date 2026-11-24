@@ -40,6 +40,20 @@ function toast(mensaje, error = false) {
   toast.t = setTimeout(() => (el.hidden = true), 3500);
 }
 
+// Botón "Punto de Venta": en la PC del servidor (Mostrador) abre o trae al frente la ventana que imprime directo;
+// en cualquier otra PC (o si no se puede) abre el POS normal en esta pestaña.
+document.querySelector('.topbar__pos')?.addEventListener('click', async (e) => {
+  if (e.ctrlKey || e.shiftKey || e.metaKey || e.button !== 0) return;
+  e.preventDefault();
+  const destino = e.currentTarget.href;
+  try {
+    const { ventana } = await api.post('/api/pos/ventana');
+    toast(ventana === 'nueva' ? 'Abriendo el Punto de Venta…' : 'El Punto de Venta ya está abierto');
+  } catch {
+    location.href = destino;
+  }
+});
+
 function setConexion(ok) {
   const el = $('#conexion');
   el.textContent = ok ? 'En línea' : 'Sin conexión';

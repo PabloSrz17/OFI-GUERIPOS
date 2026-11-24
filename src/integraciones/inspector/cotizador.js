@@ -48,11 +48,33 @@ function interpretarSolicitud(linea) {
   return { ok: true, solicitud: { cliente: cliente.toUpperCase(), telefono, colonia: colonia.join(', '), productos } };
 }
 
+// "12-5", "T-12-5", "t12-5" es el tipo de viga (peralte y hilos), no su largo: no cuenta como medida (23-nov).
+const sinCodigos = (t) => String(t ?? '').replace(/\bt?\s*-?\s*\d+\s*-\s*\d+\b/gi, ' ');
 // Largo de los productos que se venden por medida: "VIGA 4.20 T-12-5" -> [4.2], "Viga de 2 m" -> [2].
-const medidasDe = (nombre) => [...String(nombre ?? '').matchAll(/(\d+[.,]\d+)|(\d+)\s*m(?:ts?|etros?)?\b/gi)]
+const medidasDe = (nombre) => [...sinCodigos(nombre).matchAll(/(\d+[.,]\d+)|(\d+)\s*m(?:ts?|etros?)?\b/gi)]
   .map((m) => Number((m[1] ?? m[2]).replace(',', '.')));
-// Todos los números de lo que pidió el cliente: "vigas 3.28 m" -> [3.28]
-const numerosDe = (texto) => [...String(texto ?? '').matchAll(/\d+(?:[.,]\d+)?/g)].map((m) => Number(m[0].replace(',', '.')));
+// Todos los números de lo que pidió el cliente: "vigas 12-5 de 5.60" -> [5.6]
+const numerosDe = (texto) => [...sinCodigos(texto).matchAll(/\d+(?:[.,]\d+)?/g)].map((m) => Number(m[0].replace(',', '.')));
+const raizDe = (texto) => clave(texto).split(' ')[0]?.replace(/e?s$/, '');
+const deRaiz = (p, raiz) => clave(p.nombre).split(' ').some((w) => w.replace(/e?s$/, '') === raiz);
+
+// Se pidió un largo que no está en la lista ("vigas 12-5 de 5.60"): el nombre sale igual que los de su tipo
+// ("VIGA 5.60 T-12-5 HILOS") y sin precio, para que un humano lo ponga.
+function nombrePorMedida(catalogo, texto) {
+  const largo = numerosDe(texto).at(-1);
+  const raiz = raizDe(texto);
+  if (!largo || largo > 20 || !raiz || raiz.length < 3) return null; // "vigas 250" no es de 250 m
+  const codigo = String(texto).match(/(\d+)\s*-\s*(\d+)/);
+  const hermanos = catalogo.filter((p) => deRaiz(p, raiz) && /^\S+ \d+\.\d{2}\b/.test(p.nombre)
+    && (!codigo || ` ${clave(p.nombre)} `.includes(` ${codigo[1]} ${codigo[2]} `)));
+  const cuenta = new Map();
+  for (const p of hermanos) {
+    const molde = p.nombre.replace(/\d+\.\d{2}/, '#');
+    cuenta.set(molde, { n: (cuenta.get(molde)?.n ?? 0) + 1, unidad: p.unidad });
+  }
+  const [molde, { unidad } = {}] = [...cuenta].sort((a, b) => b[1].n - a[1].n)[0] ?? [];
+  return molde ? { nombre: molde.replace('#', largo.toFixed(2)), unidad } : null;
+}
 
 // Busca el producto en el catálogo por la clave más larga que aparezca como palabras completas
 // ("cal" no coincide con "calle"; "cemento maya" gana sobre "maya").
@@ -68,20 +90,26 @@ function buscarPrecio(catalogo, texto) {
   let mejor = null;
   let largo = 0;
   for (const p of catalogo) {
-    if (otraMedida(p)) continue;
+    const otra = otraMedida(p);
     for (const c of p.claves.split(',').map((x) => x.trim()).filter(Boolean)) {
+      // Una clave aprendida con número ("vigas 250" -> la de 2.50) vale aunque la medida se escriba distinto.
+      if (otra && !/\d/.test(c)) continue;
       if (t.includes(` ${c} `) && c.length > largo) {
         mejor = p;
         largo = c.length;
       }
     }
   }
+  const raiz = raizDe(texto);
+  // "vigas 12-5" sin largo: no se escoge un largo al azar (salían todas de 5.00); lo pone un humano.
+  if (mejor && !numeros.length && medidasDe(mejor.nombre).length) {
+    const suya = medidasDe(mejor.nombre)[0];
+    if (catalogo.some((p) => deRaiz(p, raiz) && medidasDe(p.nombre).some((m) => m !== suya))) return null;
+  }
   if (mejor || !numeros.length) return mejor;
   // "vigas 4.20" -> la viga de 4.20; si hay dos iguales, la de precio más reciente.
-  const raiz = clave(texto).split(' ')[0]?.replace(/e?s$/, '');
   if (!raiz || raiz.length < 3 || /^\d/.test(raiz)) return null;
-  const mismas = catalogo.filter((p) => clave(p.nombre).split(' ').some((w) => w.replace(/e?s$/, '') === raiz)
-    && medidasDe(p.nombre).some((m) => numeros.includes(m)));
+  const mismas = catalogo.filter((p) => deRaiz(p, raiz) && medidasDe(p.nombre).some((m) => numeros.includes(m)));
   mismas.sort((a, b) => String(b.actualizado_en ?? '').localeCompare(String(a.actualizado_en ?? '')) || b.id - a.id);
   return mismas[0] ?? null;
 }
@@ -112,11 +140,12 @@ function armarBorrador(solicitud, catalogo, flete) {
     const hallado = buscarPrecio(catalogo, p.texto);
     // Pedido en bolsas y la lista lo vende por m³: ese precio no aplica, lo pone un humano.
     const encontrado = /^bols/i.test(p.unidad ?? '') && !/^bols/i.test(hallado?.unidad ?? '') ? null : hallado;
+    const porMedida = encontrado ? null : nombrePorMedida(catalogo, p.texto);
     return {
       tipo: 'producto',
-      descripcion: encontrado ? encontrado.nombre : capitalizar(p.texto),
+      descripcion: encontrado ? encontrado.nombre : porMedida?.nombre ?? capitalizar(p.texto),
       cantidad: p.cantidad,
-      unidad: unidadCotizacion(encontrado ? encontrado.unidad : p.unidad),
+      unidad: unidadCotizacion(encontrado ? encontrado.unidad : porMedida?.unidad ?? p.unidad),
       precio: encontrado ? encontrado.precio : null,
       precio_id: encontrado?.id ?? null,
       texto: p.texto,

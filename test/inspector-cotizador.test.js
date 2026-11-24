@@ -52,7 +52,30 @@ test('vigas: respeta la medida aunque se haya aprendido "vigas" para otra', () =
   assert.equal(buscarPrecio(vigas, 'vigas 4.20').id, 180);        // la de precio más reciente
   assert.equal(buscarPrecio(vigas, 'viga de 2 m').id, 172);
   assert.equal(buscarPrecio(vigas, 'vigas 5.00').id, 112);
-  assert.equal(buscarPrecio(vigas, 'vigas').id, 112);              // sin medida, como antes
+  assert.equal(buscarPrecio(vigas, 'vigas'), null);                // sin largo no se escoge uno (23-nov)
+});
+
+test('vigas "12-5 de 5.60": 12-5 es el tipo, 5.60 el largo; si no está en la lista sale con su nombre y sin precio', () => {
+  const vigas = [
+    { id: 112, nombre: 'VIGA 5.00 T-12-5 HILOS', unidad: 'pz', precio: 125, claves: 'vigas,viga 5 00 t 12 5 hilos' },
+    { id: 183, nombre: 'VIGA 3.00 T-12-5 HILOS', unidad: 'PZA', precio: 375, claves: 'viga 3 00 t 12 5 hilos' },
+    { id: 187, nombre: 'VIGA 2.70 T-12-5 HILOS', unidad: 'pz', precio: 337.5, claves: 'viga 2 70 t 12 5 hilos' },
+    { id: 202, nombre: 'VIGA 2.50 T-12-5 HILOS', unidad: 'pza', precio: 312.5, claves: 'vigas 250,viga 2 50 t 12 5 hilos' },
+  ];
+  const b = armarBorrador({ colonia: 'Fovi', productos: [
+    { cantidad: '3', unidad: '', texto: 'vigas 12-5 de 5.60' },
+    { cantidad: '2', unidad: '', texto: 'vigas 12-5 de 3.00' },
+    { cantidad: '3', unidad: '', texto: 'vigas 12-5 de 2.70' },
+    { cantidad: '2', unidad: '', texto: 'vigas 12-5' },
+    { cantidad: '3', unidad: '', texto: 'vigas 250' },
+  ] }, vigas, null);
+  assert.deepEqual(b.partidas.slice(0, -1).map((p) => [p.descripcion, p.cantidad, p.unidad, p.precio]), [
+    ['VIGA 5.60 T-12-5 HILOS', '3', 'pza', null],
+    ['VIGA 3.00 T-12-5 HILOS', '2', 'pza', 375],
+    ['VIGA 2.70 T-12-5 HILOS', '3', 'pza', 337.5],
+    ['Vigas 12-5', '2', '', null],
+    ['VIGA 2.50 T-12-5 HILOS', '3', 'pza', 312.5],
+  ]);
 });
 
 test('borrador: precio de lista, producto desconocido y flete sin precio', () => {
