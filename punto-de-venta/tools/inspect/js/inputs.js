@@ -1,0 +1,1 @@
+() => [...document.querySelectorAll('input, [role=dialog] button, .react-datepicker, [class*=picker]')].filter(e=>e.offsetParent).map(e=>e.tagName+'|'+(e.type||'')+'|'+(e.placeholder||'')+'|'+(e.value||'')+'|'+(e.getAttribute('aria-label')||'')+'|'+e.className.toString().slice(0,60)+'|'+e.textContent.trim().slice(0,40)).slice(0,40)

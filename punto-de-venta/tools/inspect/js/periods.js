@@ -1,0 +1,1 @@
+() => [...document.querySelectorAll('[role=menuitem],[role=option],li,button,label,input')].filter(e=>e.offsetParent && /días|Mes|Hoy|Ayer|Personaliz|Año|Rango|Semana|Desde|Hasta|Fecha/i.test(e.textContent + (e.placeholder||''))).map(e=>e.tagName+':'+(e.textContent.trim()||e.placeholder||e.type)).slice(0,30)

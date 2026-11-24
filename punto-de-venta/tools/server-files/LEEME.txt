@@ -1,0 +1,73 @@
+SERVIDOR POS
+============
+
+Esta carpeta es el Servidor POS. Va en UNA sola PC (la de mostrador), que debe
+estar encendida mientras se vende. Las demás PCs solo usan el navegador.
+
+CONTENIDO
+  ServidorPOS.exe    el programa (no necesita instalar nada más)
+  app\               la aplicación que abren las PCs
+  sql-wasm.wasm      motor de la base de datos
+  instalar.cmd       arranque automático y acceso "Abrir POS"
+  iniciar-servidor.vbs  abre el servidor oculto (sin ventana)
+  detener-servidor.cmd  cierra el servidor
+  desinstalar.cmd    quita lo anterior (no borra datos)
+  restablecer-acceso.cmd  si se olvida la contraseña (no borra datos)
+  datos\             (se crea solo) pos.sqlite = TODOS los datos del negocio
+  respaldos\         (se crea solo) un respaldo automático al día, últimos 30
+  servidor.log       (se crea solo) bitácora del servidor
+
+INSTALACIÓN EN LA PC SERVIDOR
+  1. Copia esta carpeta a C:\ServidorPOS (o donde prefieras; no la muevas después).
+  2. Doble clic en instalar.cmd.
+  3. Una sola vez, en PowerShell como administrador (para que entren las otras PCs):
+       New-NetFirewallRule -DisplayName "Servidor POS" -Direction Inbound -Protocol TCP -LocalPort 8420 -Profile Private -Action Allow
+  4. Abre "Abrir POS" en el escritorio (o http://localhost:8420) e inicia sesión.
+
+EL SERVIDOR CORRE OCULTO
+  No tiene ventana: arranca solo al encender la PC. Para saber si está
+  corriendo, abre "Abrir POS". Para cerrarlo: detener-servidor.cmd. Para
+  abrirlo otra vez: doble clic en iniciar-servidor.vbs. Lo que hace queda
+  en servidor.log.
+
+USUARIO Y CONTRASEÑA
+  Todas las PCs piden iniciar sesión con el usuario del negocio. Si la carpeta
+  se armó con usuario inicial, ya existe; si no, la primera vez que abras
+  http://localhost:8420 EN LA PC SERVIDOR te pedirá crearlo.
+  - Cambiar la contraseña: menú del usuario (arriba a la derecha) >
+    Cambiar contraseña. Las demás PCs tendrán que volver a entrar.
+  - Cerrar sesión: menú del usuario > Cerrar sesión.
+  - La sesión dura 30 días en cada navegador.
+  - Tras 5 intentos fallidos, esa PC espera 5 minutos.
+  - ¿Se olvidó? Doble clic en restablecer-acceso.cmd (cierra y vuelve a
+    abrir el servidor) y crea el usuario en http://localhost:8420.
+
+PASAR LOS DATOS QUE YA TIENES (una sola vez)
+  1. En la PC donde ya se estuvo usando el POS, abre el POS en su navegador:
+     Preferencias > Respaldo > Descargar Respaldo. Copia el archivo .sqlite a la PC servidor.
+  2. En la PC servidor, en http://localhost:8420: Preferencias > Respaldo >
+     Elegir Archivo... > el archivo > Restaurar.
+  Lo que había en el servidor queda guardado en respaldos\antes-de-restaurar-*.sqlite.
+
+LAS OTRAS PCs
+  La dirección aparece en el POS (Preferencias > Acceso) y al terminar
+  instalar.cmd, por ejemplo http://192.168.1.50:8420. Ábrela en el navegador (Edge o Chrome) de cada PC y
+  guárdala en favoritos. Arriba a la derecha debe decir "Conectado al servidor".
+
+SI SE CAE LA RED O SE APAGA EL SERVIDOR
+  Las PCs muestran "Sin conexión con el servidor": se puede consultar, pero no
+  vender ni cobrar. Al volver, se reconectan solas sin perder nada.
+
+RESPALDOS
+  - Automático: uno al día en respaldos\ (se guardan los últimos 30).
+  - Manual: Preferencias > Respaldo > Descargar Respaldo. Guárdalo en una USB.
+    Si pasan más de 24 horas sin descargar uno, el POS lo recuerda.
+  - Copiar la carpeta "datos" con el servidor cerrado también es un respaldo.
+
+SEGURIDAD
+  Sin la contraseña no se ven ni se cambian datos. Aun así, usa una red WiFi
+  con contraseña y separa la red de clientes de la del POS: la conexión es
+  dentro de la red local, sin cifrado (http).
+
+PUERTO
+  Por defecto 8420. Para cambiarlo: variable de entorno POS_PORT.

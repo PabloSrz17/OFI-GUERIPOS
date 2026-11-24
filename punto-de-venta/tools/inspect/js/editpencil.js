@@ -1,0 +1,1 @@
+() => { const label = 'Datos Básicos'; const t = [...document.querySelectorAll('main *')].find(e => e.childElementCount === 0 && e.textContent.trim() === label); let p = t; for (let i = 0; i < 4 && p; i++) { p = p.parentElement; const b = p.querySelector('button'); if (b) { b.scrollIntoView(); b.click(); return 'ok'; } } return 'no'; }
