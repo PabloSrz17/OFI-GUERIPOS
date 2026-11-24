@@ -156,8 +156,9 @@ export function cartTotals(c: Cart) {
   return saleTotals(c.lines, c.taxesRemoved);
 }
 
-export function cartToSaleInput(c: Cart, payment: SaleInput['payment']): SaleInput {
+export function cartToSaleInput(c: Cart, payment: SaleInput['payment'], deliveryMethod: SaleInput['deliveryMethod'] = null): SaleInput {
   return {
+    deliveryMethod,
     id: c.id,
     mode: c.mode,
     clientId: c.client?.id ?? null,

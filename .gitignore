@@ -12,3 +12,9 @@ tools/inspect/node_modules/
 # Generados y configuración local
 *.tsbuildinfo
 .claude/settings.local.json
+
+# Servidor POS armado (npm run build:server)
+build/
+
+# Datos reales exportados de Pulpos (no se suben)
+importar/

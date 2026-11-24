@@ -1,19 +1,52 @@
-import * as React from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronDown, Clock, ExternalLink, Pencil, ShoppingCart, Trash2 } from 'lucide-react';
-import { Page, PageHeader } from '@/components/layout/Page';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { EmptyState } from '@/components/ui/misc';
-import { ConfirmDialog, useToast } from '@/components/ui/feedback';
-import { ClientDialog, CommentsDialog, CreditLimitDialog, PriceListDialog } from '@/components/clients/ClientDialogs';
-import { useDb, useLiveQuery } from '@/db/hooks';
-import { clientName, clientPhone, deleteClients, effectiveCreditLimit, formatAddress, getClient } from '@/repos/clients';
-import { formatMoney, formatRelativeDateTime } from '@/lib/format';
-import { clientRecentSales } from '@/repos/sales';
-import { dueText, saleFolio } from '@/domain/sale';
-import { DeliveryBadge, PaymentBadge } from '@/pages/sales/SalesListPage';
+import * as React from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  AlertTriangle,
+  ChevronDown,
+  Clock,
+  ExternalLink,
+  Pencil,
+  ShoppingCart,
+  Trash2,
+  User,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  CollectDialog,
+  CollectionsList,
+  StatementDialog,
+} from "@/components/collections/CollectionDialogs";
+import { clientCollections, clientDebtSummary } from "@/repos/collections";
+import { Page, PageHeader } from "@/components/layout/Page";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { EmptyState } from "@/components/ui/misc";
+import { ConfirmDialog, useToast } from "@/components/ui/feedback";
+import {
+  ClientDialog,
+  CommentsDialog,
+  CreditLimitDialog,
+  PriceListDialog,
+} from "@/components/clients/ClientDialogs";
+import { useDb, useLiveQuery } from "@/db/hooks";
+import {
+  clientName,
+  clientPhone,
+  deleteClients,
+  effectiveCreditLimit,
+  formatAddress,
+  getClient,
+} from "@/repos/clients";
+import { formatMoney, formatRelativeDateTime } from "@/lib/format";
+import { clientRecentSales } from "@/repos/sales";
+import { dueText, saleFolio } from "@/domain/sale";
+import { DeliveryBadge, PaymentBadge } from "@/pages/sales/SalesListPage";
 
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -25,13 +58,26 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 /** Sección de la tarjeta derecha: título 14/600 con ✎ y contenido 14 gris oscuro. */
-function Section({ title, onEdit, children }: { title: string; onEdit?: () => void; children: React.ReactNode }) {
+function Section({
+  title,
+  onEdit,
+  children,
+}: {
+  title: string;
+  onEdit?: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <section className="border-b border-gray-200 px-6 py-6 last:border-b-0">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         {onEdit && (
-          <button type="button" aria-label={`Editar ${title}`} onClick={onEdit} className="-m-1 rounded p-1 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+          <button
+            type="button"
+            aria-label={`Editar ${title}`}
+            onClick={onEdit}
+            className="-m-1 rounded p-1 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+          >
             <Pencil className="size-5" />
           </button>
         )}
@@ -41,24 +87,41 @@ function Section({ title, onEdit, children }: { title: string; onEdit?: () => vo
   );
 }
 
-const linkClass = 'text-sm font-medium text-sky-600 hover:text-sky-700';
-const money = (cents: number) => formatMoney(cents / 100).replace(/\.00$/, '');
+const linkClass = "text-sm font-medium text-sky-600 hover:text-sky-700";
+const money = (cents: number) => formatMoney(cents / 100).replace(/\.00$/, "");
 
-/** Detalle del cliente (J-client-detail-nodebt.png). Ventas, deuda y cobros se llenan en las Etapas 5 y 7. */
+/** Detalle del cliente (J-client-detail.png y J-client-detail-nodebt.png): resumen, deuda, ventas y cobros. */
 export function ClientDetailPage() {
   const db = useDb();
   const toast = useToast();
   const navigate = useNavigate();
   const [sp] = useSearchParams();
-  const id = sp.get('id') ?? '';
+  const id = sp.get("id") ?? "";
   const data = useLiveQuery(
     (tx) => {
       const c = getClient(tx, id);
-      return c ? { c, limit: effectiveCreditLimit(tx, c), sales: clientRecentSales(tx, c.id) } : null;
+      return c
+        ? {
+            c,
+            limit: effectiveCreditLimit(tx, c),
+            sales: clientRecentSales(tx, c.id),
+            debt: clientDebtSummary(tx, c.id),
+            collections: clientCollections(tx, c.id),
+          }
+        : null;
     },
     [id],
   );
-  const [modal, setModal] = React.useState<null | 'edit' | 'list' | 'limit' | 'comments' | 'delete'>(null);
+  const [modal, setModal] = React.useState<
+    | null
+    | "edit"
+    | "list"
+    | "limit"
+    | "comments"
+    | "delete"
+    | "collect"
+    | "statement"
+  >(null);
   const [more, setMore] = React.useState(false);
 
   if (data === undefined) return null;
@@ -67,12 +130,15 @@ export function ClientDetailPage() {
       <Page width="narrow">
         <PageHeader back="/clients" title="Detalle del Cliente" />
         <Card>
-          <EmptyState title="Cliente no encontrado" description="Es posible que se haya eliminado." />
+          <EmptyState
+            title="Cliente no encontrado"
+            description="Es posible que se haya eliminado."
+          />
         </Card>
       </Page>
     );
 
-  const { c, limit, sales } = data;
+  const { c, limit, sales, debt, collections } = data;
   const name = clientName(c);
   const address = formatAddress(c);
   const close = (o: boolean) => !o && setModal(null);
@@ -83,118 +149,258 @@ export function ClientDetailPage() {
         back="/clients"
         title={name}
         actions={
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                Más Acciones
-                <ChevronDown />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem icon={<ShoppingCart />} onSelect={() => navigate(`/pos?client=${c.id}`)}>
-                Nueva Venta
-              </DropdownMenuItem>
-              <DropdownMenuItem icon={<Trash2 />} className="text-red-700" onSelect={() => setModal('delete')}>
-                Eliminar Cliente
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex gap-3">
+            <Button onClick={() => setModal("statement")}>
+              <User />
+              Ver Estado de Cuenta
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>
+                  Más Acciones
+                  <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  icon={<ShoppingCart />}
+                  onSelect={() => navigate(`/pos?client=${c.id}`)}
+                >
+                  Nueva Venta
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  icon={<Trash2 />}
+                  className="text-red-700"
+                  onSelect={() => setModal("delete")}
+                >
+                  Eliminar Cliente
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         }
       />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1 space-y-4">
-          <Card className="grid grid-cols-3 gap-6 p-6">
-            <Stat label="Ventas" value={c.sales_count} />
-            <Stat label="Total Vendido" value={money(c.total_sold_cents)} />
-            <Stat label="Deuda Pendiente" value={money(c.debt_cents)} />
+          <Card className="overflow-hidden">
+            <div className="grid grid-cols-3 gap-6 p-6">
+              <Stat label="Ventas" value={c.sales_count} />
+              <Stat label="Total Vendido" value={money(c.total_sold_cents)} />
+              <Stat label="Deuda Pendiente" value={money(c.debt_cents)} />
+            </div>
+            {debt.overdue > 0 && (
+              <p
+                className="flex items-center gap-2 border-t border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-800"
+                data-testid="overdue-strip"
+              >
+                <AlertTriangle className="size-5 shrink-0 text-amber-500" />
+                El cliente tiene una deuda vencida de {money(debt.overdue)}
+              </p>
+            )}
           </Card>
           <Card className="p-6">
-            <h3 className="text-base font-semibold text-gray-900">Últimas Ventas</h3>
+            <h3 className="text-base font-semibold text-gray-900">
+              Últimas Ventas
+            </h3>
             {sales.length === 0 ? (
-              <p className="mt-4 text-sm text-gray-500">Este cliente todavía no tiene ventas.</p>
+              <p className="mt-4 text-sm text-gray-500">
+                Este cliente todavía no tiene ventas.
+              </p>
             ) : (
               <>
                 <ul className="mt-2 divide-y divide-gray-200">
                   {sales.map((s) => (
                     <li key={s.id} className="py-4">
                       <div className="flex items-center justify-between gap-4">
-                        <Link to={`/sales/detail?id=${s.id}`} className="text-sm font-medium text-sky-600 hover:text-sky-700">
+                        <Link
+                          to={`/sales/detail?id=${s.id}`}
+                          className="text-sm font-medium text-sky-600 hover:text-sky-700"
+                        >
                           Venta {saleFolio(s.folio)}
                         </Link>
-                        <span className="text-sm text-gray-900">{formatMoney(s.total_cents / 100)}</span>
+                        <span className="text-sm text-gray-900">
+                          {formatMoney(s.total_cents / 100)}
+                        </span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-sm text-gray-500">{formatRelativeDateTime(new Date(s.created_at))}</span>
+                        <span className="text-sm text-gray-500">
+                          {formatRelativeDateTime(new Date(s.created_at))}
+                        </span>
                         <span className="flex flex-wrap items-center gap-2">
                           {s.balance_cents > 0 && s.due_date && (
-                            <span className={`flex items-center gap-1 text-xs ${new Date(s.due_date) < new Date() ? 'text-red-700' : 'text-gray-500'}`}>
+                            <span
+                              className={`flex items-center gap-1 text-xs ${new Date(s.due_date) < new Date() ? "text-red-700" : "text-gray-500"}`}
+                            >
                               <Clock className="size-3.5" />
                               {dueText(s.due_date)}
                             </span>
                           )}
                           <PaymentBadge balance={s.balance_cents} />
-                          <DeliveryBadge status={s.delivery_status as 'delivered' | 'pending'} />
+                          <DeliveryBadge
+                            status={
+                              s.delivery_status as "delivered" | "pending"
+                            }
+                          />
                         </span>
                       </div>
                     </li>
                   ))}
                 </ul>
-                <Button className="mt-2" onClick={() => navigate(`/sales?client=${c.id}`)}>
+                <Button
+                  className="mt-2"
+                  onClick={() => navigate(`/sales?client=${c.id}`)}
+                >
                   <ExternalLink />
                   Ver Todas las Ventas
                 </Button>
               </>
             )}
           </Card>
+          {collections.length > 0 && (
+            <Card className="p-6">
+              <h3 className="text-base font-semibold text-gray-900">
+                Últimos Cobros
+              </h3>
+              <div className="mt-2">
+                <CollectionsList rows={collections} />
+              </div>
+            </Card>
+          )}
         </div>
 
-        <Card className="w-full shrink-0 lg:w-[288px]">
-          <Section title="Datos Básicos" onEdit={() => setModal('edit')}>
-            <p>{name}</p>
-            {more && (
-              <dl className="space-y-3 pt-2">
-                {[
-                  ['Teléfono', clientPhone(c)],
-                  ['Email', c.email],
-                  ['Dirección', address],
-                ].map(([k, v]) => (
-                  <div key={k}>
-                    <dt className="text-xs text-gray-500">{k}</dt>
-                    <dd className="text-gray-700">{v || '—'}</dd>
+        <div className="w-full shrink-0 space-y-4 lg:w-[288px]">
+          {debt.total > 0 && (
+            <Card className="p-6" data-testid="debt-detail">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Detalle de Deuda
+                </h3>
+                {debt.overdue > 0 ? (
+                  <Badge tone="debt">Vencida</Badge>
+                ) : (
+                  <Badge tone="warning">Por cobrar</Badge>
+                )}
+              </div>
+              <p className="mt-2 text-2xl font-semibold text-gray-900">
+                {money(debt.total)}
+              </p>
+              <dl className="mt-4 space-y-2 text-sm">
+                {(
+                  [
+                    ["Vencida", debt.overdue, true],
+                    ["A cobrar en 0 a 7 días", debt.within7, false],
+                    ["A cobrar en +7 días", debt.later, false],
+                  ] as const
+                ).map(([k, v, red]) => (
+                  <div key={k} className="flex justify-between gap-2">
+                    <dt className="text-gray-600">{k}</dt>
+                    <dd
+                      className={
+                        red && v > 0
+                          ? "font-semibold text-red-700"
+                          : "text-gray-900"
+                      }
+                    >
+                      {money(v)}
+                    </dd>
                   </div>
                 ))}
               </dl>
-            )}
-            <button type="button" className={`${linkClass} pt-2`} onClick={() => setMore((m) => !m)}>
-              {more ? 'Ver Menos' : 'Ver Más'}
-            </button>
-          </Section>
-          <Section title="Lista de Precios" onEdit={() => setModal('list')}>
-            <p>{c.price_list_name ?? 'Sin lista asignada'}</p>
-          </Section>
-          <Section title="Límite de Crédito" onEdit={() => setModal('limit')}>
-            <p>{limit === null ? 'Sin limitar' : formatMoney(limit / 100)}</p>
-            {c.credit_limit_cents === null && limit !== null && <p className="text-xs text-gray-500">Límite predeterminado</p>}
-          </Section>
-          <Section title="Comentarios" onEdit={c.comments ? () => setModal('comments') : undefined}>
-            {c.comments ? (
-              <p className="whitespace-pre-line">{c.comments}</p>
-            ) : (
-              <button type="button" className={linkClass} onClick={() => setModal('comments')}>
-                Agregar
+              <Button
+                variant="primary"
+                className="mt-5 w-full"
+                onClick={() => setModal("collect")}
+              >
+                Registrar Cobro
+              </Button>
+            </Card>
+          )}
+          <Card className="w-full">
+            <Section title="Datos Básicos" onEdit={() => setModal("edit")}>
+              <p>{name}</p>
+              {more && (
+                <dl className="space-y-3 pt-2">
+                  {[
+                    ["Teléfono", clientPhone(c)],
+                    ["Email", c.email],
+                    ["Dirección", address],
+                  ].map(([k, v]) => (
+                    <div key={k}>
+                      <dt className="text-xs text-gray-500">{k}</dt>
+                      <dd className="text-gray-700">{v || "—"}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+              <button
+                type="button"
+                className={`${linkClass} pt-2`}
+                onClick={() => setMore((m) => !m)}
+              >
+                {more ? "Ver Menos" : "Ver Más"}
               </button>
-            )}
-          </Section>
-        </Card>
+            </Section>
+            <Section title="Lista de Precios" onEdit={() => setModal("list")}>
+              <p>{c.price_list_name ?? "Sin lista asignada"}</p>
+            </Section>
+            <Section title="Límite de Crédito" onEdit={() => setModal("limit")}>
+              <p>{limit === null ? "Sin limitar" : formatMoney(limit / 100)}</p>
+              {c.credit_limit_cents === null && limit !== null && (
+                <p className="text-xs text-gray-500">Límite predeterminado</p>
+              )}
+            </Section>
+            <Section
+              title="Comentarios"
+              onEdit={c.comments ? () => setModal("comments") : undefined}
+            >
+              {c.comments ? (
+                <p className="whitespace-pre-line">{c.comments}</p>
+              ) : (
+                <button
+                  type="button"
+                  className={linkClass}
+                  onClick={() => setModal("comments")}
+                >
+                  Agregar
+                </button>
+              )}
+            </Section>
+          </Card>
+        </div>
       </div>
 
-      <ClientDialog open={modal === 'edit'} onOpenChange={close} client={c} />
-      <PriceListDialog open={modal === 'list'} onOpenChange={close} client={c} />
-      <CreditLimitDialog open={modal === 'limit'} onOpenChange={close} client={c} />
-      <CommentsDialog open={modal === 'comments'} onOpenChange={close} client={c} />
+      <CollectDialog
+        open={modal === "collect"}
+        onOpenChange={close}
+        target={{ clientId: c.id }}
+        clientName={name}
+      />
+      <StatementDialog
+        open={modal === "statement"}
+        onOpenChange={close}
+        clientId={c.id}
+        clientName={name}
+        onCollect={() => setModal("collect")}
+      />
+      <ClientDialog open={modal === "edit"} onOpenChange={close} client={c} />
+      <PriceListDialog
+        open={modal === "list"}
+        onOpenChange={close}
+        client={c}
+      />
+      <CreditLimitDialog
+        open={modal === "limit"}
+        onOpenChange={close}
+        client={c}
+      />
+      <CommentsDialog
+        open={modal === "comments"}
+        onOpenChange={close}
+        client={c}
+      />
       <ConfirmDialog
-        open={modal === 'delete'}
+        open={modal === "delete"}
         onOpenChange={close}
         title="Eliminar cliente"
         description={`${name} dejará de aparecer en la lista y en el punto de venta. Su historial se conserva.`}
@@ -202,8 +408,8 @@ export function ClientDetailPage() {
         onConfirm={async () => {
           try {
             await db.write((tx) => deleteClients(tx, [c.id]));
-            toast.success('Cliente eliminado');
-            navigate('/clients', { replace: true });
+            toast.success("Cliente eliminado");
+            navigate("/clients", { replace: true });
           } catch (e) {
             toast.error(e);
           }

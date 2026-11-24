@@ -11,6 +11,12 @@ import { DEFAULT_CREDIT_LIMIT_KEY } from '@/repos/clients';
 import { BLOCK_OVERDUE_KEY, CREDIT_DAYS_KEY, DEFAULT_CREDIT_DAYS } from '@/repos/sales';
 import { getSetting, setSetting } from '@/repos/settings';
 import { getTicketSettings, saveTicketSettings, type TicketSettings } from '@/sales/ticket';
+import { Select } from '@/components/ui/select';
+import { useConnection } from '@/db/connection';
+import { getPrintSettings, printOnServer, savePrintSettings, type PrintSettings } from '@/print/output';
+import { getLocalPrint, MAX_COPIES, mostradorLauncher, saveLocalPrint, type LocalPrint } from '@/print/local';
+import { downloadBlob } from '@/lib/download';
+import { ticketText, type TicketLine } from '@/print/escpos';
 
 function SettingsCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -203,6 +209,172 @@ export function TicketSettingsPage() {
           </Button>
         </div>
       </form>
+      <ThisPcPrintCard />
+      <ServerPrinterCard />
     </>
+  );
+}
+
+/**
+ * Impresión de esta PC (D39): imprimir al cobrar y cuántas copias. Se guarda en este navegador. Para que no pregunte
+ * la impresora, se descarga el acceso de mostrador (abre el POS con impresión directa en la impresora predeterminada).
+ */
+function ThisPcPrintCard() {
+  const [p, setP] = React.useState<LocalPrint>(getLocalPrint);
+  const [printer, setPrinter] = React.useState('WL88S');
+  const save = (patch: Partial<LocalPrint>) => {
+    const next = { ...p, ...patch };
+    saveLocalPrint(next);
+    setP(next);
+  };
+  return (
+    <SettingsCard title="Impresión en esta PC">
+      <CheckboxField
+        id="print-auto"
+        label="Imprimir el ticket al cobrar"
+        description="En esta PC, al cobrar una venta el ticket sale solo, sin apretar «Imprimir Ticket»."
+        checked={p.autoPrint}
+        onCheckedChange={(v) => save({ autoPrint: v === true })}
+      />
+      <Field label="Copias del ticket al cobrar" htmlFor="print-copies" help="Cada copia sale aparte, con su propio corte. Las reimpresiones desde Ventas salen una sola vez.">
+        <Select
+          id="print-copies"
+          aria-label="Copias del ticket al cobrar"
+          className="min-w-72"
+          value={String(p.copies)}
+          options={Array.from({ length: MAX_COPIES }, (_, i) => ({ value: String(i + 1), label: i === 0 ? '1 copia' : `${i + 1} copias` }))}
+          onValueChange={(v) => save({ copies: Number(v) })}
+        />
+      </Field>
+      <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+        <p className="font-medium text-gray-900">Imprimir sin que pregunte la impresora</p>
+        <p className="mt-1">
+          En la PC donde está la impresora de tickets, descarga este acceso y ábrelo: deja esa impresora como predeterminada y abre el
+          Punto de Venta en su propia ventana, donde los tickets salen directo. Ahí vuelve a marcar «Imprimir el ticket al cobrar» y las copias.
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <Field label="Impresora de tickets de esa PC" htmlFor="print-mostrador">
+            <Input id="print-mostrador" className="w-56" value={printer} onChange={(e) => setPrinter(e.target.value)} />
+          </Field>
+          <Button
+            type="button"
+            onClick={() => downloadBlob('Punto de Venta (mostrador).cmd', new Blob([mostradorLauncher(new URL('./', location.href).href, printer)], { type: 'application/octet-stream' }))}
+          >
+            Descargar acceso de mostrador
+          </Button>
+        </div>
+      </div>
+    </SettingsCard>
+  );
+}
+
+const COLUMN_OPTIONS = [
+  { value: '48', label: '80 mm (48 caracteres)' },
+  { value: '42', label: '80 mm, letra grande (42 caracteres)' },
+  { value: '32', label: '58 mm (32 caracteres)' },
+];
+
+function testTicket(t: TicketSettings, columns: number): TicketLine[] {
+  return [
+    { type: 'text', text: t.businessName, align: 'center', bold: true, big: true },
+    { type: 'text', text: 'Prueba de impresión', align: 'center' },
+    { type: 'rule' },
+    { type: 'row', left: 'Impresora', right: 'OK', bold: true },
+    { type: 'row', left: 'Ancho', right: `${columns} caracteres` },
+    { type: 'text', text: 'Acentos y eñes: áéíóú ÁÉÍÓÚ ñ Ñ ¿? ¡!' },
+    { type: 'text', text: '1234567890'.repeat(7).slice(0, columns) },
+    { type: 'rule' },
+    { type: 'row', left: 'TOTAL', right: '$1,234.50', bold: true, big: true },
+    { type: 'rule' },
+    { type: 'text', text: t.footer || 'Fin de la prueba', align: 'center' },
+  ];
+}
+
+/**
+ * Impresora de tickets de la PC servidor (diseño propio, D35): todas las PCs mandan sus tickets a esa impresora.
+ * Solo aparece cuando el POS trabaja con el Servidor POS.
+ */
+function ServerPrinterCard() {
+  const db = useDb();
+  const toast = useToast();
+  const conn = useConnection();
+  const saved = useLiveQuery(getPrintSettings, []);
+  const ticket = useLiveQuery(getTicketSettings, []);
+  const [printers, setPrinters] = React.useState<{ name: string; isDefault: boolean }[] | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [testing, setTesting] = React.useState(false);
+  const server = conn.mode === 'server';
+
+  const loadPrinters = React.useCallback(async () => {
+    setLoadError(null);
+    try {
+      const res = await fetch('./api/printers', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+      setPrinters(data);
+    } catch (e) {
+      setLoadError(`No se pudo leer la lista de impresoras de la PC servidor: ${e instanceof Error ? e.message : e}`);
+    }
+  }, []);
+  React.useEffect(() => {
+    if (server) void loadPrinters();
+  }, [server, loadPrinters]);
+
+  if (!server || !saved || !ticket) return null;
+  const save = (patch: Partial<PrintSettings>) => db.write((tx) => savePrintSettings(tx, { ...saved, ...patch })).catch((e) => toast.error(e));
+  const options = (printers ?? []).map((p) => ({ value: p.name, label: p.isDefault ? `${p.name} (predeterminada)` : p.name }));
+  if (saved.printer && !options.some((o) => o.value === saved.printer)) options.unshift({ value: saved.printer, label: `${saved.printer} (no encontrada)` });
+  const sample = testTicket(ticket, saved.columns);
+
+  return (
+    <SettingsCard title="Impresora de tickets de la PC servidor">
+      <CheckboxField
+        id="print-server"
+        label="Imprimir los tickets en la impresora de la PC servidor"
+        description="Las notas, cortes y cobros de todas las PCs salen en esta impresora. Si lo desactivas, cada PC abre su propio diálogo de impresión."
+        checked={saved.enabled}
+        onCheckedChange={(v) => save({ enabled: v === true })}
+      />
+      <Field label="Impresora" htmlFor="print-printer" help="Las impresoras instaladas en Windows de la PC servidor.">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select id="print-printer" aria-label="Impresora" className="min-w-72" value={saved.printer || undefined} placeholder={printers ? 'Elige la impresora' : 'Buscando impresoras…'} options={options} onValueChange={(v) => save({ printer: v })} />
+          <Button type="button" onClick={() => void loadPrinters()}>
+            Actualizar lista
+          </Button>
+        </div>
+      </Field>
+      {loadError && (
+        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
+          {loadError}
+        </p>
+      )}
+      <Field label="Ancho del papel" htmlFor="print-columns">
+        <Select id="print-columns" aria-label="Ancho del papel" className="min-w-72" value={String(saved.columns)} options={COLUMN_OPTIONS} onValueChange={(v) => save({ columns: Number(v) })} />
+      </Field>
+      <CheckboxField id="print-cut" label="Cortar el papel al terminar cada ticket" checked={saved.cut} onCheckedChange={(v) => save({ cut: v === true })} />
+      <div className="flex flex-wrap items-start gap-6">
+        <Button
+          type="button"
+          variant="primary"
+          disabled={!saved.printer || testing}
+          onClick={async () => {
+            setTesting(true);
+            try {
+              await printOnServer(saved, sample);
+              toast.success('Prueba enviada a la impresora');
+            } catch (e) {
+              toast.error(e);
+            } finally {
+              setTesting(false);
+            }
+          }}
+        >
+          {testing ? 'Imprimiendo…' : 'Imprimir prueba'}
+        </Button>
+        <pre aria-label="Vista previa del ticket de prueba" className="overflow-x-auto rounded-md border border-gray-200 bg-gray-50 p-3 font-mono text-[11px] leading-snug text-gray-800">
+          {ticketText(sample, saved.columns)}
+        </pre>
+      </div>
+    </SettingsCard>
   );
 }

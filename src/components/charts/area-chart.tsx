@@ -65,6 +65,7 @@ export function AreaChart({ data, height = 240, formatY = String, formatValue = 
   const ih = height - PAD.top - PAD.bottom;
   const x = (i: number) => PAD.left + (data.length <= 1 ? iw / 2 : (iw * i) / (data.length - 1));
   const y = (v: number) => PAD.top + ih - (ih * v) / max;
+  const labelStep = Math.max(1, Math.ceil((data.length * 56) / Math.max(iw, 1)));
   const pts = data.map((d, i) => [x(i), y(d.value)] as [number, number]);
   const line = smoothPath(pts);
   const area = line ? `${line} L${x(data.length - 1)},${y(0)} L${x(0)},${y(0)} Z` : '';
@@ -94,6 +95,8 @@ export function AreaChart({ data, height = 240, formatY = String, formatValue = 
           </g>
         ))}
         {data.map((d, i) => (
+          // Se muestran solo las etiquetas que caben (≈56 px cada una), siempre incluida la última.
+          (i % labelStep === 0 || i === data.length - 1) && (data.length - 1 - i >= labelStep / 2 || i === data.length - 1) &&
           <text
             key={d.label}
             x={x(i)}

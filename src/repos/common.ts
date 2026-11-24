@@ -18,7 +18,7 @@ export class ValidationError extends Error {
   }
 }
 
-export type OutboxEntity = 'category' | 'brand' | 'price_list' | 'product' | 'inventory_movement' | 'location' | 'client' | 'setting' | 'cash_register' | 'sale' | 'payment' | 'cash_movement';
+export type OutboxEntity = 'category' | 'brand' | 'price_list' | 'product' | 'inventory_movement' | 'location' | 'client' | 'setting' | 'cash_register' | 'sale' | 'payment' | 'cash_movement' | 'cash_cut' | 'collection';
 
 /** Encola un evento de sincronización en la misma transacción del cambio (Transactional Outbox). */
 export function enqueueOutbox(tx: Tx, entity: OutboxEntity, entityId: string, op: 'upsert' | 'delete', payload: unknown) {

@@ -763,7 +763,7 @@ export function PosPage() {
             setCheckoutCart(null);
             setTimeout(() => searchRef.current?.focus(), 0);
           }}
-          onPrint={(id) => printSaleTicket(db.read.bind(db), id).catch((e) => toast.error(e))}
+          onPrint={(id) => printSaleTicket(db.read.bind(db), id, { checkout: true }).catch((e) => toast.error(e))}
         />
       )}
     </div>

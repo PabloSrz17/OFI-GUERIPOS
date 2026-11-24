@@ -5,7 +5,7 @@ import { cashSuggestions, lineTotals, saleTotals } from '@/domain/sale';
 import { createPriceList, listPriceLists } from './categories';
 import { createClient, DEFAULT_CREDIT_LIMIT_KEY, deleteClients, getClient, listClients, patchClient } from './clients';
 import { createProduct } from './products';
-import { addSaleComment, BLOCK_OVERDUE_KEY, clientRecentSales, createSale, deleteSale, deliverSale, getSale, listSales, posFindByCode, posSearch, salesCsv, setSaleClient, type SaleInput } from './sales';
+import { addSaleComment, BLOCK_OVERDUE_KEY, clientRecentSales, createSale, deleteSale, deliverSale, getSale, listSales, posFindByCode, posSearch, salesReportRows, setSaleClient, type SaleInput } from './sales';
 import { setSetting } from './settings';
 
 let db: Database;
@@ -211,10 +211,11 @@ describe('historial de ventas', () => {
     expect(await folios({ filters: { discount: 'with' } })).toEqual([3]);
     expect(await folios({ filters: { payment: 'paid' }, sort: 'total-asc' })).toEqual([3, 1]);
     expect(await folios({ filters: { from: '2999-01-01' } })).toEqual([]);
-    const csv = await db.read((t) => salesCsv(t));
-    expect(csv.split('\r\n')).toHaveLength(4);
-    expect(csv).toContain('N2,');
-    expect(csv).toContain('Ana Ruiz,A Crédito,440.00,0.00,60.69,440.00,440.00,Deuda pendiente,No Entregados');
+    const report = await db.read((t) => salesReportRows(t, { from: '2000-01-01T00:00:00.000Z', to: '2999-01-01T00:00:00.000Z' }));
+    expect(report).toHaveLength(3);
+    expect(report[1]).toEqual(['N2', 'Ana Ruiz', 'Deuda pendiente', 440, 440]);
+    expect(report[0]).toEqual(['N3', 'Público General', 'Pagada', expect.any(Number), 0]);
+    expect(await db.read((t) => salesReportRows(t, { from: '2999-01-01T00:00:00.000Z', to: '2999-01-02T00:00:00.000Z' }))).toEqual([]);
   });
 
   it('comentarios en el historial', async () => {

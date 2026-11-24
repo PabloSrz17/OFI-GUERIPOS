@@ -11,6 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "build:server": "npm run build && node tools/build-server.mjs",
+    "build:oficina": "npm run build && node tools/build-oficina.mjs",
+    "e2e:server": "npm run build && node tools/build-server.mjs --no-exe && playwright test e2e/multi-pc.spec.ts",
     "tauri": "tauri"
   },
   "dependencies": {

@@ -107,7 +107,7 @@ describe('clientes', () => {
     });
     await pdb.write((tx) => {
       tx.run('DELETE FROM schema_migrations WHERE version >= 2');
-      for (const t of ['sale_events', 'sale_items', 'payments', 'cash_movements', 'sales', 'cash_registers', 'clients', 'settings']) tx.run(`DROP TABLE ${t}`);
+      for (const t of ['cash_cut_lines', 'cash_movements', 'cash_cuts', 'sale_events', 'sale_items', 'payments', 'collections', 'sales', 'cash_registers', 'clients', 'settings']) tx.run(`DROP TABLE ${t}`);
     });
     const reopened = await openTestDb(bytes!);
     expect(await reopened.read((t) => t.get<{ v: number }>('SELECT max(version) v FROM schema_migrations')!.v)).toBe(LATEST_VERSION);

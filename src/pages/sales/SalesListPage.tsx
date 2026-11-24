@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowDownUp, Calendar, CreditCard, Download, HandCoins, Percent, Plus, Search, ShoppingCart, SlidersHorizontal, Trash2, User, CircleDollarSign } from 'lucide-react';
+import { ArrowDownUp, Calendar, CreditCard, HandCoins, Percent, Plus, Search, ShoppingCart, SlidersHorizontal, Trash2, User, CircleDollarSign } from 'lucide-react';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,12 +11,12 @@ import { EmptyState, PillTabs, ToggleChip } from '@/components/ui/misc';
 import { Pagination } from '@/components/ui/pagination';
 import { Select } from '@/components/ui/select';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
-import { useDb, useLiveQuery } from '@/db/hooks';
+import { useLiveQuery } from '@/db/hooks';
 import { PAYMENT_METHODS, paymentMethodLabel, saleFolio, type PaymentMethod } from '@/domain/sale';
 import { clientName, listClients } from '@/repos/clients';
-import { listSales, salesCsv, type SaleFilters, type SaleSort, type SalesTab } from '@/repos/sales';
+import { listSales, type SaleFilters, type SaleSort, type SalesTab } from '@/repos/sales';
 import { formatMoney, formatRelativeDateTime } from '@/lib/format';
-import { download } from '@/lib/download';
+import { SalesReportDownload } from '@/components/sales/SalesReportDownload';
 
 const money = (c: number) => formatMoney(c / 100);
 
@@ -222,7 +222,6 @@ export function DeliveryBadge({ status, icon }: { status: 'delivered' | 'pending
 
 /** Historial de ventas (B-sales-list.png). */
 export function SalesListPage() {
-  const db = useDb();
   const navigate = useNavigate();
   const [sp, setSp] = useSearchParams();
   const q = sp.get('q') ?? '';
@@ -265,10 +264,7 @@ export function SalesListPage() {
         title="Ventas"
         actions={
           <>
-            <Button onClick={async () => download('ventas.csv', await db.read((tx) => salesCsv(tx, { q, tab, filters })))}>
-              <Download />
-              Descargar Ventas
-            </Button>
+            <SalesReportDownload />
             <Button variant="primary" onClick={() => navigate('/pos')}>
               <Plus />
               Nueva Venta

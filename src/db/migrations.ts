@@ -303,6 +303,143 @@ CREATE TABLE sale_events (
 CREATE INDEX sale_events_sale ON sale_events (sale_id, created_at);
 `,
   },
+  {
+    // Etapa 6: cortes de caja. cash_movements se reconstruye (SQLite no permite cambiar un CHECK) para admitir
+    // la anulación de ingresos/retiros (decisions.md D20) y para que un movimiento ya cortado no cambie de corte.
+    version: 4,
+    sql: `
+-- Corte de caja: congela lo esperado y lo contado. Sin fondo: el efectivo contado se retira completo (D19).
+CREATE TABLE cash_cuts (
+  id TEXT PRIMARY KEY,
+  folio INTEGER NOT NULL UNIQUE,
+  register_id TEXT NOT NULL REFERENCES cash_registers (id),
+  start_cents INTEGER NOT NULL DEFAULT 0,
+  expected_cents INTEGER NOT NULL,
+  counted_cents INTEGER NOT NULL,
+  withdrawn_cents INTEGER NOT NULL,
+  remaining_cents INTEGER NOT NULL DEFAULT 0,
+  comments TEXT,
+  user_name TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX cash_cuts_register ON cash_cuts (register_id, created_at);
+
+DROP TRIGGER cash_movements_no_delete;
+DROP TRIGGER cash_movements_no_update;
+ALTER TABLE cash_movements RENAME TO cash_movements_v3;
+CREATE TABLE cash_movements (
+  id TEXT PRIMARY KEY,
+  register_id TEXT NOT NULL REFERENCES cash_registers (id),
+  type TEXT NOT NULL CHECK (type IN ('sale', 'sale_deletion', 'collection', 'cash_in', 'cash_out', 'cash_in_void', 'cash_out_void')),
+  method TEXT NOT NULL CHECK (method IN ('cash', 'credit_card', 'debit_card', 'transfer')),
+  amount_cents INTEGER NOT NULL CHECK (amount_cents <> 0),
+  description TEXT NOT NULL,
+  ref_type TEXT,
+  ref_id TEXT,
+  -- Movimiento que este anula (solo cash_in_void / cash_out_void).
+  voids_id TEXT UNIQUE REFERENCES cash_movements (id),
+  cut_id TEXT REFERENCES cash_cuts (id),
+  user_name TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+INSERT INTO cash_movements (id, register_id, type, method, amount_cents, description, ref_type, ref_id, cut_id, user_name, created_at)
+  SELECT id, register_id, type, method, amount_cents, description, ref_type, ref_id, cut_id, user_name, created_at FROM cash_movements_v3;
+DROP TABLE cash_movements_v3;
+CREATE INDEX cash_movements_register ON cash_movements (register_id, cut_id, created_at);
+CREATE TRIGGER cash_movements_no_delete BEFORE DELETE ON cash_movements
+BEGIN SELECT RAISE(ABORT, 'Los movimientos de caja no se pueden eliminar'); END;
+CREATE TRIGGER cash_movements_no_update BEFORE UPDATE ON cash_movements
+WHEN NEW.amount_cents IS NOT OLD.amount_cents OR NEW.method IS NOT OLD.method OR NEW.type IS NOT OLD.type OR NEW.register_id IS NOT OLD.register_id
+  OR NEW.voids_id IS NOT OLD.voids_id OR (OLD.cut_id IS NOT NULL AND NEW.cut_id IS NOT OLD.cut_id)
+BEGIN SELECT RAISE(ABORT, 'Los movimientos de caja no se pueden modificar'); END;
+
+-- Una fila por método: Recuento Manual contra Total Esperado.
+CREATE TABLE cash_cut_lines (
+  cut_id TEXT NOT NULL REFERENCES cash_cuts (id),
+  method TEXT NOT NULL CHECK (method IN ('cash', 'credit_card', 'debit_card', 'transfer')),
+  expected_cents INTEGER NOT NULL,
+  counted_cents INTEGER NOT NULL CHECK (counted_cents >= 0),
+  PRIMARY KEY (cut_id, method)
+);
+
+CREATE TRIGGER cash_cuts_no_delete BEFORE DELETE ON cash_cuts
+BEGIN SELECT RAISE(ABORT, 'Los cortes de caja no se pueden eliminar'); END;
+CREATE TRIGGER cash_cuts_no_update BEFORE UPDATE ON cash_cuts
+BEGIN SELECT RAISE(ABORT, 'Los cortes de caja no se pueden modificar'); END;
+CREATE TRIGGER cash_cut_lines_no_delete BEFORE DELETE ON cash_cut_lines
+BEGIN SELECT RAISE(ABORT, 'Los cortes de caja no se pueden eliminar'); END;
+CREATE TRIGGER cash_cut_lines_no_update BEFORE UPDATE ON cash_cut_lines
+BEGIN SELECT RAISE(ABORT, 'Los cortes de caja no se pueden modificar'); END;
+`,
+  },
+  {
+    // Etapa 7: cobranza. Un cobro agrupa los pagos que reparte entre las ventas con deuda (D23). Cancelarlo
+    // agrega movimientos 'collection_void' (D24), así que cash_movements se reconstruye otra vez por su CHECK.
+    version: 5,
+    sql: `
+CREATE TABLE collections (
+  id TEXT PRIMARY KEY,
+  folio INTEGER NOT NULL UNIQUE,
+  client_id TEXT REFERENCES clients (id),
+  register_id TEXT NOT NULL REFERENCES cash_registers (id),
+  method TEXT NOT NULL CHECK (method IN ('cash', 'credit_card', 'debit_card', 'transfer')),
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+  received_cents INTEGER,
+  change_cents INTEGER NOT NULL DEFAULT 0,
+  user_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  canceled_at TEXT
+);
+CREATE INDEX collections_client ON collections (client_id, created_at);
+ALTER TABLE payments ADD COLUMN collection_id TEXT REFERENCES collections (id);
+CREATE INDEX payments_collection ON payments (collection_id);
+
+DROP TRIGGER cash_movements_no_delete;
+DROP TRIGGER cash_movements_no_update;
+ALTER TABLE cash_movements RENAME TO cash_movements_v4;
+CREATE TABLE cash_movements (
+  id TEXT PRIMARY KEY,
+  register_id TEXT NOT NULL REFERENCES cash_registers (id),
+  type TEXT NOT NULL CHECK (type IN ('sale', 'sale_deletion', 'collection', 'collection_void', 'cash_in', 'cash_out', 'cash_in_void', 'cash_out_void')),
+  method TEXT NOT NULL CHECK (method IN ('cash', 'credit_card', 'debit_card', 'transfer')),
+  amount_cents INTEGER NOT NULL CHECK (amount_cents <> 0),
+  description TEXT NOT NULL,
+  ref_type TEXT,
+  ref_id TEXT,
+  voids_id TEXT UNIQUE REFERENCES cash_movements (id),
+  cut_id TEXT REFERENCES cash_cuts (id),
+  user_name TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+INSERT INTO cash_movements (id, register_id, type, method, amount_cents, description, ref_type, ref_id, voids_id, cut_id, user_name, created_at)
+  SELECT id, register_id, type, method, amount_cents, description, ref_type, ref_id, voids_id, cut_id, user_name, created_at FROM cash_movements_v4 ORDER BY rowid;
+DROP TABLE cash_movements_v4;
+CREATE INDEX cash_movements_register ON cash_movements (register_id, cut_id, created_at);
+CREATE TRIGGER cash_movements_no_delete BEFORE DELETE ON cash_movements
+BEGIN SELECT RAISE(ABORT, 'Los movimientos de caja no se pueden eliminar'); END;
+CREATE TRIGGER cash_movements_no_update BEFORE UPDATE ON cash_movements
+WHEN NEW.amount_cents IS NOT OLD.amount_cents OR NEW.method IS NOT OLD.method OR NEW.type IS NOT OLD.type OR NEW.register_id IS NOT OLD.register_id
+  OR NEW.voids_id IS NOT OLD.voids_id OR (OLD.cut_id IS NOT NULL AND NEW.cut_id IS NOT OLD.cut_id)
+BEGIN SELECT RAISE(ABORT, 'Los movimientos de caja no se pueden modificar'); END;
+`,
+  },
+  {
+    // Importación desde Pulpos (D34): las ventas y cortes importados quedan marcados. Son historial: no tienen
+    // movimientos de caja ni de inventario. Las ventas de la serie antigua "#N" de Pulpos usan folio negativo.
+    version: 6,
+    sql: `
+ALTER TABLE sales ADD COLUMN source TEXT;
+ALTER TABLE cash_cuts ADD COLUMN source TEXT;
+`,
+  },
+  {
+    // Forma de Entrega (D42): "Recoge en tienda" o "Envío a domicilio", como en Pulpos. Las de envío pasan al
+    // tablero de reparto de la Oficina Virtual. Las ventas anteriores quedan sin dato (NULL).
+    version: 7,
+    sql: `
+ALTER TABLE sales ADD COLUMN delivery_method TEXT CHECK (delivery_method IS NULL OR delivery_method IN ('pickup', 'shipping'));
+`,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

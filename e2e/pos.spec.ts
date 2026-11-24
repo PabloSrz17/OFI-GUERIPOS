@@ -5,7 +5,7 @@ const SHOTS = 'docs/stage-5/screenshots';
 type Dev = { __posDev: { seedDemo: () => Promise<number>; seedClients: () => Promise<number>; query: (s: string) => Promise<Record<string, unknown>[]> }; __lastTicket?: string };
 
 async function open(page: Page, hash = '/pos') {
-  await page.addInitScript(() => ((window as unknown as { __posNoPrint: boolean }).__posNoPrint = true));
+  await page.addInitScript(() => Object.assign(window, { __posNoPrint: true, __posNoReminders: true }));
   await page.goto(`/#${hash}`);
   await page.waitForFunction(() => (window as unknown as { __posDev?: unknown }).__posDev);
   await page.evaluate(async () => {

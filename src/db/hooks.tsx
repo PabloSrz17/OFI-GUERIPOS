@@ -4,12 +4,15 @@ import type { Database, Tx } from './database';
 const DbContext = React.createContext<Database | null>(null);
 
 /** Abre la base local antes de mostrar la app; si falla, lo dice en pantalla en lugar de trabajar sin datos. */
-export function DbProvider({ open, children }: { open: () => Promise<Database>; children: React.ReactNode }) {
+export function DbProvider({ open, fallback, children }: { open: () => Promise<Database>; fallback?: (error: unknown) => React.ReactNode; children: React.ReactNode }) {
   const [db, setDb] = React.useState<Database | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const [failure, setFailure] = React.useState<{ error: unknown } | null>(null);
   React.useEffect(() => {
-    open().then(setDb, (e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    open().then(setDb, (e: unknown) => setFailure({ error: e }));
   }, [open]);
+  const custom = failure && fallback?.(failure.error);
+  if (custom) return <>{custom}</>;
+  const error = failure && (failure.error instanceof Error ? failure.error.message : String(failure.error));
   if (error)
     return (
       <div role="alert" className="flex h-screen flex-col items-center justify-center gap-2 bg-gray-100 text-center">

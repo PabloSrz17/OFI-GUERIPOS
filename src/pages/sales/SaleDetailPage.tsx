@@ -13,11 +13,12 @@ import { ClientPickerDialog, NoteDialog } from '@/components/pos/PosDialogs';
 import { useDb, useLiveQuery } from '@/db/hooks';
 import { quantityUnit } from '@/domain/catalog';
 import { dueText, paymentMethodLabel, saleFolio } from '@/domain/sale';
-import { addSaleComment, deleteSale, deliverSale, getSale, setSaleClient, setSaleNote, type SaleEvent } from '@/repos/sales';
+import { addSaleComment, deleteSale, deliverSale, DELIVERY_METHODS, getSale, setSaleClient, setSaleNote, type SaleEvent } from '@/repos/sales';
 import { printSaleTicket } from '@/sales/ticket';
 import { formatMoney, formatQuantity, formatRelativeDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { DeliveryBadge, PaymentBadge } from './SalesListPage';
+import { CollectDialog } from '@/components/collections/CollectionDialogs';
 
 const money = (c: number) => formatMoney(c / 100);
 
@@ -25,6 +26,8 @@ const EVENT_ICONS: Record<string, React.ReactNode> = {
   created: <CirclePlus />,
   payment: <Wallet />,
   credit: <Wallet />,
+  collection: <CircleDollarSign />,
+  collection_canceled: <X />,
   delivery: <ShoppingCart />,
   reserved: <ShoppingCart />,
   deleted: <Trash2 />,
@@ -36,7 +39,7 @@ function Timeline({ events }: { events: SaleEvent[] }) {
     <ol className="ml-2 mt-4 border-l-2 border-gray-200">
       {events.map((e) => (
         <li key={e.id} className="relative pb-6 pl-8 last:pb-2">
-          <span className={cn('absolute -left-[11px] top-0 flex size-5 items-center justify-center bg-white text-sky-600 [&_svg]:size-5', e.type === 'deleted' && 'text-red-600', e.type === 'comment' && 'text-gray-500')}>
+          <span className={cn('absolute -left-[11px] top-0 flex size-5 items-center justify-center bg-white text-sky-600 [&_svg]:size-5', (e.type === 'deleted' || e.type === 'collection_canceled') && 'text-red-600', e.type === 'comment' && 'text-gray-500')}>
             {EVENT_ICONS[e.type] ?? <Clock />}
           </span>
           <div className="flex items-start justify-between gap-4">
@@ -71,7 +74,7 @@ export function SaleDetailPage() {
   const [sp] = useSearchParams();
   const id = sp.get('id') ?? '';
   const s = useLiveQuery((tx) => getSale(tx, id), [id]);
-  const [modal, setModal] = React.useState<null | 'delete' | 'deliver' | 'client' | 'note'>(null);
+  const [modal, setModal] = React.useState<null | 'delete' | 'deliver' | 'client' | 'note' | 'collect'>(null);
   const [comment, setComment] = React.useState('');
 
   if (s === undefined) return null;
@@ -288,12 +291,21 @@ export function SaleDetailPage() {
                 {dueText(s.due_date)}
               </p>
             )}
+            {s.balance_cents > 0 && !deleted && (
+              <div className="border-t border-gray-200 px-6 py-4">
+                <Button variant="primary" className="w-full" onClick={() => setModal('collect')}>
+                  <CircleDollarSign />
+                  Registrar Cobro
+                </Button>
+              </div>
+            )}
           </Card>
 
           <Card>
             <Section title="Fecha">{formatRelativeDateTime(new Date(s.created_at))}</Section>
             <Section title="Caja">{s.register_name}</Section>
             <Section title="Cajero">{s.user_name}</Section>
+            {s.delivery_method && <Section title="Forma de Entrega">{DELIVERY_METHODS.find((d) => d.value === s.delivery_method)?.label}</Section>}
             <Section
               title="Cliente"
               action={
@@ -340,6 +352,7 @@ export function SaleDetailPage() {
         </div>
       </div>
 
+      <CollectDialog open={modal === 'collect'} onOpenChange={(o) => !o && setModal(null)} target={{ saleId: s.id }} />
       <ConfirmDialog
         open={modal === 'delete'}
         onOpenChange={(o) => !o && setModal(null)}

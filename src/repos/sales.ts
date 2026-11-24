@@ -1,9 +1,12 @@
+import { xlsxFile, type XlsxCell, type XlsxColumn } from '@/lib/xlsx';
 import type { Tx } from '@/db/database';
 import { normalizeSearch, taxRate } from '@/domain/catalog';
 import { lineTotals, paymentMethodLabel, saleFolio, type CashMethod, type LineDiscount, type PaymentMethod } from '@/domain/sale';
 import { formatMoney } from '@/lib/format';
 import { defaultLocationId, defaultRegisterId } from './bootstrap';
-import { clientName, effectiveCreditLimit, getClient } from './clients';
+import { clientName, effectiveCreditLimit, formatAddress, getClient } from './clients';
+
+type AddressCols = Record<'address_street' | 'address_ext' | 'address_int' | 'address_zip' | 'address_neighborhood' | 'address_municipality' | 'address_city' | 'address_state', string | null>;
 import { balanceSql, CURRENT_USER, enqueueOutbox, newId, nowIso, rowOf, trimOrNull, ValidationError } from './common';
 import { applyMovement } from './inventory';
 import { getSetting } from './settings';
@@ -31,6 +34,12 @@ export interface SaleLineInput {
   ieps?: string;
 }
 
+export type DeliveryMethod = 'pickup' | 'shipping';
+export const DELIVERY_METHODS: { value: DeliveryMethod; label: string }[] = [
+  { value: 'pickup', label: 'Recoge en Tienda' },
+  { value: 'shipping', label: 'Envío a Domicilio' },
+];
+
 export interface SaleInput {
   /** Generado por el carrito antes de cobrar: llave de idempotencia. */
   id: string;
@@ -41,6 +50,8 @@ export interface SaleInput {
   taxesRemoved?: boolean;
   /** "Posponer Entrega de Productos": se cobra ahora y el stock baja al entregar. Los pedidos siempre se entregan después. */
   deferDelivery?: boolean;
+  /** Forma de Entrega (D42): las de envío pasan al tablero de reparto de la Oficina Virtual. */
+  deliveryMethod?: DeliveryMethod | null;
   lines: SaleLineInput[];
   payment: { method: PaymentMethod; receivedCents?: number | null };
   createdAt?: string;
@@ -58,7 +69,7 @@ function registerName(tx: Tx, id: string) {
   return tx.get<{ name: string }>('SELECT name FROM cash_registers WHERE id = ?', [id])?.name ?? '';
 }
 
-function addEvent(tx: Tx, saleId: string, type: string, title: string, detail: string | null, at = nowIso()) {
+export function addEvent(tx: Tx, saleId: string, type: string, title: string, detail: string | null, at = nowIso()) {
   tx.run('INSERT INTO sale_events (id, sale_id, type, title, detail, user_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [newId(), saleId, type, title, detail, CURRENT_USER, at]);
 }
 
@@ -182,8 +193,8 @@ export function createSale(tx: Tx, input: SaleInput): { id: string; folio: numbe
 
   tx.run(
     `INSERT INTO sales (id, folio, mode, location_id, register_id, client_id, price_list_id, note, taxes_removed, subtotal_cents, discount_cents, taxes_removed_cents,
-       tax_cents, total_cents, payment_method, received_cents, change_cents, credit_cents, due_date, delivery_status, delivered_at, user_name, created_at, updated_at)
-     VALUES (:id, :folio, :mode, :loc, :reg, :client, :pl, :note, :tr, :sub, :disc, :trc, :tax, :total, :method, :recv, :change, :credit, :due, :ds, :dat, :user, :at, :at)`,
+       tax_cents, total_cents, payment_method, received_cents, change_cents, credit_cents, due_date, delivery_status, delivered_at, delivery_method, user_name, created_at, updated_at)
+     VALUES (:id, :folio, :mode, :loc, :reg, :client, :pl, :note, :tr, :sub, :disc, :trc, :tax, :total, :method, :recv, :change, :credit, :due, :ds, :dat, :dm, :user, :at, :at)`,
     {
       id: input.id,
       folio,
@@ -206,6 +217,7 @@ export function createSale(tx: Tx, input: SaleInput): { id: string; folio: numbe
       due: dueDate,
       ds: delivered ? 'delivered' : 'pending',
       dat: delivered ? at : null,
+      dm: input.deliveryMethod === 'shipping' || input.deliveryMethod === 'pickup' ? input.deliveryMethod : null,
       user: CURRENT_USER,
       at,
     },
@@ -271,7 +283,7 @@ interface PaymentRecord {
 }
 
 /** Pago + su asiento en el libro de caja (misma transacción). */
-export function recordPayment(tx: Tx, p: PaymentRecord) {
+export function recordPayment(tx: Tx, p: PaymentRecord): string {
   const id = newId();
   tx.run(
     'INSERT INTO payments (id, sale_id, client_id, register_id, kind, method, amount_cents, user_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -291,7 +303,7 @@ export function recordPayment(tx: Tx, p: PaymentRecord) {
 function deliverItems(tx: Tx, saleId: string, folio: number, locationId: string, at: string) {
   const items = tx.all<{ product_id: string; quantity: number }>('SELECT product_id, quantity FROM sale_items WHERE sale_id = ? AND product_id IS NOT NULL AND track_stock = 1 ORDER BY position', [saleId]);
   for (const it of items)
-    applyMovement(tx, { productId: it.product_id, locationId, quantity: -it.quantity, reason: 'sale_delivery', description: `Entrega de Venta #${folio}`, refType: 'sale', refId: saleId, createdAt: at });
+    applyMovement(tx, { productId: it.product_id, locationId, quantity: -it.quantity, reason: 'sale_delivery', description: `Entrega de Venta #${Math.abs(folio)}`, refType: 'sale', refId: saleId, createdAt: at });
   addEvent(tx, saleId, 'delivery', 'Entrega de Productos', `${CURRENT_USER} en ${locationName(tx, locationId)}`, at);
 }
 
@@ -318,11 +330,13 @@ export function deliverSale(tx: Tx, id: string) {
  */
 export function deleteSale(tx: Tx, id: string) {
   const s = activeSale(tx, id);
+  // Lo cobrado y entregado de una venta importada pasó por la caja y el inventario de Pulpos, no por los de aquí (D34).
+  if (tx.get("SELECT 1 FROM sales WHERE id = ? AND source = 'pulpos'", [id])) throw new ValidationError('Esta venta se importó de Pulpos y no se puede eliminar aquí');
   const at = nowIso();
   if (s.delivery_status === 'delivered') {
     const items = tx.all<{ product_id: string; quantity: number }>('SELECT product_id, quantity FROM sale_items WHERE sale_id = ? AND product_id IS NOT NULL AND track_stock = 1 ORDER BY position', [id]);
     for (const it of items)
-      applyMovement(tx, { productId: it.product_id, locationId: s.location_id, quantity: it.quantity, reason: 'sale_deletion', description: `Eliminación de Venta #${s.folio}`, refType: 'sale', refId: id, createdAt: at });
+      applyMovement(tx, { productId: it.product_id, locationId: s.location_id, quantity: it.quantity, reason: 'sale_deletion', description: `Eliminación de Venta #${Math.abs(s.folio)}`, refType: 'sale', refId: id, createdAt: at });
   }
   const pays = tx.all<{ id: string; register_id: string; method: CashMethod; amount_cents: number }>('SELECT id, register_id, method, amount_cents FROM payments WHERE sale_id = ? AND reversed_at IS NULL', [id]);
   for (const p of pays) {
@@ -407,7 +421,7 @@ function salesWhere(q: string, tab: SalesTab, f: SaleFilters) {
       `lower(s.user_name) LIKE :like ESCAPE '\\'`,
     ];
     if (/^\d+$/.test(folio)) {
-      parts.push('s.folio = :folio');
+      parts.push(term.startsWith('#') ? 's.folio IN (:folio, -:folio)' : 's.folio = :folio');
       params.folio = Number(folio);
     }
     where.push(`(${parts.join(' OR ')})`);
@@ -502,6 +516,8 @@ export interface SaleDetail {
   client_id: string | null;
   client_name: string | null;
   client_phone: string | null;
+  /** Dirección registrada del cliente (se imprime como Dirección de Entrega). */
+  client_address: string | null;
   location_name: string;
   register_name: string;
   note: string | null;
@@ -519,6 +535,8 @@ export interface SaleDetail {
   credit_cents: number;
   due_date: string | null;
   delivery_status: 'delivered' | 'pending';
+  /** Forma de Entrega (D42); NULL en ventas anteriores. */
+  delivery_method: DeliveryMethod | null;
   user_name: string;
   created_at: string;
   deleted_at: string | null;
@@ -527,9 +545,10 @@ export interface SaleDetail {
 }
 
 export function getSale(tx: Tx, id: string): SaleDetail | null {
-  const s = tx.get<Omit<SaleDetail, 'items' | 'events' | 'client_name' | 'client_phone'> & { client_first_name: string | null; client_last_name: string | null; client_phone_country: string | null; client_phone_number: string | null }>(
+  const s = tx.get<Omit<SaleDetail, 'items' | 'events' | 'client_name' | 'client_phone' | 'client_address'> & AddressCols & { client_first_name: string | null; client_last_name: string | null; client_phone_country: string | null; client_phone_number: string | null }>(
     `SELECT s.*, l.name AS location_name, r.name AS register_name, c.first_name AS client_first_name, c.last_name AS client_last_name,
             c.phone_country AS client_phone_country, c.phone AS client_phone_number,
+            c.address_street, c.address_ext, c.address_int, c.address_zip, c.address_neighborhood, c.address_municipality, c.address_city, c.address_state,
             s.total_cents - ${balanceSql('s')} AS paid_cents, ${balanceSql('s')} AS balance_cents
      FROM sales s JOIN locations l ON l.id = s.location_id JOIN cash_registers r ON r.id = s.register_id
      LEFT JOIN clients c ON c.id = s.client_id WHERE s.id = ?`,
@@ -542,11 +561,13 @@ export function getSale(tx: Tx, id: string): SaleDetail | null {
     [id],
   );
   const events = tx.all<SaleEvent>('SELECT id, type, title, detail, user_name, created_at FROM sale_events WHERE sale_id = ? ORDER BY created_at DESC, rowid DESC', [id]);
-  const { client_first_name, client_last_name, client_phone_country, client_phone_number, ...rest } = s;
+  const { client_first_name, client_last_name, client_phone_country, client_phone_number, address_street, address_ext, address_int, address_zip, address_neighborhood, address_municipality, address_city, address_state, ...rest } = s;
+  const address = s.client_id ? formatAddress({ address_street, address_ext, address_int, address_zip, address_neighborhood, address_municipality, address_city, address_state }) : '';
   return {
     ...rest,
     client_name: client_first_name ? clientName({ first_name: client_first_name, last_name: client_last_name }) : null,
     client_phone: client_phone_number ? `${client_phone_country}${client_phone_number}` : null,
+    client_address: address || null,
     items,
     events,
   };
@@ -561,40 +582,34 @@ export function clientRecentSales(tx: Tx, clientId: string, limit = 5) {
   );
 }
 
-export function salesCsv(tx: Tx, query: { q?: string; tab?: SalesTab; filters?: SaleFilters } = {}) {
-  const { where, params } = salesWhere(query.q ?? '', query.tab ?? 'all', query.filters ?? {});
-  const rows = tx.all<SaleRow & { subtotal_cents: number; discount_cents: number; tax_cents: number }>(
-    `SELECT s.*, c.first_name AS client_first_name, c.last_name AS client_last_name, ${balanceSql('s')} AS balance_cents
+/** Columnas de "Descargar Ventas" (.xlsx): exactamente estas cinco, en este orden. */
+export const SALES_REPORT_COLUMNS: XlsxColumn[] = [
+  { header: 'NUMERO DE VENTA #TICKET' },
+  { header: 'CLIENTE' },
+  { header: 'ESTADO' },
+  { header: 'TOTAL', type: 'money' },
+  { header: 'DEUDA ACTIVA', type: 'money' },
+];
+
+/** Ventas de un periodo [from, to) (ISO), de la más reciente a la más antigua: folio, cliente, estado, total y deuda (en pesos). */
+export function salesReportRows(tx: Tx, range: { from: string; to: string }): XlsxCell[][] {
+  const { where, params } = salesWhere('', 'all', { from: range.from, to: range.to });
+  const rows = tx.all<{ folio: number; total_cents: number; balance_cents: number; client_first_name: string | null; client_last_name: string | null }>(
+    `SELECT s.folio, s.total_cents, ${balanceSql('s')} AS balance_cents, c.first_name AS client_first_name, c.last_name AS client_last_name
      FROM sales s LEFT JOIN clients c ON c.id = s.client_id WHERE ${where} ORDER BY s.created_at DESC, s.folio DESC`,
     params,
   );
-  const esc = (v: unknown) => {
-    const t = v === null || v === undefined ? '' : String(v);
-    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-  };
-  const money = (c: number) => (c / 100).toFixed(2);
-  const header = ['Venta', 'Fecha', 'Cliente', 'Método de Pago', 'Subtotal', 'Descuentos', 'Impuestos', 'Total', 'Deuda', 'Pago', 'Productos', 'Cajero'];
-  return [
-    header.join(','),
-    ...rows.map((r) =>
-      [
-        saleFolio(r.folio),
-        r.created_at,
-        r.client_first_name ? clientName({ first_name: r.client_first_name, last_name: r.client_last_name }) : '',
-        paymentMethodLabel(r.payment_method),
-        money(r.subtotal_cents),
-        money(r.discount_cents),
-        money(r.tax_cents),
-        money(r.total_cents),
-        money(r.balance_cents),
-        r.balance_cents > 0 ? 'Deuda pendiente' : 'Pagada',
-        r.delivery_status === 'delivered' ? 'Entregados' : 'No Entregados',
-        r.user_name,
-      ]
-        .map(esc)
-        .join(','),
-    ),
-  ].join('\r\n');
+  return rows.map((r) => [
+    saleFolio(r.folio),
+    r.client_first_name ? clientName({ first_name: r.client_first_name, last_name: r.client_last_name }) : 'Público General',
+    r.balance_cents > 0 ? 'Deuda pendiente' : 'Pagada',
+    r.total_cents / 100,
+    r.balance_cents / 100,
+  ]);
+}
+
+export function salesReportXlsx(tx: Tx, range: { from: string; to: string }) {
+  return xlsxFile('Ventas', SALES_REPORT_COLUMNS, salesReportRows(tx, range));
 }
 
 // ---------- Búsqueda del punto de venta ----------

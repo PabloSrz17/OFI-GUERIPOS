@@ -21,7 +21,7 @@ async function finish(page: Page, folio: string) {
 
 /** N1 efectivo (cemento $220) · N2 a crédito a Daniela Fuentes (varilla $145) · N3 débito con entrega posterior (brocha $28). */
 async function setup(page: Page) {
-  await page.addInitScript(() => ((window as unknown as { __posNoPrint: boolean }).__posNoPrint = true));
+  await page.addInitScript(() => Object.assign(window, { __posNoPrint: true, __posNoReminders: true }));
   await page.goto('/#/pos');
   await page.waitForFunction(() => (window as unknown as { __posDev?: unknown }).__posDev);
   await page.evaluate(async () => {
@@ -110,22 +110,46 @@ test.describe('Historial de ventas', () => {
     await f.getByRole('button', { name: 'Ver Resultados' }).click();
     await expect(rows(page)).toHaveCount(3);
 
-    // CSV.
+    // Excel (.xlsx) del día elegido con el calendario.
     // Edge controlado por Playwright se cierra al descargar: se intercepta el enlace (como en products.spec).
-    await page.evaluate(() => {
-      const w = window as unknown as { __dl: Promise<{ name: string; text: string }> };
-      w.__dl = new Promise((resolve) => {
-        HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
-          fetch(this.href).then((r) => r.text()).then((text) => resolve({ name: this.download, text }));
-        };
-      });
+    const today = await page.evaluate(() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
+    const intercept = () =>
+      page.evaluate(() => {
+        const w = window as unknown as { __dl: Promise<{ name: string; type: string; text: string }> };
+        w.__dl = new Promise((resolve) => {
+          HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+            fetch(this.href).then((r) => r.blob()).then(async (b) => resolve({ name: this.download, type: b.type, text: new TextDecoder().decode(await b.arrayBuffer()) }));
+          };
+        });
+      });
+    const downloaded = () => page.evaluate(() => (window as unknown as { __dl: Promise<{ name: string; type: string; text: string }> }).__dl);
+    await expect(page.getByRole('button', { name: 'Fecha del reporte: Hoy' })).toBeVisible();
+    await intercept();
     await page.getByRole('button', { name: 'Descargar Ventas' }).click();
-    const dl = await page.evaluate(() => (window as unknown as { __dl: Promise<{ name: string; text: string }> }).__dl);
-    expect(dl.name).toBe('ventas.csv');
-    const csv = dl.text;
-    expect(csv.split('\n').filter(Boolean)).toHaveLength(4);
-    expect(csv).toContain('Daniela Fuentes');
+    const dl = await downloaded();
+    expect(dl.name).toBe(`reporte-ventas-${today}.xlsx`);
+    expect(dl.type).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(dl.text.startsWith('PK')).toBe(true);
+    for (const h of ['NUMERO DE VENTA #TICKET', 'CLIENTE', 'ESTADO', 'TOTAL', 'DEUDA ACTIVA', 'Daniela Fuentes', 'Público General', 'Deuda pendiente']) expect(dl.text).toContain(h);
+    expect(dl.text).not.toContain('Cajero');
+
+    // Otro día sin ventas: el archivo sale solo con encabezados.
+    await page.getByRole('button', { name: 'Fecha del reporte: Hoy' }).click();
+    const picker = page.getByRole('dialog', { name: 'Fecha del reporte' });
+    await picker.getByRole('radio', { name: 'Rango' }).click();
+    await picker.getByLabel('Desde').fill('2026-01-01');
+    await picker.getByLabel('Hasta').fill('2026-01-31');
+    await page.screenshot({ path: 'docs/stage-5/screenshots/B-sales-report-date.png' });
+    await picker.getByRole('button', { name: 'Listo' }).click();
+    await intercept();
+    await page.getByRole('button', { name: 'Descargar Ventas' }).click();
+    const empty = await downloaded();
+    expect(empty.name).toBe('reporte-ventas-2026-01-01_al_2026-01-31.xlsx');
+    expect(empty.text).toContain('DEUDA ACTIVA');
+    expect(empty.text).not.toContain('Daniela Fuentes');
   });
 
   test('detalle: entrega, comentarios, cliente, nota, reimpresión y eliminación', async ({ page }) => {
@@ -218,7 +242,8 @@ test.describe('Historial de ventas', () => {
     await page.goto('/#/sales');
     await page.getByRole('link', { name: 'N1' }).click();
     await page.getByRole('button', { name: 'Imprimir Ticket' }).click();
-    await page.waitForFunction(() => (window as unknown as Dev).__lastTicket?.includes('La Prueba'));
-    expect(await page.evaluate(() => (window as unknown as Dev).__lastTicket!)).toContain('XAXX010101000');
+    // El nombre del negocio ya no va en el ticket de venta (D38); el RFC sí.
+    await page.waitForFunction(() => (window as unknown as Dev).__lastTicket?.includes('XAXX010101000'));
+    expect(await page.evaluate(() => (window as unknown as Dev).__lastTicket!)).not.toContain('La Prueba');
   });
 });

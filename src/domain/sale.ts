@@ -90,7 +90,8 @@ export function cashSuggestions(totalCents: number) {
   return [...out].sort((a, b) => a - b).slice(0, 4);
 }
 
-export const saleFolio = (folio: number) => `N${folio}`;
+/** "N1309". Las ventas importadas de la serie antigua de Pulpos ("#117") se guardan con folio negativo (D34). */
+export const saleFolio = (folio: number) => (folio < 0 ? `#${-folio}` : `N${folio}`);
 
 /** "Vence en 15 días", "Vence mañana", "Vence hoy", "Venció ayer", "Venció hace 6 días" (por días de calendario). */
 export function dueText(dueIso: string, now = new Date()) {

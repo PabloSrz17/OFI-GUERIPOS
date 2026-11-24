@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertTriangle, ArrowLeftRight, Banknote, CalendarClock, CheckCircle2, CreditCard, Printer, UserPlus, WalletCards } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Banknote, CalendarClock, CheckCircle2, CreditCard, Printer, Store, Truck, UserPlus, WalletCards } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -8,10 +8,11 @@ import { Kbd } from '@/components/ui/misc';
 import { useDb, useLiveQuery } from '@/db/hooks';
 import { parseMoneyToCents } from '@/domain/catalog';
 import { cashSuggestions, changeFor, PAYMENT_METHODS, saleFolio, type PaymentMethod } from '@/domain/sale';
-import { effectiveCreditLimit, getClient } from '@/repos/clients';
+import { effectiveCreditLimit, formatAddress, getClient } from '@/repos/clients';
 import { ValidationError } from '@/repos/common';
-import { clientDebtCents, createSale, CREDIT_DAYS_KEY, DEFAULT_CREDIT_DAYS } from '@/repos/sales';
+import { clientDebtCents, createSale, CREDIT_DAYS_KEY, DEFAULT_CREDIT_DAYS, DELIVERY_METHODS, type DeliveryMethod } from '@/repos/sales';
 import { getSetting } from '@/repos/settings';
+import { getLocalPrint } from '@/print/local';
 import { formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { cartToSaleInput, cartTotals, type Cart } from '@/pos/cart-store';
@@ -54,6 +55,7 @@ export function CheckoutDialog({ cart, open, onOpenChange, onAssignClient, onCom
   const totals = cartTotals(cart);
   const total = totals.totalCents;
   const [method, setMethod] = React.useState<PaymentMethod>('cash');
+  const [delivery, setDelivery] = React.useState<DeliveryMethod>('pickup');
   const [received, setReceived] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -64,6 +66,8 @@ export function CheckoutDialog({ cart, open, onOpenChange, onAssignClient, onCom
   React.useEffect(() => {
     if (open) {
       setMethod('cash');
+      // Si la venta cobra un envío o flete, de entrada va a domicilio.
+      setDelivery(cart.lines.some((l) => /ENV[IÍ]O|FLETE/i.test(l.name)) ? 'shipping' : 'pickup');
       setReceived('');
       setError(null);
       setDone(null);
@@ -75,7 +79,7 @@ export function CheckoutDialog({ cart, open, onOpenChange, onAssignClient, onCom
       if (!cart.client) return null;
       const c = getClient(tx, cart.client.id);
       if (!c) return null;
-      return { limit: effectiveCreditLimit(tx, c), debt: clientDebtCents(tx, c.id), days: getSetting(tx, CREDIT_DAYS_KEY, DEFAULT_CREDIT_DAYS) };
+      return { limit: effectiveCreditLimit(tx, c), debt: clientDebtCents(tx, c.id), days: getSetting(tx, CREDIT_DAYS_KEY, DEFAULT_CREDIT_DAYS), hasAddress: !!formatAddress(c) };
     },
     [cart.client?.id],
   );
@@ -91,11 +95,13 @@ export function CheckoutDialog({ cart, open, onOpenChange, onAssignClient, onCom
     setBusy(true);
     setError(null);
     try {
-      const r = await db.write((tx) => createSale(tx, cartToSaleInput(cart, { method, receivedCents: method === 'cash' ? receivedCents : null })));
+      const r = await db.write((tx) => createSale(tx, cartToSaleInput(cart, { method, receivedCents: method === 'cash' ? receivedCents : null }, delivery)));
       const result = { id: r.id, folio: r.folio, changeCents: r.changeCents, method };
       setDone(result);
       onCompleted(result);
       setTimeout(() => newSaleRef.current?.focus(), 0);
+      // Imprimir al cobrar (Preferencias → Tickets, esta PC): sale solo, con las copias configuradas.
+      if (getLocalPrint().autoPrint) onPrint(r.id);
     } catch (e) {
       setError(e instanceof ValidationError || e instanceof Error ? e.message : String(e));
     } finally {
@@ -189,6 +195,37 @@ export function CheckoutDialog({ cart, open, onOpenChange, onAssignClient, onCom
                 </p>
                 <p>{cart.client ? cart.client.name : 'Público en General'}</p>
               </div>
+            </div>
+
+            <div className="rounded-lg bg-white p-6 shadow-card">
+              <h5 className="mb-4 text-sm font-semibold text-gray-900">Forma de Entrega</h5>
+              <div role="radiogroup" aria-label="Forma de entrega" className="grid grid-cols-2 gap-2">
+                {DELIVERY_METHODS.map((d) => {
+                  const active = d.value === delivery;
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setDelivery(d.value)}
+                      className={cn(
+                        'flex h-12 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&_svg]:size-5',
+                        active ? 'bg-sky-50 text-sky-800 ring-2 ring-sky-600' : 'ring-1 ring-gray-200 hover:bg-gray-50',
+                      )}
+                    >
+                      {d.value === 'shipping' ? <Truck /> : <Store />}
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {delivery === 'shipping' && (!cart.client || credit?.hasAddress === false) && (
+                <p role="alert" className="mt-3 flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  {cart.client ? 'El cliente no tiene dirección: la nota llega al reparto sin dirección.' : 'Asigna un cliente con dirección para el reparto.'}
+                </p>
+              )}
             </div>
 
             <div className="rounded-lg bg-white p-6 shadow-card">

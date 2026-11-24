@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowDownUp, Download, Plus, Search, SlidersHorizontal, Tags, Trash2 } from 'lucide-react';
+import { ArrowDownUp, CircleDollarSign, Download, Plus, Search, SlidersHorizontal, Tags, Trash2 } from 'lucide-react';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -15,7 +15,7 @@ import { ConfirmDialog, useToast } from '@/components/ui/feedback';
 import { ClientDialog } from '@/components/clients/ClientDialogs';
 import { useDb, useLiveQuery } from '@/db/hooks';
 import { listPriceLists } from '@/repos/categories';
-import { clientName, clientPhone, clientsCsv, deleteClients, listClients, type ClientSort } from '@/repos/clients';
+import { clientName, clientPhone, clientsCsv, deleteClients, listClients, type ClientDebtFilter, type ClientSort } from '@/repos/clients';
 import { formatMoney } from '@/lib/format';
 import { download } from '@/lib/download';
 
@@ -28,10 +28,22 @@ const SORT_OPTIONS: { value: ClientSort; label: string }[] = [
   { value: 'created-desc', label: 'Creación (recientes primero)' },
 ];
 
-/** Modal "Filtros" (J-clients-filter.png). Solo Lista de Precio: Monedero queda fuera y Estado de Deuda llega con Cobranza. */
-function ClientFiltersDialog({ value, onApply }: { value: string | null; onApply: (priceListId: string | null) => void }) {
+interface ClientFilters {
+  list: string | null;
+  debt: ClientDebtFilter | null;
+}
+const DEBT_OPTIONS = [
+  { value: 'all', label: 'Cualquier estado' },
+  { value: 'none', label: 'Sin deuda' },
+  { value: 'overdue', label: 'Deuda Vencida' },
+  { value: 'current', label: 'Deuda no Vencida' },
+];
+
+/** Modal "Filtros" (J-clients-filter.png): Lista de Precio y Estado de Deuda. Saldo en Monedero queda fuera del alcance. */
+function ClientFiltersDialog({ value, onApply }: { value: ClientFilters; onApply: (f: ClientFilters) => void }) {
   const [open, setOpen] = React.useState(false);
-  const [draft, setDraft] = React.useState<string | null>(value);
+  const [draft, setDraft] = React.useState<ClientFilters>(value);
+  const active = (f: ClientFilters) => (f.list ? 1 : 0) + (f.debt ? 1 : 0);
   const lists = useLiveQuery(listPriceLists, []) ?? [];
   React.useEffect(() => {
     if (open) setDraft(value);
@@ -42,7 +54,7 @@ function ClientFiltersDialog({ value, onApply }: { value: string | null; onApply
         <Button>
           <SlidersHorizontal />
           Filtrar
-          {value && <span className="rounded-full bg-sky-600 px-1.5 text-xs leading-5 text-white">1</span>}
+          {active(value) > 0 && <span className="rounded-full bg-sky-600 px-1.5 text-xs leading-5 text-white">{active(value)}</span>}
         </Button>
       </DialogTrigger>
       <DialogContent
@@ -51,9 +63,9 @@ function ClientFiltersDialog({ value, onApply }: { value: string | null; onApply
         bodyTone="gray"
         footer={
           <>
-            <Button onClick={() => setDraft(null)}>
+            <Button onClick={() => setDraft({ list: null, debt: null })}>
               <Trash2 />
-              Limpiar Filtros ({draft ? 1 : 0})
+              Limpiar Filtros ({active(draft)})
             </Button>
             <Button
               variant="primary"
@@ -67,6 +79,7 @@ function ClientFiltersDialog({ value, onApply }: { value: string | null; onApply
           </>
         }
       >
+        <div className="space-y-4">
         <div className="flex items-center justify-between gap-4 rounded-lg bg-white p-6 shadow-card">
           <span className="flex items-center gap-3 text-sm font-medium text-gray-900 [&_svg]:size-5 [&_svg]:text-gray-600">
             <Tags />
@@ -75,10 +88,24 @@ function ClientFiltersDialog({ value, onApply }: { value: string | null; onApply
           <Select
             aria-label="Lista de Precio"
             className="w-60"
-            value={draft ?? 'all'}
-            onValueChange={(v) => setDraft(v === 'all' ? null : v)}
+            value={draft.list ?? 'all'}
+            onValueChange={(v) => setDraft((d) => ({ ...d, list: v === 'all' ? null : v }))}
             options={[{ value: 'all', label: 'Todas las listas' }, ...lists.map((l) => ({ value: l.id, label: l.name }))]}
           />
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-lg bg-white p-6 shadow-card">
+          <span className="flex items-center gap-3 text-sm font-medium text-gray-900 [&_svg]:size-5 [&_svg]:text-gray-600">
+            <CircleDollarSign />
+            Estado de Deuda
+          </span>
+          <Select
+            aria-label="Estado de Deuda"
+            className="w-60"
+            value={draft.debt ?? 'all'}
+            onValueChange={(v) => setDraft((d) => ({ ...d, debt: v === 'all' ? null : (v as ClientDebtFilter) }))}
+            options={DEBT_OPTIONS}
+          />
+        </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -95,6 +122,7 @@ export function ClientsListPage() {
   const page = Number(sp.get('p') ?? '1') || 1;
   const sort = (sp.get('sort') as ClientSort) || 'name-asc';
   const priceListId = sp.get('list');
+  const debt = (sp.get('debt') as ClientDebtFilter | null) || null;
   const [search, setSearch] = React.useState(q);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = React.useState(false);
@@ -126,7 +154,7 @@ export function ClientsListPage() {
     return () => clearTimeout(t);
   }, [search, q, update]);
 
-  const result = useLiveQuery((tx) => listClients(tx, { q, sort, priceListId: priceListId ?? undefined, page, pageSize: PAGE_SIZE }), [q, sort, priceListId, page]);
+  const result = useLiveQuery((tx) => listClients(tx, { q, sort, priceListId: priceListId ?? undefined, debt: debt ?? undefined, page, pageSize: PAGE_SIZE }), [q, sort, priceListId, debt, page]);
   const rows = result?.rows ?? [];
   const pageIds = rows.map((r) => r.id);
   const allOnPage = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
@@ -154,7 +182,7 @@ export function ClientsListPage() {
           <div className="flex-1">
             <InputGroup icon={<Search />} placeholder="Filtrar por nombre, teléfono o email" aria-label="Buscar clientes" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <ClientFiltersDialog value={priceListId} onApply={(v) => update({ list: v, p: null })} />
+          <ClientFiltersDialog value={{ list: priceListId, debt }} onApply={(v) => update({ list: v.list, debt: v.debt, p: null })} />
           <Select aria-label="Ordenar" value={sort} onValueChange={(v) => update({ sort: v === 'name-asc' ? null : v, p: null })} icon={<ArrowDownUp className="size-4" />} triggerLabel="Ordenar" options={SORT_OPTIONS} />
         </div>
 

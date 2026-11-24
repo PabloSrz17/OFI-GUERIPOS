@@ -57,10 +57,14 @@ export interface ClientDetail extends ClientRow {
 
 export type ClientSort = 'name-asc' | 'name-desc' | 'created-asc' | 'created-desc';
 
+export type ClientDebtFilter = 'none' | 'overdue' | 'current';
+
 export interface ClientQuery {
   q?: string;
   sort?: ClientSort;
   priceListId?: string;
+  /** "Estado de Deuda" (J-clients-filter.png): sin deuda, con deuda vencida, o con deuda y nada vencido (D26). */
+  debt?: ClientDebtFilter;
   page?: number;
   pageSize?: number;
 }
@@ -94,7 +98,7 @@ const STATS_SQL = `(SELECT count(*) FROM sales s WHERE s.client_id = c.id AND s.
 
 /** Lista paginada: búsqueda por nombre, teléfono o email (sin acentos), orden y filtro por lista de precios. */
 export function listClients(tx: Tx, query: ClientQuery = {}) {
-  const { q = '', sort = 'name-asc', priceListId, page = 1, pageSize = 25 } = query;
+  const { q = '', sort = 'name-asc', priceListId, debt, page = 1, pageSize = 25 } = query;
   const where = ['c.deleted_at IS NULL'];
   const params: Record<string, string | number> = {};
   normalizeSearch(q)
@@ -107,6 +111,13 @@ export function listClients(tx: Tx, query: ClientQuery = {}) {
   if (priceListId) {
     where.push('c.price_list_id = :priceListId');
     params.priceListId = priceListId;
+  }
+  if (debt) {
+    const d0 = new Date();
+    params.today = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate()).toISOString();
+    const has = `EXISTS (SELECT 1 FROM sales s WHERE s.client_id = c.id AND s.deleted_at IS NULL AND ${balanceSql('s')} > 0`;
+    const overdue = `${has} AND s.due_date < :today)`;
+    where.push(debt === 'none' ? `NOT ${has})` : debt === 'overdue' ? overdue : `${has}) AND NOT ${overdue}`);
   }
   const from = `FROM clients c WHERE ${where.join(' AND ')}`;
   const total = tx.get<{ n: number }>(`SELECT count(*) AS n ${from}`, params)!.n;

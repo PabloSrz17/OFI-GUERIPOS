@@ -16,6 +16,8 @@ const SETTINGS_NAV = [
   { label: 'Tickets', to: '/settings/tickets', match: ['/settings/tickets'] },
   { label: 'Productos', to: '/settings/products', match: ['/settings/products', '/settings/product-'] },
   { label: 'Clientes', to: '/settings/clients', match: ['/settings/clients'] },
+  { label: 'Respaldo', to: '/settings/backup', match: ['/settings/backup'] },
+  { label: 'Acceso', to: '/settings/access', match: ['/settings/access'] },
 ];
 
 /** Columna secundaria "PREFERENCIAS" (E-settings-products.png) + contenido centrado de 712px. */
